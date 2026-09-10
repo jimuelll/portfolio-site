@@ -64,6 +64,8 @@ export function GlitchTitle() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
+    const mobileViewport = window.matchMedia("(max-width: 520px)").matches;
+    const idleGlitchInterval = mobileViewport ? 1350 : 2800;
     const letters = Array.from(
       titleElement.querySelectorAll<HTMLElement>(".glitch-letter"),
     );
@@ -263,7 +265,7 @@ export function GlitchTitle() {
     glitchLoop = window.setInterval(() => {
       if (pointerIsNear) glitch(pointerX, pointerY);
       else glitch();
-    }, 2800);
+    }, idleGlitchInterval);
     window.addEventListener("pointermove", handlePointerMove, {
       passive: true,
     });
