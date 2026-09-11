@@ -612,6 +612,12 @@ nav :is(a, button):focus-visible::before {
   position: relative;
   display: inline-block;
 }
+.glitch-letter::before {
+  content: attr(data-char);
+  display: inline-block;
+  color: transparent;
+  -webkit-text-stroke: 0;
+}
 .glitch-fragment {
   position: absolute;
   top: 0;
@@ -623,6 +629,10 @@ nav :is(a, button):focus-visible::before {
   color: var(--letter-a);
   -webkit-text-stroke: 0;
   clip-path: inset(var(--layer-top) 0 var(--layer-bottom) 0);
+}
+.glitch-fragment::before {
+  content: attr(data-char);
+  display: block;
 }
 .glitch-fragment-a {
   --layer-top: var(--layer-a-top);
@@ -1220,14 +1230,7 @@ nav :is(a, button):focus-visible::before {
 }
 .hero-actions .hero-github-action {
   min-width: 0;
-  min-height: 36px;
-  width: auto;
   position: relative;
-  display: inline-flex;
-  padding: 0 10px;
-  gap: 8px;
-  font-size: 0.58rem;
-  white-space: nowrap;
   overflow: hidden;
 }
 .hero-github-label,
@@ -3457,8 +3460,6 @@ footer a {
   }
   .hero-actions .hero-github-action {
     min-width: 0;
-    width: auto;
-    justify-self: start;
   }
   .hero-github-week:nth-child(-n + 9) {
     display: none;

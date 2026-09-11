@@ -17,14 +17,13 @@ function LetterLine({ text, kind }: { text: string; kind: "color" | "mono" }) {
           data-kind={kind}
           key={`${letter}-${index}`}
         >
-          {letter}
           {fragmentLayers.map((layer) => (
             <span
               className={`glitch-fragment glitch-fragment-${layer}`}
+              data-char={letter}
               aria-hidden="true"
               key={layer}
             >
-              {letter}
             </span>
           ))}
           {barLayers.map((layer) => (
