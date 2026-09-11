@@ -207,7 +207,7 @@ export function StackView() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const clock = new THREE.Timer();
+    const clock = new THREE.Clock();
     const inViewRef = { current: true };
     let animationFrame = 0;
     let running = false;
