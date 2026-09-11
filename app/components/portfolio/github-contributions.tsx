@@ -37,13 +37,14 @@ export function GithubContributions() {
 
   return (
     <a
-      className={`hero-github ${loading ? "is-loading" : ""}`}
+      className={`hero-github-action ${loading ? "is-loading" : ""}`}
       href="https://github.com/jimuelll"
       target="_blank"
       rel="noreferrer"
       aria-label={total === null ? "View GitHub profile" : `View GitHub profile, ${total} contributions in the last year`}
       title="GitHub activity"
     >
+      <span className="hero-github-label">GITHUB</span>
       <span className="hero-github-grid" aria-hidden="true">
         {error ? <span className="hero-github-error">GH</span> : weeks.map((week, weekIndex) => (
           <span className="hero-github-week" key={weekIndex}>
@@ -51,7 +52,8 @@ export function GithubContributions() {
           </span>
         ))}
       </span>
-      <span className="hero-github-mark mono-label" aria-hidden="true">GH::365 ↗</span>
+      <span className="hero-github-mark mono-label" aria-hidden="true">365D ACTIVITY</span>
+      <span className="hero-github-arrow" aria-hidden="true">↗</span>
     </a>
   );
 }

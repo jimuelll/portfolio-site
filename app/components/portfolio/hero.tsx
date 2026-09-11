@@ -21,13 +21,7 @@ export function Hero() {
               <a className="primary-action" href="/cv.pdf" download>
                 DOWNLOAD CV <span aria-hidden="true">↓</span>
               </a>
-              <a
-                href="https://github.com/jimuelll"
-                target="_blank"
-                rel="noreferrer"
-              >
-                GITHUB <span aria-hidden="true">↗</span>
-              </a>
+              <GithubContributions />
               <a
                 href="https://www.linkedin.com/in/yourname"
                 target="_blank"
@@ -59,7 +53,6 @@ export function Hero() {
           <span className="mono-label">03 / LOCATION</span>
           <p>QUEZON, PHILIPPINES</p>
         </div>
-        <GithubContributions />
       </div>
     </section>
   );
