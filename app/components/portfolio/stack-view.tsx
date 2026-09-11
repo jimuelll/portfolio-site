@@ -3,7 +3,7 @@ import { PageTitle } from "./page-title";
 
 export function StackView() {
   return (
-    <section className="inner-page view">
+    <section className="profile-section stack-section view" id="stack">
       <PageTitle index="03" eyebrow="CAPABILITY MAP" title="STACK" />
       <div className="stack-grid">
         {stackGroups.map((group, index) => (

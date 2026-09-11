@@ -3,7 +3,7 @@ import { PageTitle } from "./page-title";
 
 export function ExperienceView() {
   return (
-    <section className="inner-page view">
+    <section className="profile-section experience-section view" id="experience">
       <PageTitle index="02" eyebrow="CAREER LOG" title="EXPERIENCE" />
       <div className="timeline">
         {experienceRoles.map((role, index) => (

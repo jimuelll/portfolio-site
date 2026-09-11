@@ -12,6 +12,7 @@ export function Hero() {
           <div className="hero-title">
             <div className="hero-name mono-label">JIMUEL JEAN UNTALAN</div>
             <GlitchTitle />
+            <p className="hero-summary">Building precise, resilient software systems where product thinking meets technical depth.</p>
             <div className="hero-actions" aria-label="Profile links">
               <a className="primary-action" href="/cv.pdf" download>DOWNLOAD CV <span aria-hidden="true">↓</span></a>
               <a href="https://github.com/jimuelll" target="_blank" rel="noreferrer">GITHUB <span aria-hidden="true">↗</span></a>
@@ -23,9 +24,9 @@ export function Hero() {
         <div className="hero-code" aria-hidden="true">SYS::PORTFOLIO / 01</div>
       </div>
       <div className="hero-meta">
-        <div><span className="mono-label">SPECIALIZATION</span><p>INTERFACE TO<br />INFRASTRUCTURE</p></div>
-        <div><span className="mono-label">CURRENT STATUS</span><p><span className="status-square" />AVAILABLE FOR WORK</p></div>
-        <div className="hero-intro"><p>Building precise, resilient software systems where product thinking meets technical depth.</p></div>
+        <div><span className="mono-label">01 / FOCUS</span><p>INTERFACE TO INFRASTRUCTURE</p></div>
+        <div><span className="mono-label">02 / STATUS</span><p><span className="status-square" />AVAILABLE FOR WORK</p></div>
+        <div><span className="mono-label">03 / LOCATION</span><p>CITY, COUNTRY</p></div>
       </div>
     </section>
   );

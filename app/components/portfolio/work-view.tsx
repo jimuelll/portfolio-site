@@ -1,15 +1,13 @@
-import { GithubContributions } from "./github-contributions";
 import { Hero } from "./hero";
 import { projects } from "../../lib/portfolio";
 
 export function WorkView() {
   return (
-    <div className="view" key="work">
+    <div className="view" id="work">
       <Hero />
-      <GithubContributions />
       <section className="work-section">
         <div className="section-heading">
-          <span className="section-number">02</span>
+          <span className="section-number">01</span>
           <div><span className="mono-label">SELECTED</span><h2>WORK</h2></div>
           <p>03 / 05 PROJECTS</p>
         </div>

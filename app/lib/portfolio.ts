@@ -1,5 +1,3 @@
-export type View = "work" | "experience" | "stack" | "about";
-
 export type Project = {
   index: string;
   name: string;
@@ -21,7 +19,8 @@ export type StackGroup = {
   items: string;
 };
 
-export const navItems: View[] = ["work", "experience", "stack", "about"];
+export const navItems = ["work", "experience", "about", "contact"] as const;
+export type NavItem = (typeof navItems)[number];
 
 export const projects: Project[] = [
   {

@@ -2,7 +2,7 @@ import { PageTitle } from "./page-title";
 
 export function AboutView() {
   return (
-    <section className="inner-page view">
+    <section className="inner-page view" id="about">
       <PageTitle index="04" eyebrow="PERSONAL FILE" title="ABOUT" />
       <div className="about-grid">
         <div className="about-copy">

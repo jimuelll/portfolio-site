@@ -2,9 +2,11 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import CursorTrail from "../../cursor-trail";
-import type { View } from "../../lib/portfolio";
+import type { NavItem } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
+import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
+import { GithubContributions } from "./github-contributions";
 import { SiteHeader } from "./site-header";
 import { StackView } from "./stack-view";
 import { WorkView } from "./work-view";
@@ -78,8 +80,8 @@ function createCorruptionLayout(): CorruptionPiece[] {
 }
 
 export function PortfolioShell() {
-  const [view, setView] = useState<View>("work");
   const [dark, setDark] = useState(false);
+  const [activeNav, setActiveNav] = useState<NavItem>("work");
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
@@ -98,7 +100,42 @@ export function PortfolioShell() {
     window.localStorage.setItem("mono-corrupt-theme", dark ? "dark" : "light");
   }, [dark, themeReady]);
 
-  function transition(next?: View, toggleTheme = false) {
+  useEffect(() => {
+    const sections: NavItem[] = ["work", "experience", "about", "contact"];
+    let frame = 0;
+
+    const updateActiveSection = () => {
+      frame = 0;
+      const marker = window.innerHeight * 0.34;
+      let current: NavItem = "work";
+
+      sections.forEach((section) => {
+        const element = document.getElementById(section);
+        if (element && element.getBoundingClientRect().top <= marker) {
+          current = section;
+        }
+      });
+
+      setActiveNav(current);
+    };
+
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  function transitionTheme() {
     if (corrupting) return;
     setCorruptionLayout(createCorruptionLayout());
     setCorrupting(true);
@@ -108,17 +145,13 @@ export function PortfolioShell() {
       }, delay);
     });
     window.setTimeout(() => {
-      if (next) {
-        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-        setView(next);
-      }
-      if (toggleTheme) setDark((value) => !value);
+      setDark((value) => !value);
     }, 220);
     window.setTimeout(() => setCorrupting(false), 840);
   }
 
   return (
-    <main className={`shell ${corrupting ? "is-corrupting" : ""}`}>
+    <main id="top" className={`shell ${corrupting ? "is-corrupting" : ""}`}>
       <CursorTrail suspended={corrupting} />
       <div className="corruption" aria-hidden="true">
         {corruptionLayout.map(({ style, type }, index) => (
@@ -131,15 +164,18 @@ export function PortfolioShell() {
       </div>
 
       <SiteHeader
-        view={view}
+        activeNav={activeNav}
         dark={dark}
-        onNavigate={(next) => transition(next)}
-        onToggleTheme={() => transition(undefined, true)}
+        onToggleTheme={transitionTheme}
       />
-      {view === "work" && <WorkView />}
-      {view === "experience" && <ExperienceView />}
-      {view === "stack" && <StackView />}
-      {view === "about" && <AboutView />}
+      <WorkView />
+      <div className="profile-band">
+        <ExperienceView />
+        <StackView />
+      </div>
+      <AboutView />
+      <GithubContributions />
+      <ContactView />
 
       <footer>
         <span>© 2026 UNTALAN J.</span>

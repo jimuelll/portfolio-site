@@ -36,9 +36,9 @@ export function GithubContributions() {
   const weeks = buildContributionWeeks(contributions);
 
   return (
-    <section className="contributions" aria-labelledby="contributions-title">
+    <section className="contributions" id="github" aria-labelledby="contributions-title">
       <div className="contribution-copy">
-        <span className="section-number">01</span>
+        <span className="section-number">05</span>
         <div>
           <span className="mono-label">OPEN SOURCE / ACTIVITY</span>
           <h2 id="contributions-title">GITHUB<br />CONTRIBUTIONS</h2>
