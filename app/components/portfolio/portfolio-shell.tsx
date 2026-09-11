@@ -105,12 +105,7 @@ export function PortfolioShell() {
 
   useEffect(() => {
     if (pageMode !== "home") return;
-    const sections: HomeSection[] = [
-      "start",
-      "work",
-      "profile",
-      "about",
-    ];
+    const sections: HomeSection[] = ["start", "projects", "expertise", "about"];
     let frame = 0;
 
     const updateActiveSection = () => {
@@ -197,7 +192,7 @@ export function PortfolioShell() {
       {pageMode === "home" ? (
         <>
           <WorkView />
-          <div className="profile-band" id="profile">
+          <div className="profile-band" id="expertise">
             <ExperienceView />
             <StackView />
           </div>

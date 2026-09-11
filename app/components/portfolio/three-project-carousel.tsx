@@ -1,180 +1,162 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import * as THREE from "three";
 import { projects } from "../../lib/portfolio";
 
-type CardScene = {
-  group: THREE.Group;
-  frame: THREE.MeshBasicMaterial;
-  grid: THREE.MeshBasicMaterial;
-  accent: THREE.MeshBasicMaterial;
-};
-
-function signedOffset(index: number, active: number, total: number) {
-  let offset = (index - active + total) % total;
-  if (offset > total / 2) offset -= total;
-  return offset;
-}
-
 export function ThreeProjectCarousel() {
-  const mountRef = useRef<HTMLDivElement>(null);
+  const canvasMountRef = useRef<HTMLDivElement>(null);
+  const pointerRef = useRef({ x: 0, y: 0 });
   const selectedRef = useRef(0);
-  const dragStartRef = useRef<number | null>(null);
-  const dragDistanceRef = useRef(0);
   const dragProgressRef = useRef(0);
   const draggingRef = useRef(false);
+  const dragStartRef = useRef<number | null>(null);
+  const dragDistanceRef = useRef(0);
   const suppressClickRef = useRef(false);
   const [selected, setSelected] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [threeReady, setThreeReady] = useState(false);
   const project = projects[selected];
-
+  const mobileStack = project.stack
+    .split(/\s*\/\s*|\n/)
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(" / ");
   selectedRef.current = selected;
 
   useEffect(() => {
-    const mount = mountRef.current;
+    const mount = canvasMountRef.current;
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
-    camera.position.set(0, 0, 7.2);
-
+    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 20);
+    camera.position.z = 5;
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
-    const color = new THREE.Color();
-    const readThemeColor = () => {
-      const value = getComputedStyle(document.documentElement)
-        .getPropertyValue("--foreground")
-        .trim();
-      color.setStyle(value || "#111111");
-      cards.forEach(({ frame, grid, accent }) => {
-        frame.color.copy(color);
-        grid.color.copy(color);
-        accent.color.copy(color);
-      });
-    };
-
-    const cards: CardScene[] = projects.map((_, index) => {
-      const group = new THREE.Group();
-      const frame = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+    const geometry = new THREE.PlaneGeometry(3.1, 1.43, 24, 12);
+    let disposed = false;
+    const materials: THREE.MeshBasicMaterial[] = [];
+    const textures: THREE.Texture[] = [];
+    const cards = projects.map((item, index) => {
+      const material = new THREE.MeshBasicMaterial({
+        color: index === 0 ? 0xffffff : 0x202020,
         transparent: true,
-        opacity: 0.9,
-        wireframe: true,
+        opacity: index === 0 ? 1 : 0.92,
       });
-      const grid = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.16,
-        wireframe: true,
-      });
-      const accent = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.72,
-      });
+      materials.push(material);
+      const mesh = new THREE.Mesh(geometry, material);
+      scene.add(mesh);
 
-      const frameMesh = new THREE.Mesh(
-        new THREE.BoxGeometry(3.55, 2.16, 0.08),
-        frame,
-      );
-      const gridMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(3.3, 1.9, 9, 6),
-        grid,
-      );
-      gridMesh.position.z = 0.07;
-
-      const barWidths = [1.15, 0.7, 1.55];
-      barWidths.forEach((width, barIndex) => {
-        const bar = new THREE.Mesh(
-          new THREE.BoxGeometry(width, 0.08, 0.06),
-          accent,
-        );
-        bar.position.set(
-          -1.35 + width / 2 + barIndex * 0.24,
-          0.58 - barIndex * 0.34,
-          0.12,
-        );
-        group.add(bar);
-      });
-
-      const indexBlock = new THREE.Mesh(
-        new THREE.BoxGeometry(0.48 + index * 0.12, 0.48, 0.08),
-        accent,
-      );
-      indexBlock.position.set(1.28, -0.63, 0.12);
-
-      group.add(frameMesh, gridMesh, indexBlock);
-      scene.add(group);
-      return { group, frame, grid, accent };
+      if (item.image) {
+        const texture = new THREE.TextureLoader().load(item.image, (loaded) => {
+          loaded.colorSpace = THREE.SRGBColorSpace;
+          loaded.minFilter = THREE.LinearFilter;
+          material.map = loaded;
+          material.color.set(0xffffff);
+          material.needsUpdate = true;
+          mount.dataset.ready = "true";
+          if (!disposed) setThreeReady(true);
+        });
+        textures.push(texture);
+      } else {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1200;
+        canvas.height = 552;
+        const context = canvas.getContext("2d");
+        if (context) {
+          context.fillStyle = "#151515";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.strokeStyle = "#3a3a3a";
+          context.lineWidth = 2;
+          for (let x = 0; x <= canvas.width; x += 100) {
+            context.beginPath();
+            context.moveTo(x, 0);
+            context.lineTo(x, canvas.height);
+            context.stroke();
+          }
+          for (let y = 0; y <= canvas.height; y += 92) {
+            context.beginPath();
+            context.moveTo(0, y);
+            context.lineTo(canvas.width, y);
+            context.stroke();
+          }
+          context.fillStyle = "#f4f4f1";
+          context.font = "700 38px monospace";
+          context.fillText(`PROJECT / ${item.index}`, 58, 76);
+          context.font = "700 82px monospace";
+          context.fillText("IMAGE PENDING", 58, 310);
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.colorSpace = THREE.SRGBColorSpace;
+          material.map = texture;
+          material.color.set(0xffffff);
+          material.needsUpdate = true;
+          textures.push(texture);
+        }
+      }
+      return mesh;
     });
-
-    readThemeColor();
-    const themeObserver = new MutationObserver(readThemeColor);
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme"],
-    });
-
+    let sceneScale = 1;
     const resize = () => {
       const width = Math.max(1, mount.clientWidth);
       const height = Math.max(1, mount.clientHeight);
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
+      const visibleWidth = visibleHeight * camera.aspect;
+      sceneScale = Math.min(
+        (visibleWidth * 0.9) / 3.1,
+        (visibleHeight * 0.88) / 1.43,
+      );
     };
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(mount);
     resize();
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let animationFrame = 0;
+    let frame = 0;
     const render = () => {
       if (!draggingRef.current) {
         dragProgressRef.current *= reducedMotion ? 0 : 0.84;
         if (Math.abs(dragProgressRef.current) < 0.001) dragProgressRef.current = 0;
       }
-
-      cards.forEach(({ group, frame, grid, accent }, index) => {
-        const offset = signedOffset(index, selectedRef.current, cards.length) + dragProgressRef.current;
-        const activeStrength = Math.max(0, 1 - Math.abs(offset));
-        const targetX = offset * 3.05;
-        const targetY = Math.abs(offset) * 0.08;
-        const targetZ = -Math.abs(offset) * 1.5;
-        const targetRotation = -offset * 0.34;
-        const targetScale = 0.82 + activeStrength * 0.18;
-        const ease = draggingRef.current ? 0.34 : reducedMotion ? 1 : 0.11;
-
-        group.position.x += (targetX - group.position.x) * ease;
-        group.position.y += (targetY - group.position.y) * ease;
-        group.position.z += (targetZ - group.position.z) * ease;
-        group.rotation.y += (targetRotation - group.rotation.y) * ease;
-        group.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), ease);
-        frame.opacity += ((0.2 + activeStrength * 0.72) - frame.opacity) * ease;
-        grid.opacity += ((0.06 + activeStrength * 0.14) - grid.opacity) * ease;
-        accent.opacity += ((0.13 + activeStrength * 0.61) - accent.opacity) * ease;
+      cards.forEach((card, index) => {
+        let offset = (index - selectedRef.current + cards.length) % cards.length;
+        if (offset > cards.length / 2) offset -= cards.length;
+        offset += dragProgressRef.current;
+        const wheelAngle = offset * ((Math.PI * 2) / cards.length);
+        const depth = (Math.cos(wheelAngle) + 1) / 2;
+        const active = Math.max(0, 1 - Math.abs(offset));
+        const targetX = Math.sin(wheelAngle) * 2.08 * sceneScale;
+        const targetZ = (Math.cos(wheelAngle) - 1) * 1.28;
+        const targetRotY = -Math.sin(wheelAngle) * 0.62 + (active * pointerRef.current.x * 0.055);
+        const targetRotX = active * pointerRef.current.y * -0.035;
+        const targetScale = sceneScale * (0.66 + depth * 0.34);
+        const ease = draggingRef.current ? 0.3 : reducedMotion ? 1 : 0.1;
+        card.position.x += (targetX - card.position.x) * ease;
+        card.position.z += (targetZ - card.position.z) * ease;
+        card.rotation.y += (targetRotY - card.rotation.y) * ease;
+        card.rotation.x += (targetRotX - card.rotation.x) * ease;
+        card.scale.x += (targetScale - card.scale.x) * ease;
+        card.scale.y += (targetScale - card.scale.y) * ease;
+        materials[index].opacity += ((0.46 + depth * 0.54) - materials[index].opacity) * ease;
       });
-
       renderer.render(scene, camera);
-      animationFrame = window.requestAnimationFrame(render);
+      frame = requestAnimationFrame(render);
     };
     render();
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      disposed = true;
+      cancelAnimationFrame(frame);
       resizeObserver.disconnect();
-      themeObserver.disconnect();
-      scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) object.geometry.dispose();
-      });
-      cards.forEach(({ frame, grid, accent }) => {
-        frame.dispose();
-        grid.dispose();
-        accent.dispose();
-      });
+      geometry.dispose();
+      materials.forEach((material) => material.dispose());
+      textures.forEach((texture) => texture.dispose());
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -182,7 +164,10 @@ export function ThreeProjectCarousel() {
 
   const move = (direction: number) => {
     dragProgressRef.current = 0;
-    setSelected((current) => (current + direction + projects.length) % projects.length);
+    setDragOffset(0);
+    setSelected(
+      (current) => (current + direction + projects.length) % projects.length,
+    );
   };
 
   return (
@@ -209,27 +194,39 @@ export function ThreeProjectCarousel() {
           dragStartRef.current = event.clientX;
           dragDistanceRef.current = 0;
           dragProgressRef.current = 0;
+          setDragOffset(0);
           draggingRef.current = true;
           setDragging(true);
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          pointerRef.current = {
+            x: ((event.clientX - bounds.left) / bounds.width - 0.5) * 2,
+            y: ((event.clientY - bounds.top) / bounds.height - 0.5) * 2,
+          };
           if (dragStartRef.current === null) return;
           dragDistanceRef.current = event.clientX - dragStartRef.current;
-          const travel = Math.max(180, Math.min(event.currentTarget.clientWidth * 0.72, 460));
-          dragProgressRef.current = Math.max(-1.1, Math.min(1.1, dragDistanceRef.current / travel));
+          const travel = Math.max(210, Math.min(event.currentTarget.clientWidth * 0.68, 480));
+          dragProgressRef.current = Math.max(-1.12, Math.min(1.12, dragDistanceRef.current / travel));
+          setDragOffset(Math.max(-120, Math.min(120, dragDistanceRef.current)));
         }}
         onPointerUp={(event) => {
           const distance = dragDistanceRef.current;
+          const threshold = Math.min(72, event.currentTarget.clientWidth * 0.18);
           const progress = dragProgressRef.current;
-          if (Math.abs(progress) > 0.18) {
+          if (Math.abs(distance) > threshold || Math.abs(progress) > 0.18) {
             const direction = progress > 0 ? -1 : 1;
-            setSelected((current) => (current + direction + projects.length) % projects.length);
+            setSelected(
+              (current) =>
+                (current + direction + projects.length) % projects.length,
+            );
             dragProgressRef.current = progress + (progress > 0 ? -1 : 1);
           }
           suppressClickRef.current = Math.abs(distance) > 8;
           dragStartRef.current = null;
           dragDistanceRef.current = 0;
+          setDragOffset(0);
           draggingRef.current = false;
           setDragging(false);
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -239,8 +236,13 @@ export function ThreeProjectCarousel() {
         onPointerCancel={() => {
           dragStartRef.current = null;
           dragDistanceRef.current = 0;
+          dragProgressRef.current = 0;
+          setDragOffset(0);
           draggingRef.current = false;
           setDragging(false);
+        }}
+        onPointerLeave={() => {
+          pointerRef.current = { x: 0, y: 0 };
         }}
         onClick={(event) => {
           if (!suppressClickRef.current) return;
@@ -248,46 +250,137 @@ export function ThreeProjectCarousel() {
           suppressClickRef.current = false;
         }}
       >
-        <div className="carousel-canvas" ref={mountRef} aria-hidden="true" />
-        <span className="carousel-stage-label mono-label" aria-hidden="true">THREE::PROJECT_INDEX</span>
-        <span className="carousel-stage-index" aria-hidden="true">{project.index}</span>
+        <div
+          className={`carousel-image-shell ${threeReady ? "is-three-ready" : ""}`}
+        >
+          {project.image ? (
+            <img
+              className="carousel-project-image"
+              src={project.image}
+              alt={`${project.name} interface preview`}
+              draggable={false}
+            />
+          ) : (
+            <div className="carousel-image-placeholder" aria-hidden="true">
+              <span className="mono-label">PROJECT / {project.index}</span>
+              <strong>IMAGE PENDING</strong>
+            </div>
+          )}
+          <div className="carousel-three-image" ref={canvasMountRef} aria-hidden="true" />
+          <div className="mobile-project-wheel" aria-hidden="true">
+            {projects.map((item, index) => {
+              let slot = (index - selected + projects.length) % projects.length;
+              if (slot > projects.length / 2) slot -= projects.length;
+              return (
+                <div
+                  className={`mobile-project-card ${slot === 0 ? "is-active" : ""}`}
+                  key={item.index}
+                  style={
+                    {
+                      "--card-left": `${50 + slot * 69}%`,
+                      "--card-drag": `${dragOffset}px`,
+                      "--card-scale": slot === 0 ? 1 : 0.78,
+                      "--card-turn": `${slot * -5}deg`,
+                    } as CSSProperties
+                  }
+                >
+                  {item.image ? (
+                    <img src={item.image} alt="" draggable={false} />
+                  ) : (
+                    <div className="mobile-project-placeholder">
+                      <span>PROJECT / {item.index}</span>
+                      <strong>IMAGE PENDING</strong>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </a>
 
       <article className="carousel-copy" aria-live="polite">
         <div className="carousel-topline mono-label">
-          <span>{project.index} / {project.type}</span>
+          <span>
+            {project.index} / {project.type}
+          </span>
           <span>{project.year}</span>
         </div>
-        <div className="carousel-project-copy" key={project.index}>
+        <div
+          className={`carousel-project-copy ${project.dense ? "is-dense" : ""}`}
+          key={project.index}
+        >
           <h3>{project.name}</h3>
           <p className="project-summary">{project.summary}</p>
         </div>
-        <div className="carousel-stack">
-          <span className="mono-label">STACK</span>
-          <p>{project.stack}</p>
-        </div>
-        <a className="carousel-demo-link" href={project.demoUrl} target="_blank" rel="noreferrer">
-          DEMO SITE <span aria-hidden="true">↗</span>
-        </a>
-        <div className="carousel-controls">
-          <button type="button" onClick={() => move(-1)} aria-label="Previous project">← PREV</button>
-          <div className="carousel-pagination" aria-label="Choose project">
-            {projects.map((item, index) => (
-              <button
-                type="button"
-                key={item.index}
-                className={selected === index ? "active" : ""}
-                onClick={() => setSelected(index)}
-                aria-label={`Show ${item.name}`}
-                aria-pressed={selected === index}
-              >
-                {item.index}
-              </button>
-            ))}
+        <p className="mobile-project-stack mono-label">
+          CORE / {mobileStack}
+        </p>
+        <div className="carousel-project-meta">
+          <div>
+            <span className="mono-label">STACK</span>
+            <p>{project.stack}</p>
           </div>
-          <button type="button" onClick={() => move(1)} aria-label="Next project">NEXT →</button>
+          {project.services ? (
+            <div>
+              <span className="mono-label">AI + SERVICES</span>
+              <p>{project.services}</p>
+            </div>
+          ) : null}
         </div>
+        <a
+          className="carousel-demo-link"
+          href={project.demoUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {project.demoLabel ?? "DEMO SITE"} <span aria-hidden="true">↗</span>
+        </a>
+        <details className="mobile-project-details" key={`details-${project.index}`}>
+          <summary>TECHNICAL DETAILS <span aria-hidden="true">+</span></summary>
+          <div>
+            <span className="mono-label">STACK</span>
+            <p>{project.stack}</p>
+          </div>
+          {project.services ? (
+            <div>
+              <span className="mono-label">AI + SERVICES</span>
+              <p>{project.services}</p>
+            </div>
+          ) : null}
+        </details>
       </article>
+
+      <div className="carousel-controls">
+        <button
+          type="button"
+          onClick={() => move(-1)}
+          aria-label="Previous project"
+        >
+          ← PREV
+        </button>
+        <div className="carousel-pagination" aria-label="Choose project">
+          {projects.map((item, index) => (
+            <button
+              type="button"
+              key={item.index}
+              className={selected === index ? "active" : ""}
+              onClick={() => setSelected(index)}
+              aria-label={`Show ${item.name}`}
+              aria-pressed={selected === index}
+            >
+              {item.index}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => move(1)}
+          aria-label="Next project"
+        >
+          NEXT →
+        </button>
+      </div>
     </div>
   );
 }

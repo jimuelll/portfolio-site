@@ -2,15 +2,31 @@ type PageTitleProps = {
   index: string;
   eyebrow: string;
   title: string;
+  className?: string;
+  glitchTitle?: boolean;
 };
 
-export function PageTitle({ index, eyebrow, title }: PageTitleProps) {
+export function PageTitle({
+  index,
+  eyebrow,
+  title,
+  className,
+  glitchTitle = false,
+}: PageTitleProps) {
   return (
-    <div className="page-title">
+    <div className={`page-title ${className ?? ""}`}>
       <span className="page-index">{index}</span>
       <div>
         <span className="mono-label">{eyebrow}</span>
-        <h1>{title}</h1>
+        <h1>
+          <span className={glitchTitle ? "page-title-base" : undefined}>{title}</span>
+          {glitchTitle ? (
+            <>
+              <span className="page-title-glitch-layer layer-a" aria-hidden="true">{title}</span>
+              <span className="page-title-glitch-layer layer-b" aria-hidden="true">{title}</span>
+            </>
+          ) : null}
+        </h1>
       </div>
       <span className="page-state mono-label">STATE / LOADED</span>
     </div>

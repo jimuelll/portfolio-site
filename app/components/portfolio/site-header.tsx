@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { homeNavItems, type HomeSection, type NavPage } from "../../lib/portfolio";
+import {
+  homeNavItems,
+  type HomeSection,
+  type NavPage,
+} from "../../lib/portfolio";
 
 type SiteHeaderProps = {
   activePage: NavPage;
@@ -14,7 +18,7 @@ type SiteHeaderProps = {
 
 export function SiteHeader({
   activePage,
-  activeSection = "work",
+  activeSection = "start",
   dark,
   onToggleTheme,
   onNavigatePage,
@@ -35,7 +39,9 @@ export function SiteHeader({
   }, []);
 
   return (
-    <header className={`site-header ${navTransition ? `is-${navTransition}-nav` : ""}`}>
+    <header
+      className={`site-header ${navTransition ? `is-${navTransition}-nav` : ""}`}
+    >
       <button
         className="identity"
         type="button"
@@ -53,7 +59,9 @@ export function SiteHeader({
         aria-label={`${menuOpen ? "Close" : "Open"} navigation`}
         onClick={() => setMenuOpen((value) => !value)}
       >
-        <span /><span /><span />
+        <span />
+        <span />
+        <span />
       </button>
       <nav
         id="primary-navigation"
@@ -67,7 +75,9 @@ export function SiteHeader({
                 key={item.id}
                 href={`#${item.id}`}
                 className={`nav-section ${activeSection === item.id ? "active" : ""}`}
-                aria-current={activeSection === item.id ? "location" : undefined}
+                aria-current={
+                  activeSection === item.id ? "location" : undefined
+                }
                 data-label={`/${item.label}`}
                 onClick={() => setMenuOpen(false)}
               >
@@ -75,12 +85,39 @@ export function SiteHeader({
                 <span className="nav-label-mobile">/{item.mobileLabel}</span>
               </a>
             ))}
-            <button className="nav-lab" type="button" onClick={() => { setMenuOpen(false); onNavigatePage("lab"); }} data-label="/LAB">/LAB</button>
+            <button
+              className="nav-lab"
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onNavigatePage("lab");
+              }}
+              data-label="/LAB"
+            >
+              /LAB
+            </button>
           </>
         ) : (
           <>
-            <button className="nav-home" type="button" onClick={() => { setMenuOpen(false); onNavigatePage("home"); }} data-label="/HOME">/HOME</button>
-            <button className="nav-lab active" type="button" aria-current="page" data-label="/LAB">/LAB</button>
+            <button
+              className="nav-home"
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onNavigatePage("home");
+              }}
+              data-label="/HOME"
+            >
+              /HOME
+            </button>
+            <button
+              className="nav-lab active"
+              type="button"
+              aria-current="page"
+              data-label="/LAB"
+            >
+              /LAB
+            </button>
           </>
         )}
       </nav>
