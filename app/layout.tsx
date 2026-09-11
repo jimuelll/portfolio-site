@@ -27,6 +27,9 @@ export const metadata: Metadata = {
   ...(siteOrigin ? { metadataBase: new URL(siteOrigin) } : {}),
   title: siteTitle,
   description: siteDescription,
+  verification: {
+    google: "kR15d-A0JYppNf_o4vLwKiAp9OuE8gY6wg7uUL_q71c",
+  },
   alternates: siteOrigin ? { canonical: "/" } : undefined,
   openGraph: {
     title: siteTitle,
