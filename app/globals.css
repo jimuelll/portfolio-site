@@ -2080,7 +2080,7 @@ nav :is(a, button):focus-visible::before {
 }
 .experience-flip-card {
   position: relative;
-  min-height: 312px;
+  min-height: 390px;
   margin-top: 4px;
   cursor: pointer;
   transform-style: preserve-3d;
@@ -2273,7 +2273,7 @@ nav :is(a, button):focus-visible::before {
   grid-template-columns: .28fr .95fr 1.1fr;
   gap: 12px;
   align-items: start;
-  padding: 12px 0;
+  padding: 9px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--foreground) 45%, transparent);
 }
 .experience-card-row:last-child {
@@ -2287,9 +2287,16 @@ nav :is(a, button):focus-visible::before {
 }
 .experience-card-row p {
   margin: 4px 0 0;
-  font-size: .72rem;
+  font-size: .66rem;
   line-height: 1.35;
   color: var(--muted);
+}
+.experience-card-back .experience-card-row h3 {
+  font-size: clamp(.76rem, .9vw, .94rem);
+}
+.experience-card-back .experience-card-row p {
+  font-size: .62rem;
+  line-height: 1.3;
 }
 .experience-card-row > .mono-label {
   color: var(--muted);
@@ -2912,7 +2919,7 @@ footer a {
     border-bottom: 1px solid var(--foreground);
   }
   .experience-flip-card {
-    min-height: 356px;
+    min-height: 410px;
   }
   .experience-card-row {
     grid-template-columns: 76px minmax(0, 1fr);
@@ -3655,7 +3662,7 @@ footer a {
     padding-bottom: 28px;
   }
   .experience-flip-card {
-    min-height: 382px;
+    min-height: 430px;
   }
   .experience-card-face {
     padding: 15px 14px;

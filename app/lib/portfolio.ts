@@ -12,13 +12,6 @@ export type Project = {
   demoUrl: string;
 };
 
-export type ExperienceRole = {
-  date: string;
-  role: string;
-  company: string;
-  copy: string;
-};
-
 export type StackGroup = {
   name: string;
   items: string;
@@ -72,36 +65,21 @@ export const projects: Project[] = [
   },
 ];
 
-export const experienceRoles: ExperienceRole[] = [
-  {
-    date: "2024—NOW",
-    role: "SENIOR SOFTWARE ENGINEER",
-    company: "COMPANY NAME",
-    copy: "Shipped core platform systems and led frontend architecture.",
-  },
-  {
-    date: "2022—2024",
-    role: "FULL-STACK ENGINEER",
-    company: "PREVIOUS COMPANY",
-    copy: "Built customer-facing products from first commit to production.",
-  },
-  {
-    date: "2020—2022",
-    role: "SOFTWARE DEVELOPER",
-    company: "EARLY-STAGE STUDIO",
-    copy: "Delivered web applications across product and infrastructure.",
-  },
-];
-
 export const stackGroups: StackGroup[] = [
   {
     name: "FRONTEND",
-    items: "TypeScript, React, Next.js, CSS, Design Systems",
+    items: "TypeScript, React, Next.js, Vite, Tailwind CSS, TanStack Query, Framer Motion",
   },
-  { name: "BACKEND", items: "Node.js, Go, REST, GraphQL, WebSockets" },
-  { name: "DATA / STORAGE", items: "PostgreSQL, Redis, ClickHouse, Search" },
+  {
+    name: "BACKEND",
+    items: "Node.js, Express, REST APIs, WebSockets, JWT Authentication",
+  },
+  {
+    name: "DATA / STORAGE",
+    items: "MySQL, MariaDB, PostgreSQL, Redis, Cloudinary",
+  },
   {
     name: "CLOUD / DEVOPS",
-    items: "AWS, Cloudflare, Docker, CI/CD, Observability",
+    items: "Cloudflare, CI/CD, Vercel",
   },
 ];

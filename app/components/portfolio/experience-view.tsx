@@ -2,34 +2,48 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { experienceRoles } from "../../lib/portfolio";
 import { PageTitle } from "./page-title";
 
-const education = [
+const practiceEntries = [
   {
-    date: "2016—2020",
-    role: "B.S. COMPUTER SCIENCE",
-    school: "UNIVERSITY NAME",
-    copy: "Systems, algorithms, and human-centered product design.",
-  },
-  {
-    date: "2020",
-    role: "CAPSTONE / PRODUCT SYSTEMS",
-    school: "INDEPENDENT STUDY",
-    copy: "A first-principles study in resilient interfaces and infrastructure.",
+    date: "ONGOING",
+    role: "INDEPENDENT DEVELOPMENT",
+    company: "PERSONAL + ACADEMIC PROJECTS",
+    copy: "Designing and shipping full-stack applications from interface to infrastructure, with a focus on maintainability, product thinking, and real-world workflows.",
   },
   {
     date: "ONGOING",
-    role: "CONTINUOUS PRACTICE",
-    school: "SELF-DIRECTED",
-    copy: "Reading, shipping, and learning in public through every new build.",
+    role: "EXPERIMENTAL DEVELOPMENT",
+    company: "LAB / SELF-DIRECTED WORK",
+    copy: "Exploring new tools, interaction patterns, system design, and creative web experiences through small experiments and technical prototypes.",
+  },
+  {
+    date: "CURRENT",
+    role: "CAPSTONE DEVELOPMENT",
+    company: "ACADEMIC PROJECT",
+    copy: "Applying software engineering, research, and collaborative development practices to a production-scale academic system.",
+  },
+];
+
+const education = [
+  {
+    date: "2022—ONGOING",
+    role: "B.S. COMPUTER SCIENCE",
+    school: "MANUEL S. ENVERGA UNIVERSITY FOUNDATION-CANDELARIA INC.",
+    copy: "Software engineering, algorithms, databases, systems, and human-centered product development.",
+  },
+  {
+    date: "2025—2026",
+    role: "CAPSTONE / THESIS",
+    school: "REVITALIZING ACADEMIC RESOURCE ACCESSIBILITY: AN AI-ENHANCED SMART LIBRARY MANAGEMENT SYSTEM FOR MANUEL S. ENVERGA UNIVERSITY FOUNDATION – CANDELARIA, INC.",
+    copy: "Designed and developed a full-stack system focused on real-world workflows, scalable architecture, and practical user experience.",
   },
 ];
 
 export function ExperienceView() {
   const mountRef = useRef<HTMLDivElement>(null);
   const flippedRef = useRef(false);
-  const [flipped, setFlipped] = useState(false);
+  const [flipped, setFlipped] = useState(true);
   const [titleGlitch, setTitleGlitch] = useState(false);
 
   flippedRef.current = flipped;
@@ -184,10 +198,10 @@ export function ExperienceView() {
       id="experience"
     >
       <PageTitle
-        key={flipped ? "education-title" : "experience-title"}
+        key={flipped ? "education-title" : "practice-title"}
         index="02"
-        eyebrow={flipped ? "EDUCATION / EXPERIENCE" : "EXPERIENCE / EDUCATION"}
-        title={flipped ? "EDUCATION" : "EXPERIENCE"}
+        eyebrow={flipped ? "EDUCATION / PRACTICE" : "PRACTICE / EDUCATION"}
+        title={flipped ? "EDUCATION" : "PRACTICE"}
         className={titleGlitch ? "experience-title-glitch" : undefined}
         glitchTitle={titleGlitch}
       />
@@ -196,7 +210,7 @@ export function ExperienceView() {
         role="button"
         tabIndex={0}
         aria-pressed={flipped}
-        aria-label={`Experience and education card. Currently showing ${flipped ? "education" : "experience"}. Click to flip.`}
+        aria-label={`Practice and education card. Currently showing ${flipped ? "education" : "practice"}. Click to flip.`}
         onClick={toggle}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -222,8 +236,8 @@ export function ExperienceView() {
               </span>
             </div>
             <div className="experience-card-list">
-              {experienceRoles.map((role, index) => (
-                <article className="experience-card-row" key={role.date}>
+              {practiceEntries.map((role, index) => (
+                <article className="experience-card-row" key={role.date + role.role}>
                   <span className="mono-label">
                     0{index + 1} / {role.date}
                   </span>
@@ -236,7 +250,7 @@ export function ExperienceView() {
               ))}
             </div>
             <div className="experience-card-hint mono-label">
-              EDUCATION / B.S. COMPUTER SCIENCE · VIEW FILE{" "}
+              EDUCATION / 02 ENTRIES · VIEW FILE{" "}
               <span aria-hidden="true">↻</span>
             </div>
           </div>
@@ -244,9 +258,9 @@ export function ExperienceView() {
             <div className="experience-card-topline mono-label">
               <span>FACE / 02</span>
               <span className="experience-flip-control">
-                <span>FLIP TO EXPERIENCE</span>
-                <i className="flip-corrupt-copy copy-a" aria-hidden="true">FLIP TO EXPERIENCE</i>
-                <i className="flip-corrupt-copy copy-b" aria-hidden="true">FLIP TO EXPERIENCE</i>
+                <span>FLIP TO PRACTICE</span>
+                <i className="flip-corrupt-copy copy-a" aria-hidden="true">FLIP TO PRACTICE</i>
+                <i className="flip-corrupt-copy copy-b" aria-hidden="true">FLIP TO PRACTICE</i>
                 <b aria-hidden="true">↗</b>
               </span>
             </div>
@@ -268,7 +282,7 @@ export function ExperienceView() {
               ))}
             </div>
             <div className="experience-card-hint mono-label">
-              EXPERIENCE / 03 ROLES · RETURN{" "}
+              PRACTICE / 03 TRACKS · RETURN{" "}
               <span aria-hidden="true">↻</span>
             </div>
           </div>
