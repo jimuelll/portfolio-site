@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import CursorTrail from "../../cursor-trail";
+import type { HomeSection } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
 import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
@@ -80,6 +81,7 @@ function createCorruptionLayout(): CorruptionPiece[] {
 
 export function PortfolioShell() {
   const [dark, setDark] = useState(false);
+  const [activeSection, setActiveSection] = useState<HomeSection>("work");
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
@@ -97,6 +99,35 @@ export function PortfolioShell() {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     window.localStorage.setItem("mono-corrupt-theme", dark ? "dark" : "light");
   }, [dark, themeReady]);
+
+  useEffect(() => {
+    const sections: HomeSection[] = ["work", "experience", "about", "contact"];
+    let frame = 0;
+
+    const updateActiveSection = () => {
+      frame = 0;
+      const marker = window.innerHeight * 0.34;
+      let current: HomeSection = "work";
+      sections.forEach((section) => {
+        const element = document.getElementById(section);
+        if (element && element.getBoundingClientRect().top <= marker) current = section;
+      });
+      setActiveSection(current);
+    };
+
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   function transitionTheme() {
     if (corrupting) return;
@@ -128,6 +159,7 @@ export function PortfolioShell() {
 
       <SiteHeader
         activePage="home"
+        activeSection={activeSection}
         dark={dark}
         onToggleTheme={transitionTheme}
       />

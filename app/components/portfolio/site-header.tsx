@@ -1,14 +1,16 @@
 import Link from "next/link";
-import { navItems, type NavPage } from "../../lib/portfolio";
+import { homeNavItems, type HomeSection, type NavPage } from "../../lib/portfolio";
 
 type SiteHeaderProps = {
   activePage: NavPage;
+  activeSection?: HomeSection;
   dark: boolean;
   onToggleTheme: () => void;
 };
 
 export function SiteHeader({
   activePage,
+  activeSection = "work",
   dark,
   onToggleTheme,
 }: SiteHeaderProps) {
@@ -22,18 +24,29 @@ export function SiteHeader({
         <span className="identity-mark" aria-hidden="true" />
         <span>Untalan J.</span>
       </Link>
-      <nav aria-label="Primary navigation">
-        {navItems.map((item) => (
-          <Link
-            key={item.id}
-            href={item.href}
-            className={`nav-${item.id} ${activePage === item.id ? "active" : ""}`}
-            aria-current={activePage === item.id ? "page" : undefined}
-            data-label={`/${item.label}`}
-          >
-            /{item.label}
-          </Link>
-        ))}
+      <nav className={activePage === "home" ? "home-section-nav" : "lab-route-nav"} aria-label="Primary navigation">
+        {activePage === "home" ? (
+          <>
+            {homeNavItems.map((item) => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={`nav-section ${activeSection === item.id ? "active" : ""}`}
+                aria-current={activeSection === item.id ? "location" : undefined}
+                data-label={`/${item.label}`}
+              >
+                <span className="nav-label-desktop">/{item.label}</span>
+                <span className="nav-label-mobile">/{item.mobileLabel}</span>
+              </a>
+            ))}
+            <Link className="nav-lab" href="/lab" data-label="/LAB">/LAB</Link>
+          </>
+        ) : (
+          <>
+            <Link className="nav-home" href="/" data-label="/HOME">/HOME</Link>
+            <Link className="nav-lab active" href="/lab" aria-current="page" data-label="/LAB">/LAB</Link>
+          </>
+        )}
       </nav>
       <button
         className="theme-toggle"

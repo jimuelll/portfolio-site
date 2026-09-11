@@ -19,11 +19,14 @@ export type StackGroup = {
   items: string;
 };
 
-export const navItems = [
-  { id: "home", label: "HOME", href: "/" },
-  { id: "lab", label: "LAB", href: "/lab" },
+export const homeNavItems = [
+  { id: "work", label: "WORK", mobileLabel: "WORK" },
+  { id: "experience", label: "EXPERIENCE", mobileLabel: "EXP" },
+  { id: "about", label: "ABOUT", mobileLabel: "ABOUT" },
+  { id: "contact", label: "CONTACT", mobileLabel: "CONTACT" },
 ] as const;
-export type NavPage = (typeof navItems)[number]["id"];
+export type HomeSection = (typeof homeNavItems)[number]["id"];
+export type NavPage = "home" | "lab";
 
 export const projects: Project[] = [
   {
