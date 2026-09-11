@@ -20,7 +20,11 @@ function signedOffset(index: number, active: number, total: number) {
 export function ThreeProjectCarousel() {
   const mountRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef(0);
+  const dragStartRef = useRef<number | null>(null);
+  const dragDistanceRef = useRef(0);
+  const suppressClickRef = useRef(false);
   const [selected, setSelected] = useState(0);
+  const [dragging, setDragging] = useState(false);
   const project = projects[selected];
 
   selectedRef.current = selected;
@@ -184,11 +188,53 @@ export function ThreeProjectCarousel() {
         if (event.key === "ArrowRight") move(1);
       }}
     >
-      <div className="carousel-stage" aria-hidden="true">
-        <div className="carousel-canvas" ref={mountRef} />
-        <span className="carousel-stage-label mono-label">THREE::PROJECT_INDEX</span>
-        <span className="carousel-stage-index">{project.index}</span>
-      </div>
+      <a
+        className={`carousel-stage ${dragging ? "is-dragging" : ""}`}
+        href={project.demoUrl}
+        target="_blank"
+        rel="noreferrer"
+        draggable={false}
+        aria-label={`Open demo site for ${project.name}. Drag horizontally to browse projects.`}
+        onDragStart={(event) => event.preventDefault()}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          dragStartRef.current = event.clientX;
+          dragDistanceRef.current = 0;
+          setDragging(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => {
+          if (dragStartRef.current === null) return;
+          dragDistanceRef.current = event.clientX - dragStartRef.current;
+        }}
+        onPointerUp={(event) => {
+          const distance = dragDistanceRef.current;
+          if (Math.abs(distance) > 42) {
+            move(distance > 0 ? -1 : 1);
+            suppressClickRef.current = true;
+          }
+          dragStartRef.current = null;
+          dragDistanceRef.current = 0;
+          setDragging(false);
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+        }}
+        onPointerCancel={() => {
+          dragStartRef.current = null;
+          dragDistanceRef.current = 0;
+          setDragging(false);
+        }}
+        onClick={(event) => {
+          if (!suppressClickRef.current) return;
+          event.preventDefault();
+          suppressClickRef.current = false;
+        }}
+      >
+        <div className="carousel-canvas" ref={mountRef} aria-hidden="true" />
+        <span className="carousel-stage-label mono-label" aria-hidden="true">THREE::PROJECT_INDEX</span>
+        <span className="carousel-stage-index" aria-hidden="true">{project.index}</span>
+      </a>
 
       <article className="carousel-copy" aria-live="polite">
         <div className="carousel-topline mono-label">
@@ -203,6 +249,9 @@ export function ThreeProjectCarousel() {
           <span className="mono-label">STACK</span>
           <p>{project.stack}</p>
         </div>
+        <a className="carousel-demo-link" href={project.demoUrl} target="_blank" rel="noreferrer">
+          DEMO SITE <span aria-hidden="true">↗</span>
+        </a>
         <div className="carousel-controls">
           <button type="button" onClick={() => move(-1)} aria-label="Previous project">← PREV</button>
           <div className="carousel-pagination" aria-label="Choose project">

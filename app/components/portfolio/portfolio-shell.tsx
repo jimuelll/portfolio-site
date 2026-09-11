@@ -2,11 +2,12 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import CursorTrail from "../../cursor-trail";
-import type { HomeSection } from "../../lib/portfolio";
+import type { HomeSection, NavPage } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
 import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
 import { GithubContributions } from "./github-contributions";
+import { LabView } from "./lab-view";
 import { SiteHeader } from "./site-header";
 import { StackView } from "./stack-view";
 import { WorkView } from "./work-view";
@@ -85,6 +86,8 @@ export function PortfolioShell() {
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
+  const [pageMode, setPageMode] = useState<NavPage>("home");
+  const [navTransition, setNavTransition] = useState<"merging" | "splitting" | null>(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("mono-corrupt-theme");
@@ -101,6 +104,7 @@ export function PortfolioShell() {
   }, [dark, themeReady]);
 
   useEffect(() => {
+    if (pageMode !== "home") return;
     const sections: HomeSection[] = ["work", "experience", "about", "contact"];
     let frame = 0;
 
@@ -127,7 +131,26 @@ export function PortfolioShell() {
       window.removeEventListener("resize", scheduleUpdate);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [pageMode]);
+
+  function navigatePage(nextPage: NavPage) {
+    if (nextPage === pageMode || navTransition) return;
+
+    if (nextPage === "lab") {
+      setNavTransition("merging");
+      window.setTimeout(() => {
+        setPageMode("lab");
+        setNavTransition(null);
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }, 560);
+      return;
+    }
+
+    setPageMode("home");
+    setNavTransition("splitting");
+    window.scrollTo({ top: 0, behavior: "auto" });
+    window.setTimeout(() => setNavTransition(null), 560);
+  }
 
   function transitionTheme() {
     if (corrupting) return;
@@ -158,25 +181,37 @@ export function PortfolioShell() {
       </div>
 
       <SiteHeader
-        activePage="home"
+        activePage={pageMode}
         activeSection={activeSection}
         dark={dark}
         onToggleTheme={transitionTheme}
+        onNavigatePage={navigatePage}
+        navTransition={navTransition}
       />
-      <WorkView />
-      <div className="profile-band">
-        <ExperienceView />
-        <StackView />
-      </div>
-      <AboutView />
-      <GithubContributions />
-      <ContactView />
+      {pageMode === "home" ? (
+        <>
+          <WorkView />
+          <div className="profile-band">
+            <ExperienceView />
+            <StackView />
+          </div>
+          <AboutView />
+          <GithubContributions />
+          <ContactView />
+        </>
+      ) : (
+        <LabView />
+      )}
 
       <footer>
         <span>© 2026 UNTALAN J.</span>
-        <span>BUILD 2026.09</span>
-        <span>LOCATION / CITY, COUNTRY</span>
-        <a href="mailto:hello@example.com">CONTACT ↗</a>
+        <span>{pageMode === "lab" ? "LAB BUILD 00" : "BUILD 2026.09"}</span>
+        <span>{pageMode === "lab" ? "EXPERIMENTS / INCOMING" : "LOCATION / CITY, COUNTRY"}</span>
+        {pageMode === "lab" ? (
+          <button className="footer-home" type="button" onClick={() => navigatePage("home")}>RETURN HOME ↗</button>
+        ) : (
+          <a href="mailto:hello@example.com">CONTACT ↗</a>
+        )}
       </footer>
     </main>
   );

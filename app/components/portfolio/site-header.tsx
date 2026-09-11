@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { homeNavItems, type HomeSection, type NavPage } from "../../lib/portfolio";
 
 type SiteHeaderProps = {
@@ -6,6 +5,8 @@ type SiteHeaderProps = {
   activeSection?: HomeSection;
   dark: boolean;
   onToggleTheme: () => void;
+  onNavigatePage: (page: NavPage) => void;
+  navTransition?: "merging" | "splitting" | null;
 };
 
 export function SiteHeader({
@@ -13,17 +14,20 @@ export function SiteHeader({
   activeSection = "work",
   dark,
   onToggleTheme,
+  onNavigatePage,
+  navTransition = null,
 }: SiteHeaderProps) {
   return (
-    <header className="site-header">
-      <Link
+    <header className={`site-header ${navTransition ? `is-${navTransition}-nav` : ""}`}>
+      <button
         className="identity"
-        href="/"
+        type="button"
+        onClick={() => onNavigatePage("home")}
         aria-label="Go home"
       >
         <span className="identity-mark" aria-hidden="true" />
         <span>Untalan J.</span>
-      </Link>
+      </button>
       <nav className={activePage === "home" ? "home-section-nav" : "lab-route-nav"} aria-label="Primary navigation">
         {activePage === "home" ? (
           <>
@@ -39,12 +43,12 @@ export function SiteHeader({
                 <span className="nav-label-mobile">/{item.mobileLabel}</span>
               </a>
             ))}
-            <Link className="nav-lab" href="/lab" data-label="/LAB">/LAB</Link>
+            <button className="nav-lab" type="button" onClick={() => onNavigatePage("lab")} data-label="/LAB">/LAB</button>
           </>
         ) : (
           <>
-            <Link className="nav-home" href="/" data-label="/HOME">/HOME</Link>
-            <Link className="nav-lab active" href="/lab" aria-current="page" data-label="/LAB">/LAB</Link>
+            <button className="nav-home" type="button" onClick={() => onNavigatePage("home")} data-label="/HOME">/HOME</button>
+            <button className="nav-lab active" type="button" aria-current="page" data-label="/LAB">/LAB</button>
           </>
         )}
       </nav>

@@ -5,6 +5,7 @@ export type Project = {
   year: string;
   summary: string;
   stack: string;
+  demoUrl: string;
 };
 
 export type ExperienceRole = {
@@ -36,6 +37,7 @@ export const projects: Project[] = [
     year: "2026",
     summary: "A collaborative workspace designed for fast-moving distributed teams.",
     stack: "NEXT.JS / TYPESCRIPT / GO / POSTGRESQL",
+    demoUrl: "https://example.com",
   },
   {
     index: "02",
@@ -44,6 +46,7 @@ export const projects: Project[] = [
     year: "2025",
     summary: "An observability interface that turns complex systems into clear decisions.",
     stack: "REACT / NODE.JS / CLICKHOUSE / AWS",
+    demoUrl: "https://example.com",
   },
   {
     index: "03",
@@ -52,6 +55,7 @@ export const projects: Project[] = [
     year: "2025",
     summary: "A resilient multi-market storefront built for speed, scale, and conversion.",
     stack: "NEXT.JS / GRAPHQL / STRIPE / VERCEL",
+    demoUrl: "https://example.com",
   },
 ];
 
