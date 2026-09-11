@@ -22,6 +22,8 @@ export function ThreeProjectCarousel() {
   const selectedRef = useRef(0);
   const dragStartRef = useRef<number | null>(null);
   const dragDistanceRef = useRef(0);
+  const dragProgressRef = useRef(0);
+  const draggingRef = useRef(false);
   const suppressClickRef = useRef(false);
   const [selected, setSelected] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -131,24 +133,29 @@ export function ThreeProjectCarousel() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let animationFrame = 0;
     const render = () => {
+      if (!draggingRef.current) {
+        dragProgressRef.current *= reducedMotion ? 0 : 0.84;
+        if (Math.abs(dragProgressRef.current) < 0.001) dragProgressRef.current = 0;
+      }
+
       cards.forEach(({ group, frame, grid, accent }, index) => {
-        const offset = signedOffset(index, selectedRef.current, cards.length);
-        const active = offset === 0;
+        const offset = signedOffset(index, selectedRef.current, cards.length) + dragProgressRef.current;
+        const activeStrength = Math.max(0, 1 - Math.abs(offset));
         const targetX = offset * 3.05;
         const targetY = Math.abs(offset) * 0.08;
         const targetZ = -Math.abs(offset) * 1.5;
         const targetRotation = -offset * 0.34;
-        const targetScale = active ? 1 : 0.82;
-        const ease = reducedMotion ? 1 : 0.11;
+        const targetScale = 0.82 + activeStrength * 0.18;
+        const ease = draggingRef.current ? 0.34 : reducedMotion ? 1 : 0.11;
 
         group.position.x += (targetX - group.position.x) * ease;
         group.position.y += (targetY - group.position.y) * ease;
         group.position.z += (targetZ - group.position.z) * ease;
         group.rotation.y += (targetRotation - group.rotation.y) * ease;
         group.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), ease);
-        frame.opacity += ((active ? 0.92 : 0.2) - frame.opacity) * ease;
-        grid.opacity += ((active ? 0.2 : 0.06) - grid.opacity) * ease;
-        accent.opacity += ((active ? 0.74 : 0.13) - accent.opacity) * ease;
+        frame.opacity += ((0.2 + activeStrength * 0.72) - frame.opacity) * ease;
+        grid.opacity += ((0.06 + activeStrength * 0.14) - grid.opacity) * ease;
+        accent.opacity += ((0.13 + activeStrength * 0.61) - accent.opacity) * ease;
       });
 
       renderer.render(scene, camera);
@@ -174,6 +181,7 @@ export function ThreeProjectCarousel() {
   }, []);
 
   const move = (direction: number) => {
+    dragProgressRef.current = 0;
     setSelected((current) => (current + direction + projects.length) % projects.length);
   };
 
@@ -200,21 +208,29 @@ export function ThreeProjectCarousel() {
           if (event.pointerType === "mouse" && event.button !== 0) return;
           dragStartRef.current = event.clientX;
           dragDistanceRef.current = 0;
+          dragProgressRef.current = 0;
+          draggingRef.current = true;
           setDragging(true);
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
           if (dragStartRef.current === null) return;
           dragDistanceRef.current = event.clientX - dragStartRef.current;
+          const travel = Math.max(180, Math.min(event.currentTarget.clientWidth * 0.72, 460));
+          dragProgressRef.current = Math.max(-1.1, Math.min(1.1, dragDistanceRef.current / travel));
         }}
         onPointerUp={(event) => {
           const distance = dragDistanceRef.current;
-          if (Math.abs(distance) > 42) {
-            move(distance > 0 ? -1 : 1);
-            suppressClickRef.current = true;
+          const progress = dragProgressRef.current;
+          if (Math.abs(progress) > 0.18) {
+            const direction = progress > 0 ? -1 : 1;
+            setSelected((current) => (current + direction + projects.length) % projects.length);
+            dragProgressRef.current = progress + (progress > 0 ? -1 : 1);
           }
+          suppressClickRef.current = Math.abs(distance) > 8;
           dragStartRef.current = null;
           dragDistanceRef.current = 0;
+          draggingRef.current = false;
           setDragging(false);
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
@@ -223,6 +239,7 @@ export function ThreeProjectCarousel() {
         onPointerCancel={() => {
           dragStartRef.current = null;
           dragDistanceRef.current = 0;
+          draggingRef.current = false;
           setDragging(false);
         }}
         onClick={(event) => {
