@@ -18,12 +18,12 @@ export function Hero() {
               thinking meets technical depth.
             </p>
             <div className="hero-actions" aria-label="Profile links">
-              <a className="primary-action" href="/cv.pdf" download>
-                DOWNLOAD CV <span aria-hidden="true">↓</span>
+              <a className="primary-action" href="#about">
+                CONTACT ME <span aria-hidden="true">↗</span>
               </a>
               <GithubContributions />
               <a
-                href="https://www.linkedin.com/in/yourname"
+                href="https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"
                 target="_blank"
                 rel="noreferrer"
               >

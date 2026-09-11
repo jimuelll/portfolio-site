@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import Image from "next/image";
 import * as THREE from "three";
 import { projects } from "../../lib/portfolio";
 
@@ -23,7 +24,10 @@ export function ThreeProjectCarousel() {
     .filter(Boolean)
     .slice(0, 4)
     .join(" / ");
-  selectedRef.current = selected;
+
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   useEffect(() => {
     const mount = canvasMountRef.current;
@@ -183,11 +187,17 @@ export function ThreeProjectCarousel() {
     >
       <a
         className={`carousel-stage ${dragging ? "is-dragging" : ""}`}
+        role={project.demoUrl ? undefined : "group"}
         href={project.demoUrl}
-        target="_blank"
-        rel="noreferrer"
+        target={project.demoUrl ? "_blank" : undefined}
+        rel={project.demoUrl ? "noreferrer" : undefined}
         draggable={false}
-        aria-label={`Open demo site for ${project.name}. Drag horizontally to browse projects.`}
+        aria-label={
+          project.demoUrl
+            ? `Open demo site for ${project.name}. Drag horizontally to browse projects.`
+            : `${project.name} preview. No demo link is published yet. Drag horizontally to browse projects.`
+        }
+        aria-disabled={project.demoUrl ? undefined : true}
         onDragStart={(event) => event.preventDefault()}
         onPointerDown={(event) => {
           if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -254,10 +264,13 @@ export function ThreeProjectCarousel() {
           className={`carousel-image-shell ${threeReady ? "is-three-ready" : ""}`}
         >
           {project.image ? (
-            <img
+            <Image
               className="carousel-project-image"
               src={project.image}
               alt={`${project.name} interface preview`}
+              fill
+              sizes="(max-width: 1100px) 100vw, 72vw"
+              style={{ inset: "4%", width: "92%", height: "92%", objectFit: "contain" }}
               draggable={false}
             />
           ) : (
@@ -285,7 +298,14 @@ export function ThreeProjectCarousel() {
                   }
                 >
                   {item.image ? (
-                    <img src={item.image} alt="" draggable={false} />
+                    <Image
+                      src={item.image}
+                      alt=""
+                      fill
+                      sizes="(max-width: 700px) 78vw, 430px"
+                      style={{ objectFit: "cover" }}
+                      draggable={false}
+                    />
                   ) : (
                     <div className="mobile-project-placeholder">
                       <span>PROJECT / {item.index}</span>
@@ -328,14 +348,20 @@ export function ThreeProjectCarousel() {
             </div>
           ) : null}
         </div>
-        <a
-          className="carousel-demo-link"
-          href={project.demoUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {project.demoLabel ?? "DEMO SITE"} <span aria-hidden="true">↗</span>
-        </a>
+        {project.demoUrl ? (
+          <a
+            className="carousel-demo-link"
+            href={project.demoUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {project.demoLabel ?? "DEMO SITE"} <span aria-hidden="true">↗</span>
+          </a>
+        ) : (
+          <span className="carousel-demo-link is-unavailable" aria-disabled="true">
+            DEMO LINK / NOT AVAILABLE
+          </span>
+        )}
         <details className="mobile-project-details" key={`details-${project.index}`}>
           <summary>TECHNICAL DETAILS <span aria-hidden="true">+</span></summary>
           <div>

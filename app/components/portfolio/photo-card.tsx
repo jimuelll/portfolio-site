@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { Euler, MathUtils, Quaternion, Vector2 } from "three";
 import { useGithubStats } from "./github-contributions";
 
@@ -87,11 +88,15 @@ export function PhotoCard() {
     >
       <div className="portrait-inner">
         <div className="portrait-face portrait-front">
-          <img
+          <Image
             className="portrait-image"
             ref={imageRef}
             src="/star.jpg"
             alt="Monochrome portrait"
+            fill
+            priority
+            sizes="(max-width: 700px) 80vw, 360px"
+            style={{ inset: "-3%", width: "106%", height: "106%" }}
           />
           <div className="portrait-grid" aria-hidden="true" />
           <div className="halftone" aria-hidden="true" />

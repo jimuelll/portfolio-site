@@ -9,7 +9,7 @@ export type Project = {
   dense?: boolean;
   demoLabel?: string;
   image?: string;
-  demoUrl: string;
+  demoUrl?: string;
 };
 
 export type StackGroup = {
@@ -51,7 +51,6 @@ export const projects: Project[] = [
     summary:
       "An observability interface that turns complex systems into clear decisions.",
     stack: "REACT / NODE.JS / CLICKHOUSE / AWS",
-    demoUrl: "https://example.com",
   },
   {
     index: "03",
@@ -61,7 +60,6 @@ export const projects: Project[] = [
     summary:
       "A resilient multi-market storefront built for speed, scale, and conversion.",
     stack: "NEXT.JS / GRAPHQL / STRIPE / VERCEL",
-    demoUrl: "https://example.com",
   },
 ];
 

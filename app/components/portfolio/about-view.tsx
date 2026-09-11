@@ -17,12 +17,12 @@ export function AboutView() {
               feels, and how long it lasts.
             </p>
             <p>
-              Hello, I'm Jean. I like making things work. When I build I try to
+              Hello, I&apos;m Jean. I like making things work. When I build I try to
               place myself in the shoes of the user. I always think about the
               longevity of the product. I put a huge amount of thought too
               whenever I build UIs. A huge fan of efficiency (agentic coding
               lol). In my free time, I play video games, watch anime, or when
-              I'm feeling it, I build passion projects.
+              I&apos;m feeling it, I build passion projects.
             </p>
           </div>
           <div className="about-facts">
@@ -50,14 +50,17 @@ export function AboutView() {
           <span className="mono-label">START A CONVERSATION</span>
           <p className="contact-lead">
             Have a product to build, a problem to solve, or a team I could help?
-            Let's talk.
+            Let&apos;s talk.
           </p>
           <div className="contact-actions">
-            <a className="primary-action" href="mailto:hello@example.com">
+            <a
+              className="primary-action"
+              href="mailto:untalanjimueljean@gmail.com"
+            >
               EMAIL ME <span aria-hidden="true">↗</span>
             </a>
             <a
-              href="https://www.linkedin.com/in/yourname"
+              href="https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"
               target="_blank"
               rel="noreferrer"
             >

@@ -1822,6 +1822,11 @@ nav :is(a, button):focus-visible::before {
   color: var(--background);
   outline: none;
 }
+.carousel-demo-link.is-unavailable {
+  opacity: .45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .carousel-controls {
   grid-area: controls;
   display: grid;
@@ -1909,7 +1914,7 @@ nav :is(a, button):focus-visible::before {
 .page-title > div {
   min-width: 0;
 }
-.page-title h1 {
+.page-title h2 {
   position: relative;
   font-size: clamp(2.35rem, 3.7vw, 3.85rem);
   line-height: 0.76;
@@ -2329,7 +2334,7 @@ nav :is(a, button):focus-visible::before {
 .profile-section .page-index {
   font-size: clamp(2.8rem, 3.5vw, 3.9rem);
 }
-.profile-section .page-title h1 {
+.profile-section .page-title h2 {
   font-size: clamp(2.35rem, 3.2vw, 3.6rem);
   line-height: 0.8;
 }
@@ -3600,7 +3605,7 @@ footer a {
     gap: 16px;
     padding: 0 0 20px;
   }
-  .page-title h1 {
+  .page-title h2 {
     font-size: clamp(2.15rem, 10vw, 3.1rem);
     overflow-wrap: anywhere;
   }
@@ -3765,7 +3770,7 @@ footer a {
   .page-index {
     font-size: 3.6rem;
   }
-  .page-title h1 {
+  .page-title h2 {
     font-size: clamp(1.9rem, 10vw, 2.4rem);
   }
   .about-copy dl div {

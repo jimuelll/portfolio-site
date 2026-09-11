@@ -46,7 +46,9 @@ export function ExperienceView() {
   const [flipped, setFlipped] = useState(true);
   const [titleGlitch, setTitleGlitch] = useState(false);
 
-  flippedRef.current = flipped;
+  useEffect(() => {
+    flippedRef.current = flipped;
+  }, [flipped]);
 
   useEffect(() => {
     const mount = mountRef.current;

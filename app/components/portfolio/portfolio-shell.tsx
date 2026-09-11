@@ -92,6 +92,8 @@ export function PortfolioShell() {
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("mono-corrupt-theme");
     const initialDark = savedTheme === "dark";
+    // Read the persisted browser preference after mount to avoid an SSR hydration mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDark(initialDark);
     document.documentElement.dataset.theme = initialDark ? "dark" : "light";
     setThemeReady(true);
@@ -219,7 +221,7 @@ export function PortfolioShell() {
             RETURN HOME ↗
           </button>
         ) : (
-          <a href="mailto:hello@example.com">CONTACT ↗</a>
+          <a href="mailto:untalanjimueljean@gmail.com">CONTACT ↗</a>
         )}
       </footer>
     </main>
