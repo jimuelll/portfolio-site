@@ -17,11 +17,12 @@ export function AboutView() {
               feels, and how long it lasts.
             </p>
             <p>
-              Hello, I&apos;m Jean—a full-stack developer who works from user
-              experience through backend architecture. I care about clear
-              interfaces, maintainable systems, and choosing practical tools
-              for the problem. Outside work, I play games, watch anime, and
-              build experimental projects for the Lab.
+              Hello, I'm Jean. I like making things work. When I build I try to
+              place myself in the shoes of the user. I always think about the
+              longevity of the product. I put a huge amount of thought too
+              whenever I build UIs. A huge fan of efficiency (agentic coding
+              lol). In my free time, I play video games, watch anime, or when
+              I'm feeling it, I build passion projects.
             </p>
           </div>
           <div className="about-facts">
