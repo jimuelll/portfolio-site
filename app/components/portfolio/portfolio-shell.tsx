@@ -4,7 +4,6 @@ import { useEffect, useState, type CSSProperties } from "react";
 import CursorTrail from "../../cursor-trail";
 import type { HomeSection, NavPage } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
-import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
 import { LabView } from "./lab-view";
 import { SiteHeader } from "./site-header";
@@ -111,7 +110,6 @@ export function PortfolioShell() {
       "work",
       "profile",
       "about",
-      "contact",
     ];
     let frame = 0;
 
@@ -204,7 +202,6 @@ export function PortfolioShell() {
             <StackView />
           </div>
           <AboutView />
-          <ContactView />
         </>
       ) : (
         <LabView />

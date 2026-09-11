@@ -25,7 +25,6 @@ export const homeNavItems = [
   { id: "work", label: "WORK", mobileLabel: "WORK" },
   { id: "profile", label: "PROFILE", mobileLabel: "PROFILE" },
   { id: "about", label: "ABOUT", mobileLabel: "ABOUT" },
-  { id: "contact", label: "CONTACT", mobileLabel: "CONTACT" },
 ] as const;
 export type HomeSection = (typeof homeNavItems)[number]["id"];
 export type NavPage = "home" | "lab";
