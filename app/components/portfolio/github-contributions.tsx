@@ -41,7 +41,7 @@ export function GithubContributions() {
         <span className="section-number">05</span>
         <div>
           <span className="mono-label">OPEN SOURCE / ACTIVITY</span>
-          <h2 id="contributions-title">GITHUB<br />CONTRIBUTIONS</h2>
+          <h2 id="contributions-title">GITHUB ACTIVITY</h2>
         </div>
         <p>Consistent work across products, experiments, and open-source projects.</p>
       </div>
