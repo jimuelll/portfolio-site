@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import CursorTrail from "../../cursor-trail";
-import type { NavItem } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
 import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
@@ -81,7 +80,6 @@ function createCorruptionLayout(): CorruptionPiece[] {
 
 export function PortfolioShell() {
   const [dark, setDark] = useState(false);
-  const [activeNav, setActiveNav] = useState<NavItem>("work");
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
@@ -99,41 +97,6 @@ export function PortfolioShell() {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
     window.localStorage.setItem("mono-corrupt-theme", dark ? "dark" : "light");
   }, [dark, themeReady]);
-
-  useEffect(() => {
-    const sections: NavItem[] = ["work", "experience", "about", "contact"];
-    let frame = 0;
-
-    const updateActiveSection = () => {
-      frame = 0;
-      const marker = window.innerHeight * 0.34;
-      let current: NavItem = "work";
-
-      sections.forEach((section) => {
-        const element = document.getElementById(section);
-        if (element && element.getBoundingClientRect().top <= marker) {
-          current = section;
-        }
-      });
-
-      setActiveNav(current);
-    };
-
-    const scheduleUpdate = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updateActiveSection);
-    };
-
-    updateActiveSection();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-
-    return () => {
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, []);
 
   function transitionTheme() {
     if (corrupting) return;
@@ -164,7 +127,7 @@ export function PortfolioShell() {
       </div>
 
       <SiteHeader
-        activeNav={activeNav}
+        activePage="home"
         dark={dark}
         onToggleTheme={transitionTheme}
       />

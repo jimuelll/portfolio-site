@@ -19,8 +19,11 @@ export type StackGroup = {
   items: string;
 };
 
-export const navItems = ["work", "experience", "about", "contact"] as const;
-export type NavItem = (typeof navItems)[number];
+export const navItems = [
+  { id: "home", label: "HOME", href: "/" },
+  { id: "lab", label: "LAB", href: "/lab" },
+] as const;
+export type NavPage = (typeof navItems)[number]["id"];
 
 export const projects: Project[] = [
   {

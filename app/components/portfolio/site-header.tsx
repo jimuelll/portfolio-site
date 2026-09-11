@@ -1,37 +1,38 @@
-import { navItems, type NavItem } from "../../lib/portfolio";
+import Link from "next/link";
+import { navItems, type NavPage } from "../../lib/portfolio";
 
 type SiteHeaderProps = {
-  activeNav: NavItem;
+  activePage: NavPage;
   dark: boolean;
   onToggleTheme: () => void;
 };
 
 export function SiteHeader({
-  activeNav,
+  activePage,
   dark,
   onToggleTheme,
 }: SiteHeaderProps) {
   return (
     <header className="site-header">
-      <a
+      <Link
         className="identity"
-        href="#top"
-        aria-label="Go to the top"
+        href="/"
+        aria-label="Go home"
       >
         <span className="identity-mark" aria-hidden="true" />
         <span>Untalan J.</span>
-      </a>
+      </Link>
       <nav aria-label="Primary navigation">
         {navItems.map((item) => (
-          <a
-            key={item}
-            href={`#${item}`}
-            className={activeNav === item ? "active" : undefined}
-            aria-current={activeNav === item ? "location" : undefined}
-            data-label={`/${item.toUpperCase()}`}
+          <Link
+            key={item.id}
+            href={item.href}
+            className={`nav-${item.id} ${activePage === item.id ? "active" : ""}`}
+            aria-current={activePage === item.id ? "page" : undefined}
+            data-label={`/${item.label}`}
           >
-            /{item.toUpperCase()}
-          </a>
+            /{item.label}
+          </Link>
         ))}
       </nav>
       <button
