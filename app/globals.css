@@ -993,6 +993,120 @@ nav :is(a, button):focus-visible::before {
   overflow: hidden;
   border: 1px solid var(--foreground);
   background: var(--ghost);
+  perspective: 1000px;
+  cursor: pointer;
+}
+.hero-portrait:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 5px;
+}
+.portrait-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform .72s cubic-bezier(.2,.75,.18,1);
+}
+.hero-portrait.is-flipped .portrait-inner {
+  transform: rotateY(180deg);
+}
+.portrait-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.portrait-back {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--foreground) 8%, transparent) 1px, transparent 1px),
+    var(--background);
+  background-size: 22px 22px;
+  transform: rotateY(180deg);
+}
+.portrait-back-kicker {
+  color: var(--muted);
+}
+.portrait-back-title {
+  margin-top: 18px;
+  font-size: clamp(1.7rem, 3vw, 2.8rem);
+  line-height: .9;
+  letter-spacing: -.06em;
+}
+.portrait-contributions {
+  margin-top: 20px;
+  border-top: 1px solid var(--foreground);
+  padding-top: 10px;
+}
+.portrait-contributions-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.portrait-contributions-top .mono-label {
+  min-width: 0;
+  font-size: .57rem;
+  letter-spacing: .06em;
+}
+.portrait-contributions-top strong {
+  flex: 0 0 auto;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1rem;
+  letter-spacing: -.04em;
+}
+.portrait-contribution-grid {
+  display: grid;
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 10px;
+}
+.portrait-contribution-week {
+  display: grid;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.portrait-contribution-week i {
+  display: block;
+  min-width: 0;
+  aspect-ratio: 1;
+  background: var(--foreground);
+  opacity: .1;
+}
+.portrait-contribution-week i[data-level="1"] { opacity: .3; }
+.portrait-contribution-week i[data-level="2"] { opacity: .5; }
+.portrait-contribution-week i[data-level="3"] { opacity: .72; }
+.portrait-contribution-week i[data-level="4"] { opacity: 1; }
+.portrait-contributions-note {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: .52rem;
+  letter-spacing: .06em;
+}
+.portrait-stats-grid {
+  margin-top: auto;
+  border-top: 1px solid var(--foreground);
+}
+.portrait-stats-grid > div {
+  min-height: 42px;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--ghost);
+}
+.portrait-stats-grid strong {
+  font-family: var(--font-geist-mono);
+  font-size: 1.05rem;
+  letter-spacing: -.04em;
+}
+.portrait-back .portrait-stats-grid {
+  margin-top: 14px;
 }
 .photo-card {
   transform-style: preserve-3d;
@@ -1064,6 +1178,17 @@ nav :is(a, button):focus-visible::before {
   writing-mode: vertical-rl;
   color: var(--muted);
 }
+.hero-portrait .portrait-back .portrait-code {
+  position: static;
+  align-self: flex-end;
+  margin-top: auto;
+  padding: 6px 8px;
+  writing-mode: horizontal-tb;
+  font-size: .52rem;
+  line-height: 1.2;
+  right: auto;
+  bottom: auto;
+}
 .hero-meta {
   align-self: end;
   display: grid;
@@ -1094,11 +1219,15 @@ nav :is(a, button):focus-visible::before {
   font-weight: 650;
 }
 .hero-actions .hero-github-action {
-  min-width: 210px;
+  min-width: 0;
+  min-height: 36px;
+  width: auto;
   position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 12px;
+  display: inline-flex;
+  padding: 0 10px;
+  gap: 8px;
+  font-size: 0.58rem;
+  white-space: nowrap;
   overflow: hidden;
 }
 .hero-github-label,
@@ -3328,6 +3457,8 @@ footer a {
   }
   .hero-actions .hero-github-action {
     min-width: 0;
+    width: auto;
+    justify-self: start;
   }
   .hero-github-week:nth-child(-n + 9) {
     display: none;

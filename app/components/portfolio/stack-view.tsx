@@ -207,7 +207,8 @@ export function StackView() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const clock = new THREE.Clock();
+    const timer = new THREE.Timer();
+    timer.connect(document);
     const inViewRef = { current: true };
     let animationFrame = 0;
     let running = false;
@@ -249,7 +250,8 @@ export function StackView() {
       if (reducedMotion || routeCurves.length === 0) {
         pulse.visible = false;
       } else {
-        const progress = (clock.getElapsedTime() % 5.6) / 5.6;
+        timer.update();
+        const progress = (timer.getElapsed() % 5.6) / 5.6;
         const scaled = progress * routeCurves.length;
         const segment = Math.min(routeCurves.length - 1, Math.floor(scaled));
         pulse.position.copy(routeCurves[segment].getPointAt(scaled - segment));
@@ -300,6 +302,7 @@ export function StackView() {
 
     return () => {
       stop();
+      timer.disconnect();
       surface.removeEventListener("pointermove", handlePointerMove);
       surface.removeEventListener("pointerleave", resetPointer);
       visibilityObserver.disconnect();
