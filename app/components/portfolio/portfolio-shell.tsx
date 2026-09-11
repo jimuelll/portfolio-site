@@ -6,7 +6,6 @@ import type { HomeSection, NavPage } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
 import { ContactView } from "./contact-view";
 import { ExperienceView } from "./experience-view";
-import { GithubContributions } from "./github-contributions";
 import { LabView } from "./lab-view";
 import { SiteHeader } from "./site-header";
 import { StackView } from "./stack-view";
@@ -82,12 +81,14 @@ function createCorruptionLayout(): CorruptionPiece[] {
 
 export function PortfolioShell() {
   const [dark, setDark] = useState(false);
-  const [activeSection, setActiveSection] = useState<HomeSection>("work");
+  const [activeSection, setActiveSection] = useState<HomeSection>("start");
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
   const [pageMode, setPageMode] = useState<NavPage>("home");
-  const [navTransition, setNavTransition] = useState<"merging" | "splitting" | null>(null);
+  const [navTransition, setNavTransition] = useState<
+    "merging" | "splitting" | null
+  >(null);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("mono-corrupt-theme");
@@ -105,16 +106,23 @@ export function PortfolioShell() {
 
   useEffect(() => {
     if (pageMode !== "home") return;
-    const sections: HomeSection[] = ["work", "experience", "about", "contact"];
+    const sections: HomeSection[] = [
+      "start",
+      "work",
+      "profile",
+      "about",
+      "contact",
+    ];
     let frame = 0;
 
     const updateActiveSection = () => {
       frame = 0;
       const marker = window.innerHeight * 0.34;
-      let current: HomeSection = "work";
+      let current: HomeSection = "start";
       sections.forEach((section) => {
         const element = document.getElementById(section);
-        if (element && element.getBoundingClientRect().top <= marker) current = section;
+        if (element && element.getBoundingClientRect().top <= marker)
+          current = section;
       });
       setActiveSection(current);
     };
@@ -191,12 +199,11 @@ export function PortfolioShell() {
       {pageMode === "home" ? (
         <>
           <WorkView />
-          <div className="profile-band">
+          <div className="profile-band" id="profile">
             <ExperienceView />
             <StackView />
           </div>
           <AboutView />
-          <GithubContributions />
           <ContactView />
         </>
       ) : (
@@ -206,9 +213,19 @@ export function PortfolioShell() {
       <footer>
         <span>© 2026 UNTALAN J.</span>
         <span>{pageMode === "lab" ? "LAB BUILD 00" : "BUILD 2026.09"}</span>
-        <span>{pageMode === "lab" ? "EXPERIMENTS / INCOMING" : "LOCATION / CITY, COUNTRY"}</span>
+        <span>
+          {pageMode === "lab"
+            ? "EXPERIMENTS / INCOMING"
+            : "LOCATION / QUEZON, PHILIPPINES"}
+        </span>
         {pageMode === "lab" ? (
-          <button className="footer-home" type="button" onClick={() => navigatePage("home")}>RETURN HOME ↗</button>
+          <button
+            className="footer-home"
+            type="button"
+            onClick={() => navigatePage("home")}
+          >
+            RETURN HOME ↗
+          </button>
         ) : (
           <a href="mailto:hello@example.com">CONTACT ↗</a>
         )}

@@ -21,8 +21,9 @@ export type StackGroup = {
 };
 
 export const homeNavItems = [
+  { id: "start", label: "START", mobileLabel: "START" },
   { id: "work", label: "WORK", mobileLabel: "WORK" },
-  { id: "experience", label: "EXPERIENCE", mobileLabel: "EXP" },
+  { id: "profile", label: "PROFILE", mobileLabel: "PROFILE" },
   { id: "about", label: "ABOUT", mobileLabel: "ABOUT" },
   { id: "contact", label: "CONTACT", mobileLabel: "CONTACT" },
 ] as const;

@@ -3,9 +3,9 @@ import { ThreeProjectCarousel } from "./three-project-carousel";
 
 export function WorkView() {
   return (
-    <div className="view" id="work">
+    <div className="view">
       <Hero />
-      <section className="work-section">
+      <section className="work-section" id="work">
         <div className="section-heading">
           <span className="section-number">01</span>
           <div><span className="mono-label">SELECTED</span><h2>WORK</h2></div>
