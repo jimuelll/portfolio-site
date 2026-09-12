@@ -17,10 +17,15 @@ export function Hero() {
               Building precise, resilient software systems where product
               thinking meets technical depth.
             </p>
-            <div className="hero-actions" aria-label="Profile links">
-              <a className="primary-action" href="#about">
-                CONTACT ME <span aria-hidden="true">↗</span>
-              </a>
+            <div className="hero-actions" aria-label="Profile actions">
+              <button
+                className="primary-action"
+                type="button"
+                disabled
+                title="CV download coming soon"
+              >
+                DOWNLOAD CV <span aria-hidden="true">↓</span>
+              </button>
               <GithubContributions />
               <a
                 href="https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"

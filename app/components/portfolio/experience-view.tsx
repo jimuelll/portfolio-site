@@ -9,19 +9,19 @@ const practiceEntries = [
     date: "ONGOING",
     role: "INDEPENDENT DEVELOPMENT",
     company: "PERSONAL + ACADEMIC PROJECTS",
-    copy: "Designing and shipping full-stack applications from interface to infrastructure, with a focus on maintainability, product thinking, and real-world workflows.",
+    copy: "Shipping full-stack applications from interface to infrastructure, centered on maintainability and real workflows.",
   },
   {
     date: "ONGOING",
     role: "EXPERIMENTAL DEVELOPMENT",
     company: "LAB / SELF-DIRECTED WORK",
-    copy: "Exploring new tools, interaction patterns, system design, and creative web experiences through small experiments and technical prototypes.",
+    copy: "Testing new tools, interaction patterns, and system ideas through focused prototypes.",
   },
   {
     date: "CURRENT",
     role: "CAPSTONE DEVELOPMENT",
     company: "ACADEMIC PROJECT",
-    copy: "Applying software engineering, research, and collaborative development practices to a production-scale academic system.",
+    copy: "Building a production-scale academic system through research and collaborative engineering.",
   },
 ];
 
@@ -29,14 +29,14 @@ const education = [
   {
     date: "2022—ONGOING",
     role: "B.S. COMPUTER SCIENCE",
-    school: "MANUEL S. ENVERGA UNIVERSITY FOUNDATION-CANDELARIA INC.",
-    copy: "Software engineering, algorithms, databases, systems, and human-centered product development.",
+    school: "MANUEL S. ENVERGA UNIVERSITY FOUNDATION — CANDELARIA",
+    copy: "Software engineering, algorithms, databases, systems, and human-centered development.",
   },
   {
     date: "2025—2026",
     role: "CAPSTONE / THESIS",
-    school: "REVITALIZING ACADEMIC RESOURCE ACCESSIBILITY: AN AI-ENHANCED SMART LIBRARY MANAGEMENT SYSTEM FOR MANUEL S. ENVERGA UNIVERSITY FOUNDATION – CANDELARIA, INC.",
-    copy: "Designed and developed a full-stack system focused on real-world workflows, scalable architecture, and practical user experience.",
+    school: "AI-ENHANCED SMART LIBRARY MANAGEMENT SYSTEM",
+    copy: "Capstone on academic resource accessibility, scalable architecture, and practical user experience.",
   },
 ];
 
@@ -240,14 +240,15 @@ export function ExperienceView() {
             <div className="experience-card-list">
               {practiceEntries.map((role, index) => (
                 <article className="experience-card-row" key={role.date + role.role}>
-                  <span className="mono-label">
-                    0{index + 1} / {role.date}
-                  </span>
-                  <div>
-                    <h3>{role.role}</h3>
-                    <p>{role.company}</p>
+                  <div className="experience-card-date mono-label">
+                    <strong className="experience-entry-index">0{index + 1}</strong>
+                    <span>{role.date}</span>
                   </div>
-                  <p>{role.copy}</p>
+                  <div className="experience-card-entry">
+                    <h3>{role.role}</h3>
+                    <p className="experience-card-meta">{role.company}</p>
+                    <p className="experience-card-description">{role.copy}</p>
+                  </div>
                 </article>
               ))}
             </div>
@@ -272,14 +273,15 @@ export function ExperienceView() {
                   className="experience-card-row"
                   key={item.date + item.role}
                 >
-                  <span className="mono-label">
-                    0{index + 1} / {item.date}
-                  </span>
-                  <div>
-                    <h3>{item.role}</h3>
-                    <p>{item.school}</p>
+                  <div className="experience-card-date mono-label">
+                    <strong className="experience-entry-index">0{index + 1}</strong>
+                    <span>{item.date}</span>
                   </div>
-                  <p>{item.copy}</p>
+                  <div className="experience-card-entry">
+                    <h3>{item.role}</h3>
+                    <p className="experience-card-meta">{item.school}</p>
+                    <p className="experience-card-description">{item.copy}</p>
+                  </div>
                 </article>
               ))}
             </div>

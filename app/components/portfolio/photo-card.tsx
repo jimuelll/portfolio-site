@@ -96,7 +96,6 @@ export function PhotoCard() {
             fill
             priority
             sizes="(max-width: 700px) 80vw, 360px"
-            style={{ inset: "-3%", width: "106%", height: "106%" }}
           />
           <div className="portrait-grid" aria-hidden="true" />
           <div className="halftone" aria-hidden="true" />

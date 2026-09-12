@@ -270,7 +270,6 @@ export function ThreeProjectCarousel() {
               alt={`${project.name} interface preview`}
               fill
               sizes="(max-width: 1100px) 100vw, 72vw"
-              style={{ inset: "4%", width: "92%", height: "92%", objectFit: "contain" }}
               draggable={false}
             />
           ) : (
