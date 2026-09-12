@@ -1,3 +1,5 @@
+import { GlitchTitle } from "./glitch-title";
+
 const slots = ["01", "02", "03", "04"];
 
 export function LabView() {
@@ -6,21 +8,7 @@ export function LabView() {
       <div className="lab-heading">
         <div>
           <span className="mono-label">EXPERIMENTAL INDEX / 00</span>
-          <h1 className="lab-title" id="lab-title" aria-label="Lab">
-            <span className="lab-title-base">LAB</span>
-            <span
-              className="lab-title-copy lab-title-copy-a"
-              aria-hidden="true"
-            >
-              LAB
-            </span>
-            <span
-              className="lab-title-copy lab-title-copy-b"
-              aria-hidden="true"
-            >
-              LAB
-            </span>
-          </h1>
+          <GlitchTitle variant="lab" id="lab-title" />
         </div>
         <p>
           A space for experiments, small tools, visual studies, and unfinished

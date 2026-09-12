@@ -52,7 +52,15 @@ function randomLetters(letters: HTMLElement[]) {
     .slice(0, 1 + Math.floor(Math.random() * 3));
 }
 
-export function GlitchTitle() {
+type GlitchTitleProps = {
+  variant?: "hero" | "lab";
+  id?: string;
+};
+
+export function GlitchTitle({
+  variant = "hero",
+  id,
+}: GlitchTitleProps) {
   const rootRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -279,10 +287,27 @@ export function GlitchTitle() {
     };
   }, []);
 
+  if (variant === "lab") {
+    return (
+      <h1
+        className="glitch-title lab-glitch-title"
+        ref={rootRef}
+        id={id}
+        aria-label="Lab"
+      >
+        <span className="glitch-title-base">LAB</span>
+        <span className="glitch-title-overlay" aria-hidden="true">
+          <LetterLine text="LAB" kind="color" />
+        </span>
+      </h1>
+    );
+  }
+
   return (
     <h1
       className="glitch-title"
       ref={rootRef}
+      id={id}
       aria-label="Full-stack developer"
     >
       <span className="glitch-title-base">

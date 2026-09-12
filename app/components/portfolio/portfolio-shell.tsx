@@ -153,40 +153,40 @@ export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
 
     if (compactRoute) {
       setRouteLoading(nextPage);
-      startCorruption(640, [110, 250, 410, 530]);
+      startCorruption(480, [80, 180, 300, 400]);
       window.setTimeout(() => {
         router.push(destination, { scroll: false });
         window.scrollTo({ top: 0, behavior: "auto" });
-      }, 560);
-      window.setTimeout(() => setRouteLoading(null), 720);
+      }, 420);
+      window.setTimeout(() => setRouteLoading(null), 540);
       return;
     }
 
-    startCorruption(1420, [84, 174, 282, 402, 548, 708, 872, 1040, 1210]);
+    startCorruption(900, [64, 140, 232, 344, 470, 600, 736, 826]);
 
     if (nextPage === "lab") {
       setNavTransition("glitching");
       window.setTimeout(() => {
         setNavTransition("merging");
-      }, 420);
+      }, 280);
       window.setTimeout(() => {
         setNavTransition("holding");
-      }, 1020);
+      }, 650);
       window.setTimeout(() => {
         router.push("/lab", { scroll: false });
         window.scrollTo({ top: 0, behavior: "auto" });
-      }, 1260);
+      }, 820);
       return;
     }
 
     setNavTransition("home-glitching");
     window.setTimeout(() => {
       setNavTransition("splitting");
-    }, 420);
+    }, 280);
     window.setTimeout(() => {
       router.push("/", { scroll: false });
       window.scrollTo({ top: 0, behavior: "auto" });
-    }, 980);
+    }, 700);
   }
 
   function startCorruption(duration = 840, refreshes = [72, 146, 238, 344, 468, 612, 742]) {

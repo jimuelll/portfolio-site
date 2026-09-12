@@ -256,11 +256,11 @@ nav :is(a, button):focus-visible::before {
   pointer-events: none;
 }
 .site-header.is-glitching-nav .home-section-nav .nav-section {
-  animation: nav-pre-merge-glitch .42s steps(1, end) both;
+  animation: nav-pre-merge-glitch .28s steps(1, end) both;
 }
-.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(2) { animation-delay: 35ms; }
-.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(3) { animation-delay: 70ms; }
-.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(4) { animation-delay: 105ms; }
+.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(2) { animation-delay: 24ms; }
+.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(3) { animation-delay: 48ms; }
+.site-header.is-glitching-nav .home-section-nav .nav-section:nth-child(4) { animation-delay: 72ms; }
 @keyframes nav-pre-merge-glitch {
   0%, 100% {
     opacity: 1;
@@ -295,7 +295,7 @@ nav :is(a, button):focus-visible::before {
   pointer-events: none;
 }
 .site-header.is-merging-nav .home-section-nav :is(a, button) {
-  animation: nav-merge 0.6s steps(8, end) both;
+  animation: nav-merge 0.42s steps(8, end) both;
 }
 .nav-merge-home {
   position: absolute;
@@ -316,7 +316,7 @@ nav :is(a, button):focus-visible::before {
   transform-origin: center;
 }
 .site-header.is-merging-nav .nav-merge-home {
-  animation: nav-merge-home-reveal .6s cubic-bezier(.18, .76, .22, 1) both;
+  animation: nav-merge-home-reveal .42s cubic-bezier(.18, .76, .22, 1) both;
 }
 .site-header.is-merging-nav .home-section-nav > :nth-child(1) {
   --merge-x: clamp(170px, 24vw, 370px);
@@ -337,13 +337,13 @@ nav :is(a, button):focus-visible::before {
   pointer-events: none;
 }
 .site-header.is-home-glitching-nav .nav-home {
-  animation: nav-return-home-glitch .42s steps(1, end) both;
+  animation: nav-return-home-glitch .28s steps(1, end) both;
 }
 .site-header.is-home-glitching-nav .lab-route-nav .nav-lab {
-  animation: nav-home-companion-fade .42s steps(4, end) both;
+  animation: nav-home-companion-fade .28s steps(4, end) both;
 }
 .site-header.is-splitting-nav .home-section-nav :is(a, button) {
-  animation: nav-split 0.56s cubic-bezier(.2, .74, .18, 1) both;
+  animation: nav-split 0.4s cubic-bezier(.2, .74, .18, 1) both;
 }
 .site-header.is-splitting-nav .home-section-nav {
   pointer-events: none;
@@ -754,6 +754,22 @@ nav :is(a, button):focus-visible::before {
   display: block;
   color: transparent;
   pointer-events: none;
+}
+.lab-glitch-title {
+  position: relative;
+  width: max-content;
+  margin: 18px 0 0;
+  font-size: clamp(7rem, 18vw, 18rem);
+  line-height: 0.68;
+  letter-spacing: -0.1em;
+  font-weight: 720;
+}
+.lab-glitch-title .glitch-title-base {
+  color: transparent;
+  -webkit-text-stroke: 1px var(--foreground);
+}
+.lab-glitch-title .glitch-line-color {
+  color: transparent;
 }
 .glitch-line {
   display: inline-block;
@@ -3215,7 +3231,7 @@ footer a {
   font-size: clamp(4.5rem, 25vw, 7rem);
   line-height: .78;
   letter-spacing: -.1em;
-  animation: route-handoff-glitch .56s steps(1, end) both;
+  animation: route-handoff-glitch .42s steps(1, end) both;
 }
 .route-handoff-track {
   margin-top: 28px;
@@ -3229,16 +3245,16 @@ footer a {
   background: var(--foreground);
   transform: scaleY(0);
   transform-origin: bottom;
-  animation: route-handoff-cell .18s steps(2, end) both;
+  animation: route-handoff-cell .14s steps(2, end) both;
 }
-.route-handoff-track i:nth-child(1) { animation-delay: 30ms; }
-.route-handoff-track i:nth-child(2) { animation-delay: 85ms; }
-.route-handoff-track i:nth-child(3) { animation-delay: 140ms; }
-.route-handoff-track i:nth-child(4) { animation-delay: 195ms; }
-.route-handoff-track i:nth-child(5) { animation-delay: 250ms; }
-.route-handoff-track i:nth-child(6) { animation-delay: 305ms; }
-.route-handoff-track i:nth-child(7) { animation-delay: 360ms; }
-.route-handoff-track i:nth-child(8) { animation-delay: 415ms; }
+.route-handoff-track i:nth-child(1) { animation-delay: 24ms; }
+.route-handoff-track i:nth-child(2) { animation-delay: 66ms; }
+.route-handoff-track i:nth-child(3) { animation-delay: 108ms; }
+.route-handoff-track i:nth-child(4) { animation-delay: 150ms; }
+.route-handoff-track i:nth-child(5) { animation-delay: 192ms; }
+.route-handoff-track i:nth-child(6) { animation-delay: 234ms; }
+.route-handoff-track i:nth-child(7) { animation-delay: 276ms; }
+.route-handoff-track i:nth-child(8) { animation-delay: 318ms; }
 .route-handoff-status {
   margin-top: 10px;
   font-size: .58rem;
@@ -4603,6 +4619,9 @@ footer a {
     padding-bottom: 32px;
   }
   .lab-title {
+    font-size: clamp(6rem, 34vw, 9rem);
+  }
+  .lab-glitch-title {
     font-size: clamp(6rem, 34vw, 9rem);
   }
   .lab-grid {
