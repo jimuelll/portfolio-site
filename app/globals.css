@@ -1591,6 +1591,9 @@ nav :is(a, button):focus-visible::before {
   user-select: none;
   transition: opacity 0.16s steps(3, end);
 }
+.carousel-project-image-source {
+  opacity: 0;
+}
 .carousel-image-shell.is-three-ready > .carousel-project-image,
 .carousel-image-shell.is-three-ready > .carousel-image-placeholder {
   opacity: 0;

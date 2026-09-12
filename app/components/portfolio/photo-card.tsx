@@ -39,6 +39,8 @@ export function PhotoCard() {
     const targetRotation = { x: 0, y: 0, z: 0 };
     const currentRotation = { x: 0, y: 0, z: 0 };
     let animationFrame = 0;
+    let running = false;
+    let inView = false;
 
     function updateTarget(event: PointerEvent) {
       if (event.pointerType === "touch") return;
@@ -51,6 +53,7 @@ export function PhotoCard() {
       targetRotation.x = pointer.y * -6;
       targetRotation.y = pointer.x * 7;
       targetRotation.z = pointer.x * 0.7;
+      start();
     }
 
     function resetTarget() {
@@ -59,9 +62,35 @@ export function PhotoCard() {
       targetRotation.x = 0;
       targetRotation.y = 0;
       targetRotation.z = 0;
+      start();
+    }
+
+    function hasPendingMotion() {
+      return (
+        Math.abs(pointer.x - currentPointer.x) > 0.01 ||
+        Math.abs(pointer.y - currentPointer.y) > 0.01 ||
+        Math.abs(targetRotation.x - currentRotation.x) > 0.01 ||
+        Math.abs(targetRotation.y - currentRotation.y) > 0.01 ||
+        Math.abs(targetRotation.z - currentRotation.z) > 0.01
+      );
+    }
+
+    function stop() {
+      running = false;
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+      }
+    }
+
+    function start() {
+      if (running || !inView || document.hidden || !hasPendingMotion()) return;
+      running = true;
+      animationFrame = window.requestAnimationFrame(render);
     }
 
     function render() {
+      if (!running) return;
       currentPointer.x += (pointer.x - currentPointer.x) * 0.11;
       currentPointer.y += (pointer.y - currentPointer.y) * 0.11;
       currentRotation.x += (targetRotation.x - currentRotation.x) * 0.11;
@@ -70,15 +99,34 @@ export function PhotoCard() {
 
       cardElement.style.transform = `perspective(900px) rotateX(${currentRotation.x.toFixed(3)}deg) rotateY(${currentRotation.y.toFixed(3)}deg) rotateZ(${currentRotation.z.toFixed(3)}deg)`;
       imageElement.style.transform = `translate3d(${(currentPointer.x * -5).toFixed(2)}px, ${(currentPointer.y * -4).toFixed(2)}px, 0) scale(1.045)`;
-      animationFrame = window.requestAnimationFrame(render);
+      if (hasPendingMotion()) {
+        animationFrame = window.requestAnimationFrame(render);
+      } else {
+        stop();
+      }
     }
 
     interactionArea.addEventListener("pointermove", updateTarget, { passive: true });
     interactionArea.addEventListener("pointerleave", resetTarget);
-    animationFrame = window.requestAnimationFrame(render);
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) start();
+        else stop();
+      },
+      { rootMargin: "80px" },
+    );
+    visibilityObserver.observe(interactionArea);
+    const handleVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      window.cancelAnimationFrame(animationFrame);
+      stop();
+      visibilityObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
       interactionArea.removeEventListener("pointermove", updateTarget);
       interactionArea.removeEventListener("pointerleave", resetTarget);
     };

@@ -7,6 +7,11 @@ import { projects } from "../../lib/portfolio";
 
 export function ThreeProjectCarousel() {
   const canvasMountRef = useRef<HTMLDivElement>(null);
+  const projectImageRef = useRef<HTMLImageElement>(null);
+  const projectImageMaterialRef = useRef<THREE.MeshBasicMaterial | null>(null);
+  const projectImageTextureRef = useRef<THREE.Texture | null>(null);
+  const projectImageCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const attachProjectImageRef = useRef<((image: HTMLImageElement) => void) | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });
   const selectedRef = useRef(0);
   const dragProgressRef = useRef(0);
@@ -20,6 +25,7 @@ export function ThreeProjectCarousel() {
   const [threeReady, setThreeReady] = useState(false);
   const [threeModule, setThreeModule] = useState<typeof import("three") | null>(null);
   const project = projects[selected];
+  const imageProject = projects.find((item) => item.image);
   const mobileStack = project.stack
     .split(/\s*\/\s*|\n/)
     .filter(Boolean)
@@ -65,9 +71,35 @@ export function ThreeProjectCarousel() {
     mount.appendChild(renderer.domElement);
 
     const geometry = new Three.PlaneGeometry(3.1, 1.43, 24, 12);
-    let disposed = false;
     const materials: THREE.MeshBasicMaterial[] = [];
     const textures: THREE.Texture[] = [];
+    const attachProjectImage = (image: HTMLImageElement) => {
+      const material = projectImageMaterialRef.current;
+      if (!material || !image.complete || image.naturalWidth === 0) return;
+
+      let canvas = projectImageCanvasRef.current;
+      if (!canvas || canvas.width !== image.naturalWidth || canvas.height !== image.naturalHeight) {
+        canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        canvas.getContext("2d")?.drawImage(image, 0, 0);
+        projectImageCanvasRef.current = canvas;
+      }
+
+      const texture = projectImageTextureRef.current ?? new Three.CanvasTexture(canvas);
+      texture.image = canvas;
+      texture.colorSpace = Three.SRGBColorSpace;
+      texture.minFilter = Three.LinearFilter;
+      texture.generateMipmaps = false;
+      texture.needsUpdate = true;
+      projectImageTextureRef.current = texture;
+      material.map = texture;
+      material.color.set(0xffffff);
+      material.needsUpdate = true;
+      mount.dataset.ready = "true";
+      setThreeReady(true);
+    };
+    attachProjectImageRef.current = attachProjectImage;
     const cards = projects.map((item, index) => {
       const material = new Three.MeshBasicMaterial({
         color: index === 0 ? 0xffffff : 0x202020,
@@ -79,16 +111,11 @@ export function ThreeProjectCarousel() {
       scene.add(mesh);
 
       if (item.image) {
-        const texture = new Three.TextureLoader().load(item.image, (loaded) => {
-          loaded.colorSpace = Three.SRGBColorSpace;
-          loaded.minFilter = Three.LinearFilter;
-          material.map = loaded;
-          material.color.set(0xffffff);
-          material.needsUpdate = true;
-          mount.dataset.ready = "true";
-          if (!disposed) setThreeReady(true);
-        });
-        textures.push(texture);
+        if (index === 0) {
+          projectImageMaterialRef.current = material;
+          const image = projectImageRef.current;
+          if (image) attachProjectImage(image);
+        }
       } else {
         const canvas = document.createElement("canvas");
         canvas.width = 1200;
@@ -143,6 +170,9 @@ export function ThreeProjectCarousel() {
     const resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(mount);
     resize();
+
+    const projectImage = projectImageRef.current;
+    if (projectImage) attachProjectImage(projectImage);
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
@@ -203,7 +233,6 @@ export function ThreeProjectCarousel() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      disposed = true;
       stop();
       visibilityObserver.disconnect();
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -211,6 +240,11 @@ export function ThreeProjectCarousel() {
       geometry.dispose();
       materials.forEach((material) => material.dispose());
       textures.forEach((texture) => texture.dispose());
+      projectImageTextureRef.current?.dispose();
+      projectImageTextureRef.current = null;
+      projectImageCanvasRef.current = null;
+      projectImageMaterialRef.current = null;
+      attachProjectImageRef.current = null;
       renderer.dispose();
       renderer.domElement.remove();
     };
@@ -313,21 +347,26 @@ export function ThreeProjectCarousel() {
         <div
           className={`carousel-image-shell ${threeReady ? "is-three-ready" : ""}`}
         >
-          {project.image ? (
+          {imageProject?.image ? (
             <Image
-              className="carousel-project-image"
-              src={project.image}
-              alt={`${project.name} interface preview`}
+              className={`carousel-project-image ${project.image ? "" : "carousel-project-image-source"}`}
+              ref={projectImageRef}
+              src={imageProject.image}
+              alt={project.image ? `${project.name} interface preview` : ""}
               fill
               sizes="(max-width: 1100px) 100vw, 72vw"
               draggable={false}
+              onLoad={(event) => {
+                attachProjectImageRef.current?.(event.currentTarget);
+              }}
             />
-          ) : (
+          ) : null}
+          {!project.image ? (
             <div className="carousel-image-placeholder" aria-hidden="true">
               <span className="mono-label">PROJECT / {project.index}</span>
               <strong>IMAGE PENDING</strong>
             </div>
-          )}
+          ) : null}
           <div className="carousel-three-image" ref={canvasMountRef} aria-hidden="true" />
           <div className="mobile-project-wheel" aria-hidden="true">
             {projects.map((item, index) => {

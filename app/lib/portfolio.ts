@@ -40,7 +40,7 @@ export const projects: Project[] = [
       "GEMINI EMBEDDINGS / GEMINI OR GROQ ANALYTICS\nJWT AUTH / CLOUDINARY / QR + BARCODE SCANNING",
     dense: true,
     demoLabel: "LIBRARY PORTAL",
-    image: "/euc-library.png",
+    image: "/euc-library.webp",
     demoUrl: "https://euc-lib.vercel.app",
   },
   {
