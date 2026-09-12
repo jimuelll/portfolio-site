@@ -1041,9 +1041,6 @@ nav :is(a, button):focus-visible::before {
 .hero-portrait {
   aspect-ratio: 4/5;
   position: relative;
-  overflow: hidden;
-  border: 1px solid var(--foreground);
-  background: var(--ghost);
   perspective: 1000px;
   cursor: pointer;
 }
@@ -1054,7 +1051,10 @@ nav :is(a, button):focus-visible::before {
 .portrait-inner {
   position: absolute;
   inset: 0;
+  border: 1px solid var(--foreground);
+  background: var(--ghost);
   transform-style: preserve-3d;
+  will-change: transform;
   transition: transform .72s cubic-bezier(.2,.75,.18,1);
 }
 .hero-portrait.is-flipped .portrait-inner {
@@ -1737,6 +1737,9 @@ nav :is(a, button):focus-visible::before {
 }
 .mobile-project-wheel {
   display: none;
+}
+.mobile-project-card {
+  position: relative;
 }
 .carousel-image-placeholder {
   position: absolute;
