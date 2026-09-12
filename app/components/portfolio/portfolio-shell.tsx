@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
 import CursorTrail from "../../cursor-trail";
 import type { HomeSection, NavPage } from "../../lib/portfolio";
 import { AboutView } from "./about-view";
@@ -78,15 +79,16 @@ function createCorruptionLayout(): CorruptionPiece[] {
   return [...fragments, ...bars, ...cuts];
 }
 
-export function PortfolioShell() {
+export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
+  const router = useRouter();
   const [dark, setDark] = useState(false);
   const [activeSection, setActiveSection] = useState<HomeSection>("start");
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
-  const [pageMode, setPageMode] = useState<NavPage>("home");
+  const [pageMode, setPageMode] = useState<NavPage>(initialPage);
   const [navTransition, setNavTransition] = useState<
-    "merging" | "splitting" | null
+    "glitching" | "merging" | "holding" | "home-glitching" | "splitting" | null
   >(null);
 
   useEffect(() => {
@@ -139,35 +141,51 @@ export function PortfolioShell() {
   function navigatePage(nextPage: NavPage) {
     if (nextPage === pageMode || navTransition) return;
 
+    startCorruption(1420, [84, 174, 282, 402, 548, 708, 872, 1040, 1210]);
+
     if (nextPage === "lab") {
-      setNavTransition("merging");
+      setNavTransition("glitching");
       window.setTimeout(() => {
-        setPageMode("lab");
-        setNavTransition(null);
+        setNavTransition("merging");
+      }, 420);
+      window.setTimeout(() => {
+        setNavTransition("holding");
+      }, 1020);
+      window.setTimeout(() => {
+        router.push("/lab", { scroll: false });
         window.scrollTo({ top: 0, behavior: "auto" });
-      }, 560);
+      }, 1260);
       return;
     }
 
-    setPageMode("home");
-    setNavTransition("splitting");
-    window.scrollTo({ top: 0, behavior: "auto" });
-    window.setTimeout(() => setNavTransition(null), 560);
+    setNavTransition("home-glitching");
+    window.setTimeout(() => {
+      setNavTransition("splitting");
+    }, 420);
+    window.setTimeout(() => {
+      router.push("/", { scroll: false });
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }, 980);
   }
 
-  function transitionTheme() {
-    if (corrupting) return;
+  function startCorruption(duration = 840, refreshes = [72, 146, 238, 344, 468, 612, 742]) {
+    if (corrupting) return false;
     setCorruptionLayout(createCorruptionLayout());
     setCorrupting(true);
-    [72, 146, 238, 344, 468, 612, 742].forEach((delay) => {
+    refreshes.forEach((delay) => {
       window.setTimeout(() => {
         setCorruptionLayout(createCorruptionLayout());
       }, delay);
     });
+    window.setTimeout(() => setCorrupting(false), duration);
+    return true;
+  }
+
+  function transitionTheme() {
+    if (!startCorruption()) return;
     window.setTimeout(() => {
       setDark((value) => !value);
     }, 220);
-    window.setTimeout(() => setCorrupting(false), 840);
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   homeNavItems,
   type HomeSection,
@@ -13,7 +13,7 @@ type SiteHeaderProps = {
   dark: boolean;
   onToggleTheme: () => void;
   onNavigatePage: (page: NavPage) => void;
-  navTransition?: "merging" | "splitting" | null;
+  navTransition?: "glitching" | "merging" | "holding" | "home-glitching" | "splitting" | null;
 };
 
 export function SiteHeader({
@@ -25,6 +25,9 @@ export function SiteHeader({
   navTransition = null,
 }: SiteHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const showLabNavigation =
+    navTransition === "holding" ||
+    (activePage === "lab" && navTransition !== "splitting");
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -33,6 +36,19 @@ export function SiteHeader({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, []);
+
+  function handleRouteLink(event: MouseEvent<HTMLAnchorElement>, page: NavPage) {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) return;
+    event.preventDefault();
+    setMenuOpen(false);
+    onNavigatePage(page);
+  }
 
   return (
     <header
@@ -61,10 +77,10 @@ export function SiteHeader({
       </button>
       <nav
         id="primary-navigation"
-        className={`${activePage === "home" ? "home-section-nav" : "lab-route-nav"} ${menuOpen ? "is-open" : ""}`}
+        className={`${showLabNavigation ? "lab-route-nav" : "home-section-nav"} ${menuOpen ? "is-open" : ""}`}
         aria-label="Primary navigation"
       >
-        {activePage === "home" ? (
+        {!showLabNavigation ? (
           <>
             {homeNavItems.map((item) => (
               <a
@@ -81,39 +97,34 @@ export function SiteHeader({
                 <span className="nav-label-mobile">/{item.mobileLabel}</span>
               </a>
             ))}
-            <button
+            <a
               className="nav-lab"
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onNavigatePage("lab");
-              }}
+              href="/lab"
+              onClick={(event) => handleRouteLink(event, "lab")}
               data-label="/LAB"
             >
               /LAB
-            </button>
+            </a>
+            <span className="nav-merge-home" aria-hidden="true">/HOME</span>
           </>
         ) : (
           <>
-            <button
+            <a
               className="nav-home"
-              type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                onNavigatePage("home");
-              }}
+              href="/"
+              onClick={(event) => handleRouteLink(event, "home")}
               data-label="/HOME"
             >
               /HOME
-            </button>
-            <button
+            </a>
+            <a
               className="nav-lab active"
-              type="button"
+              href="/lab"
               aria-current="page"
               data-label="/LAB"
             >
               /LAB
-            </button>
+            </a>
           </>
         )}
       </nav>
