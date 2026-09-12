@@ -3,18 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   buildContributionWeeks,
-  formatDateKey,
   type Contribution,
   type ContributionsResponse,
 } from "../../lib/github";
 import { PlatformIcon } from "./platform-icon";
 
 const GITHUB_CONTRIBUTIONS_URL = "https://github-contributions-api.jogruber.de/v4/jimuelll?y=last";
-const GITHUB_PROFILE_URL = "https://api.github.com/users/jimuelll";
-
-type GithubProfile = {
-  public_repos?: number;
-};
 
 export function GithubContributions() {
   return (
@@ -36,7 +30,6 @@ export function GithubContributions() {
 export function useGithubStats() {
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [total, setTotal] = useState<number | null>(null);
-  const [publicRepos, setPublicRepos] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -48,23 +41,13 @@ export function useGithubStats() {
         return response.json() as Promise<ContributionsResponse>;
       })
       .catch(() => null);
-    const profileRequest = fetch(GITHUB_PROFILE_URL, {
-      headers: { Accept: "application/vnd.github+json" },
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Profile data unavailable");
-        return response.json() as Promise<GithubProfile>;
-      })
-      .catch(() => null);
-
-    Promise.all([contributionRequest, profileRequest])
-      .then(([data, profile]) => {
+    contributionRequest
+      .then((data) => {
         if (cancelled) return;
         if (data) {
           setContributions(data.contributions ?? []);
           setTotal(data.total?.lastYear ?? null);
         }
-        if (profile) setPublicRepos(profile.public_repos ?? null);
         setError(!data);
       })
       .finally(() => {
@@ -74,30 +57,9 @@ export function useGithubStats() {
   }, []);
 
   const weeks = buildContributionWeeks(contributions).slice(-18);
-  const activeDates = contributions
-    .filter((day) => day.count > 0)
-    .map((day) => day.date);
-  const activeDateSet = new Set(activeDates);
-  let currentStreak: number | null = contributions.length > 0 ? 0 : null;
-  if (activeDates.length > 0) {
-    const cursor = new Date();
-    let streak = 0;
-    if (!activeDateSet.has(formatDateKey(cursor))) {
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    while (activeDateSet.has(formatDateKey(cursor))) {
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    currentStreak = streak;
-  }
 
   return {
-    contributions,
     total,
-    publicRepos,
-    currentStreak,
-    activeDays: activeDates.length,
     loading,
     error,
     weeks,

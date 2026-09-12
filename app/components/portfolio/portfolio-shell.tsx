@@ -86,7 +86,7 @@ export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
   const [themeReady, setThemeReady] = useState(false);
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
-  const [pageMode, setPageMode] = useState<NavPage>(initialPage);
+  const pageMode = initialPage;
   const [routeLoading, setRouteLoading] = useState<NavPage | null>(null);
   const [navTransition, setNavTransition] = useState<
     "glitching" | "merging" | "holding" | "home-glitching" | "splitting" | null
