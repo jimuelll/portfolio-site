@@ -87,6 +87,7 @@ export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
   const [corrupting, setCorrupting] = useState(false);
   const [corruptionLayout, setCorruptionLayout] = useState(initialCorruption);
   const [pageMode, setPageMode] = useState<NavPage>(initialPage);
+  const [routeLoading, setRouteLoading] = useState<NavPage | null>(null);
   const [navTransition, setNavTransition] = useState<
     "glitching" | "merging" | "holding" | "home-glitching" | "splitting" | null
   >(null);
@@ -139,7 +140,27 @@ export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
   }, [pageMode]);
 
   function navigatePage(nextPage: NavPage) {
-    if (nextPage === pageMode || navTransition) return;
+    if (nextPage === pageMode || navTransition || routeLoading || corrupting) return;
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const compactRoute = window.matchMedia("(max-width: 800px)").matches;
+    const destination = nextPage === "lab" ? "/lab" : "/";
+
+    if (reducedMotion) {
+      router.push(destination);
+      return;
+    }
+
+    if (compactRoute) {
+      setRouteLoading(nextPage);
+      startCorruption(640, [110, 250, 410, 530]);
+      window.setTimeout(() => {
+        router.push(destination, { scroll: false });
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }, 560);
+      window.setTimeout(() => setRouteLoading(null), 720);
+      return;
+    }
 
     startCorruption(1420, [84, 174, 282, 402, 548, 708, 872, 1040, 1210]);
 
@@ -200,6 +221,16 @@ export function PortfolioShell({ initialPage }: { initialPage: NavPage }) {
           />
         ))}
       </div>
+      {routeLoading ? (
+        <div className="route-handoff" role="status" aria-live="assertive">
+          <span className="route-handoff-kicker mono-label">SYSTEM / ROUTE HANDOFF</span>
+          <strong>{routeLoading === "lab" ? "/LAB" : "/HOME"}</strong>
+          <div className="route-handoff-track" aria-hidden="true">
+            {Array.from({ length: 8 }, (_, index) => <i key={index} />)}
+          </div>
+          <span className="route-handoff-status mono-label">RESOLVING DESTINATION...</span>
+        </div>
+      ) : null}
 
       <SiteHeader
         activePage={pageMode}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
-import * as THREE from "three";
+import type * as THREE from "three";
 import { projects } from "../../lib/portfolio";
 
 export function ThreeProjectCarousel() {
@@ -18,6 +18,7 @@ export function ThreeProjectCarousel() {
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [threeReady, setThreeReady] = useState(false);
+  const [threeModule, setThreeModule] = useState<typeof import("three") | null>(null);
   const project = projects[selected];
   const mobileStack = project.stack
     .split(/\s*\/\s*|\n/)
@@ -32,33 +33,55 @@ export function ThreeProjectCarousel() {
   useEffect(() => {
     const mount = canvasMountRef.current;
     if (!mount) return;
+    let cancelled = false;
+    const loadObserver = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        loadObserver.disconnect();
+        void import("three").then((module) => {
+          if (!cancelled) setThreeModule(module);
+        });
+      },
+      { rootMargin: "240px" },
+    );
+    loadObserver.observe(mount);
+    return () => {
+      cancelled = true;
+      loadObserver.disconnect();
+    };
+  }, []);
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 20);
+  useEffect(() => {
+    const mount = canvasMountRef.current;
+    if (!mount || !threeModule) return;
+    const Three = threeModule;
+
+    const scene = new Three.Scene();
+    const camera = new Three.PerspectiveCamera(34, 1, 0.1, 20);
     camera.position.z = 5;
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    const renderer = new Three.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
-    const geometry = new THREE.PlaneGeometry(3.1, 1.43, 24, 12);
+    const geometry = new Three.PlaneGeometry(3.1, 1.43, 24, 12);
     let disposed = false;
     const materials: THREE.MeshBasicMaterial[] = [];
     const textures: THREE.Texture[] = [];
     const cards = projects.map((item, index) => {
-      const material = new THREE.MeshBasicMaterial({
+      const material = new Three.MeshBasicMaterial({
         color: index === 0 ? 0xffffff : 0x202020,
         transparent: true,
         opacity: index === 0 ? 1 : 0.92,
       });
       materials.push(material);
-      const mesh = new THREE.Mesh(geometry, material);
+      const mesh = new Three.Mesh(geometry, material);
       scene.add(mesh);
 
       if (item.image) {
-        const texture = new THREE.TextureLoader().load(item.image, (loaded) => {
-          loaded.colorSpace = THREE.SRGBColorSpace;
-          loaded.minFilter = THREE.LinearFilter;
+        const texture = new Three.TextureLoader().load(item.image, (loaded) => {
+          loaded.colorSpace = Three.SRGBColorSpace;
+          loaded.minFilter = Three.LinearFilter;
           material.map = loaded;
           material.color.set(0xffffff);
           material.needsUpdate = true;
@@ -93,8 +116,8 @@ export function ThreeProjectCarousel() {
           context.fillText(`PROJECT / ${item.index}`, 58, 76);
           context.font = "700 82px monospace";
           context.fillText("IMAGE PENDING", 58, 310);
-          const texture = new THREE.CanvasTexture(canvas);
-          texture.colorSpace = THREE.SRGBColorSpace;
+          const texture = new Three.CanvasTexture(canvas);
+          texture.colorSpace = Three.SRGBColorSpace;
           material.map = texture;
           material.color.set(0xffffff);
           material.needsUpdate = true;
@@ -110,7 +133,7 @@ export function ThreeProjectCarousel() {
       renderer.setSize(width, height, false);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      const visibleHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
+      const visibleHeight = 2 * Math.tan(Three.MathUtils.degToRad(camera.fov / 2)) * camera.position.z;
       const visibleWidth = visibleHeight * camera.aspect;
       sceneScale = Math.min(
         (visibleWidth * 0.9) / 3.1,
@@ -123,7 +146,10 @@ export function ThreeProjectCarousel() {
 
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
+    let running = false;
+    let inView = false;
     const render = () => {
+      if (!running) return;
       if (!draggingRef.current) {
         dragProgressRef.current *= reducedMotion ? 0 : 0.84;
         if (Math.abs(dragProgressRef.current) < 0.001) dragProgressRef.current = 0;
@@ -152,11 +178,35 @@ export function ThreeProjectCarousel() {
       renderer.render(scene, camera);
       frame = requestAnimationFrame(render);
     };
-    render();
+    const start = () => {
+      if (running || !inView || document.hidden) return;
+      running = true;
+      render();
+    };
+    const stop = () => {
+      running = false;
+      cancelAnimationFrame(frame);
+    };
+    const visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        inView = entry.isIntersecting;
+        if (inView) start();
+        else stop();
+      },
+      { rootMargin: "120px" },
+    );
+    const handleVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    visibilityObserver.observe(mount);
+    document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       disposed = true;
-      cancelAnimationFrame(frame);
+      stop();
+      visibilityObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
       resizeObserver.disconnect();
       geometry.dispose();
       materials.forEach((material) => material.dispose());
@@ -164,7 +214,7 @@ export function ThreeProjectCarousel() {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, []);
+  }, [threeModule]);
 
   const move = (direction: number) => {
     dragProgressRef.current = 0;
@@ -318,7 +368,7 @@ export function ThreeProjectCarousel() {
         </div>
       </a>
 
-      <article className="carousel-copy" aria-live="polite">
+      <article className="carousel-copy" aria-live="polite" key={project.index}>
         <div className="carousel-topline mono-label">
           <span>
             {project.index} / {project.type}
@@ -327,7 +377,6 @@ export function ThreeProjectCarousel() {
         </div>
         <div
           className={`carousel-project-copy ${project.dense ? "is-dense" : ""}`}
-          key={project.index}
         >
           <h3>{project.name}</h3>
           <p className="project-summary">{project.summary}</p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
+import type * as THREE from "three";
 import { stackGroups } from "../../lib/portfolio";
 import { PageTitle } from "./page-title";
 
@@ -28,6 +28,7 @@ function columnCount(grid: HTMLDivElement | null) {
 }
 
 function makeLayout(
+  Three: typeof import("three"),
   columns: number,
   worldWidth: number,
   worldHeight: number,
@@ -36,10 +37,10 @@ function makeLayout(
     const y = worldHeight * 0.36;
     return {
       positions: [
-        new THREE.Vector3(0, y, 0),
-        new THREE.Vector3(0, y / 3, 0),
-        new THREE.Vector3(0, -y / 3, 0),
-        new THREE.Vector3(0, -y, 0),
+        new Three.Vector3(0, y, 0),
+        new Three.Vector3(0, y / 3, 0),
+        new Three.Vector3(0, -y / 3, 0),
+        new Three.Vector3(0, -y, 0),
       ],
       pairs: linearPairs,
     };
@@ -49,10 +50,10 @@ function makeLayout(
     const x = worldWidth * 0.39;
     return {
       positions: [
-        new THREE.Vector3(-x, 0, 0),
-        new THREE.Vector3(-x / 3, 0, 0),
-        new THREE.Vector3(x / 3, 0, 0),
-        new THREE.Vector3(x, 0, 0),
+        new Three.Vector3(-x, 0, 0),
+        new Three.Vector3(-x / 3, 0, 0),
+        new Three.Vector3(x / 3, 0, 0),
+        new Three.Vector3(x, 0, 0),
       ],
       pairs: linearPairs,
     };
@@ -62,10 +63,10 @@ function makeLayout(
   const y = worldHeight * 0.25;
   return {
     positions: [
-      new THREE.Vector3(-x, y, 0),
-      new THREE.Vector3(x, y, 0),
-      new THREE.Vector3(-x, -y, 0),
-      new THREE.Vector3(x, -y, 0),
+      new Three.Vector3(-x, y, 0),
+      new Three.Vector3(x, y, 0),
+      new Three.Vector3(-x, -y, 0),
+      new Three.Vector3(x, -y, 0),
     ],
     pairs: desktopPairs,
   };
@@ -78,47 +79,70 @@ export function StackView() {
   const activeRef = useRef<number | null>(null);
   const pointerRef = useRef({ x: 0, y: 0 });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [threeModule, setThreeModule] = useState<typeof import("three") | null>(null);
+
+  useEffect(() => {
+    const surface = surfaceRef.current;
+    if (!surface) return;
+    let cancelled = false;
+    const loadObserver = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        loadObserver.disconnect();
+        void import("three").then((module) => {
+          if (!cancelled) setThreeModule(module);
+        });
+      },
+      { rootMargin: "240px" },
+    );
+    loadObserver.observe(surface);
+    return () => {
+      cancelled = true;
+      loadObserver.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     const surface = surfaceRef.current;
     const mount = mountRef.current;
-    if (!surface || !mount) return;
+    if (!surface || !mount || !threeModule) return;
+    const Three = threeModule;
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-2.2, 2.2, 1.7, -1.7, 0.1, 100);
+    const scene = new Three.Scene();
+    const camera = new Three.OrthographicCamera(-2.2, 2.2, 1.7, -1.7, 0.1, 100);
     camera.position.set(0, 0, 10);
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    const renderer = new Three.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
-    const group = new THREE.Group();
+    const group = new Three.Group();
     scene.add(group);
 
-    const color = new THREE.Color();
-    const nodeGeometry = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+    const color = new Three.Color();
+    const nodeGeometry = new Three.BoxGeometry(0.16, 0.16, 0.16);
     const nodeMaterials = stackGroups.map(
       () =>
-        new THREE.MeshBasicMaterial({
+        new Three.MeshBasicMaterial({
           color: 0xffffff,
           transparent: true,
           opacity: 0.56,
         }),
     );
     const nodeMeshes = nodeMaterials.map((material) => {
-      const node = new THREE.Mesh(nodeGeometry, material);
+      const node = new Three.Mesh(nodeGeometry, material);
       group.add(node);
       return node;
     });
 
-    const pulseMaterial = new THREE.MeshBasicMaterial({
+    const pulseMaterial = new Three.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
       opacity: 0.95,
     });
-    const pulse = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07, 10, 10),
+    const pulse = new Three.Mesh(
+      new Three.SphereGeometry(0.07, 10, 10),
       pulseMaterial,
     );
     group.add(pulse);
@@ -158,16 +182,16 @@ export function StackView() {
         const end = layout.positions[to].clone();
         const middle = start.clone().lerp(end, 0.5);
         if (layout.pairs === desktopPairs && index === 1) middle.x += 0.1;
-        const curve = new THREE.CatmullRomCurve3([start, middle, end]);
-        const geometry = new THREE.BufferGeometry().setFromPoints(
+        const curve = new Three.CatmullRomCurve3([start, middle, end]);
+        const geometry = new Three.BufferGeometry().setFromPoints(
           curve.getPoints(28),
         );
-        const material = new THREE.LineBasicMaterial({
+        const material = new Three.LineBasicMaterial({
           color,
           transparent: true,
           opacity: 0.3,
         });
-        const line = new THREE.Line(geometry, material);
+        const line = new Three.Line(geometry, material);
         group.add(line);
         routeCurves.push(curve);
         routeMaterials.push(material);
@@ -189,7 +213,7 @@ export function StackView() {
       camera.bottom = -worldHeight / 2;
       camera.updateProjectionMatrix();
       rebuildRoutes(
-        makeLayout(columnCount(gridRef.current), worldWidth, worldHeight),
+        makeLayout(Three, columnCount(gridRef.current), worldWidth, worldHeight),
       );
     };
 
@@ -207,9 +231,9 @@ export function StackView() {
     const reducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
     ).matches;
-    const timer = new THREE.Timer();
+    const timer = new Three.Timer();
     timer.connect(document);
-    const inViewRef = { current: true };
+    const inViewRef = { current: false };
     let animationFrame = 0;
     let running = false;
 
@@ -266,7 +290,7 @@ export function StackView() {
       animationFrame = window.requestAnimationFrame(render);
     };
     const start = () => {
-      if (running || !inViewRef.current) return;
+      if (running || !inViewRef.current || document.hidden) return;
       running = true;
       render();
     };
@@ -284,7 +308,11 @@ export function StackView() {
       { rootMargin: "120px" },
     );
     visibilityObserver.observe(surface);
-    start();
+    const handleVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     const handlePointerMove = (event: PointerEvent) => {
       if (event.pointerType === "touch") return;
@@ -306,6 +334,7 @@ export function StackView() {
       surface.removeEventListener("pointermove", handlePointerMove);
       surface.removeEventListener("pointerleave", resetPointer);
       visibilityObserver.disconnect();
+      document.removeEventListener("visibilitychange", handleVisibility);
       resizeObserver.disconnect();
       themeObserver.disconnect();
       routeLines.forEach((line) => line.geometry.dispose());
@@ -317,7 +346,7 @@ export function StackView() {
       renderer.dispose();
       renderer.domElement.remove();
     };
-  }, []);
+  }, [threeModule]);
 
   const activate = (index: number) => {
     activeRef.current = index;

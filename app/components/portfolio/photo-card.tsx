@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
-import { Euler, MathUtils, Quaternion, Vector2 } from "three";
 import { useGithubStats } from "./github-contributions";
 
 const coreSkills = [
@@ -35,11 +34,10 @@ export function PhotoCard() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) return;
 
-    const pointer = new Vector2();
-    const currentPointer = new Vector2();
-    const targetRotation = new Quaternion();
-    const currentRotation = new Quaternion();
-    const euler = new Euler(0, 0, 0, "XYZ");
+    const pointer = { x: 0, y: 0 };
+    const currentPointer = { x: 0, y: 0 };
+    const targetRotation = { x: 0, y: 0, z: 0 };
+    const currentRotation = { x: 0, y: 0, z: 0 };
     let animationFrame = 0;
 
     function updateTarget(event: PointerEvent) {
@@ -48,26 +46,29 @@ export function PhotoCard() {
       const rect = interactionArea.getBoundingClientRect();
       const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       const y = ((event.clientY - rect.top) / rect.height) * 2 - 1;
-      pointer.set(MathUtils.clamp(x, -1, 1), MathUtils.clamp(y, -1, 1));
-      euler.set(
-        MathUtils.degToRad(pointer.y * -6),
-        MathUtils.degToRad(pointer.x * 7),
-        MathUtils.degToRad(pointer.x * 0.7),
-      );
-      targetRotation.setFromEuler(euler);
+      pointer.x = Math.max(-1, Math.min(1, x));
+      pointer.y = Math.max(-1, Math.min(1, y));
+      targetRotation.x = pointer.y * -6;
+      targetRotation.y = pointer.x * 7;
+      targetRotation.z = pointer.x * 0.7;
     }
 
     function resetTarget() {
-      pointer.set(0, 0);
-      targetRotation.identity();
+      pointer.x = 0;
+      pointer.y = 0;
+      targetRotation.x = 0;
+      targetRotation.y = 0;
+      targetRotation.z = 0;
     }
 
     function render() {
-      currentPointer.lerp(pointer, 0.11);
-      currentRotation.slerp(targetRotation, 0.11);
-      euler.setFromQuaternion(currentRotation, "XYZ");
+      currentPointer.x += (pointer.x - currentPointer.x) * 0.11;
+      currentPointer.y += (pointer.y - currentPointer.y) * 0.11;
+      currentRotation.x += (targetRotation.x - currentRotation.x) * 0.11;
+      currentRotation.y += (targetRotation.y - currentRotation.y) * 0.11;
+      currentRotation.z += (targetRotation.z - currentRotation.z) * 0.11;
 
-      cardElement.style.transform = `perspective(900px) rotateX(${MathUtils.radToDeg(euler.x).toFixed(3)}deg) rotateY(${MathUtils.radToDeg(euler.y).toFixed(3)}deg) rotateZ(${MathUtils.radToDeg(euler.z).toFixed(3)}deg)`;
+      cardElement.style.transform = `perspective(900px) rotateX(${currentRotation.x.toFixed(3)}deg) rotateY(${currentRotation.y.toFixed(3)}deg) rotateZ(${currentRotation.z.toFixed(3)}deg)`;
       imageElement.style.transform = `translate3d(${(currentPointer.x * -5).toFixed(2)}px, ${(currentPointer.y * -4).toFixed(2)}px, 0) scale(1.045)`;
       animationFrame = window.requestAnimationFrame(render);
     }

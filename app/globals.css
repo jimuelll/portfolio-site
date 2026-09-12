@@ -1963,6 +1963,8 @@ nav :is(a, button):focus-visible::before {
   padding: clamp(26px, 2.7vw, 38px);
   display: flex;
   flex-direction: column;
+  will-change: opacity, transform;
+  animation: carousel-copy-in .46s cubic-bezier(.2, .72, .2, 1) both;
 }
 .carousel-topline {
   display: flex;
@@ -1984,7 +1986,6 @@ nav :is(a, button):focus-visible::before {
   flex: 1 0 auto;
   min-height: max-content;
   overflow: visible;
-  animation: carousel-copy-in 0.34s steps(3, end) both;
 }
 .carousel-project-copy h3 {
   max-width: 620px;
@@ -2123,15 +2124,20 @@ nav :is(a, button):focus-visible::before {
   }
 }
 @keyframes carousel-copy-in {
-  from {
-    opacity: 0.25;
-    transform: translateX(12px);
-    clip-path: inset(0 0 38% 0);
+  0% {
+    opacity: .28;
+    transform: translate3d(10px, 5px, 0);
+    filter: blur(1.5px);
   }
-  to {
+  45% {
+    opacity: .78;
+    transform: translate3d(2px, 1px, 0);
+    filter: blur(0);
+  }
+  100% {
     opacity: 1;
     transform: none;
-    clip-path: inset(0);
+    filter: none;
   }
 }
 .inner-page {
@@ -3183,6 +3189,71 @@ footer a {
   display: none;
   overflow: hidden;
 }
+.route-handoff {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  padding: 22px;
+  display: none;
+  place-content: center;
+  grid-template-columns: minmax(0, 320px);
+  background:
+    linear-gradient(var(--ghost) 1px, transparent 1px),
+    linear-gradient(90deg, var(--ghost) 1px, transparent 1px),
+    var(--background);
+  background-size: 18px 18px;
+  color: var(--foreground);
+  text-align: left;
+}
+.route-handoff-kicker,
+.route-handoff-status {
+  color: var(--muted);
+}
+.route-handoff strong {
+  position: relative;
+  margin-top: 16px;
+  font-size: clamp(4.5rem, 25vw, 7rem);
+  line-height: .78;
+  letter-spacing: -.1em;
+  animation: route-handoff-glitch .56s steps(1, end) both;
+}
+.route-handoff-track {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+}
+.route-handoff-track i {
+  height: 8px;
+  border: 1px solid var(--foreground);
+  background: var(--foreground);
+  transform: scaleY(0);
+  transform-origin: bottom;
+  animation: route-handoff-cell .18s steps(2, end) both;
+}
+.route-handoff-track i:nth-child(1) { animation-delay: 30ms; }
+.route-handoff-track i:nth-child(2) { animation-delay: 85ms; }
+.route-handoff-track i:nth-child(3) { animation-delay: 140ms; }
+.route-handoff-track i:nth-child(4) { animation-delay: 195ms; }
+.route-handoff-track i:nth-child(5) { animation-delay: 250ms; }
+.route-handoff-track i:nth-child(6) { animation-delay: 305ms; }
+.route-handoff-track i:nth-child(7) { animation-delay: 360ms; }
+.route-handoff-track i:nth-child(8) { animation-delay: 415ms; }
+.route-handoff-status {
+  margin-top: 10px;
+  font-size: .58rem;
+}
+@keyframes route-handoff-cell {
+  from { transform: scaleY(0); opacity: .2; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+@keyframes route-handoff-glitch {
+  0%, 100% { transform: none; clip-path: inset(0); text-shadow: none; }
+  20% { transform: translateX(5px); clip-path: inset(0 0 58% 0); text-shadow: -4px 0 #00f5ff; }
+  42% { transform: translateX(-6px); clip-path: inset(47% 0 8% 0); text-shadow: 4px 0 #ff20d6; }
+  64% { transform: translateX(3px) scaleX(1.04); clip-path: inset(18% 0 38% 0); }
+  82% { transform: translateX(-2px); clip-path: inset(65% 0 2% 0); text-shadow: -2px 0 #00f5ff; }
+}
 .is-corrupting .corruption {
   display: block;
 }
@@ -3345,6 +3416,9 @@ footer a {
   }
 }
 @media (max-width: 800px) {
+  .route-handoff {
+    display: grid;
+  }
   .site-header {
     grid-template-columns: 1fr auto auto;
     column-gap: 12px;
