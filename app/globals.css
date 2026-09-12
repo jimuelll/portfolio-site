@@ -22,7 +22,6 @@ html {
 body {
   min-width: 280px;
   margin: 0;
-  overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, sans-serif;
@@ -109,14 +108,14 @@ nav button,
 nav {
   display: flex;
   align-items: center;
-  gap: clamp(18px, 3vw, 48px);
+  gap: clamp(16px, 2.2vw, 36px);
   height: 100%;
 }
 nav :is(a, button) {
   height: 100%;
   position: relative;
   color: var(--muted);
-  cursor: crosshair;
+  cursor: pointer;
   transition: color 0.12s;
 }
 nav :is(a, button)::after {
@@ -507,7 +506,7 @@ nav :is(a, button):focus-visible::before {
   min-height: 44px;
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 8px;
 }
 .hero {
   min-height: min(720px, calc(100vh - 76px));
@@ -537,7 +536,7 @@ nav :is(a, button):focus-visible::before {
   width: 100%;
   height: 100%;
   color: var(--foreground);
-  opacity: 0.18;
+  opacity: 0.13;
   overflow: visible;
 }
 .ripple-grid path {
@@ -561,7 +560,7 @@ nav :is(a, button):focus-visible::before {
 .hero-main {
   align-self: center;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(230px, 25vw, 390px);
+  grid-template-columns: minmax(0, 1fr) clamp(220px, 23vw, 360px);
   gap: clamp(28px, 5vw, 84px);
   align-items: center;
   padding: 22px 0;
@@ -609,7 +608,7 @@ nav :is(a, button):focus-visible::before {
   display: inline-block;
   margin-left: 11.5vw;
   color: transparent;
-  -webkit-text-stroke: 1px var(--foreground);
+  -webkit-text-stroke: .8px var(--foreground);
 }
 .glitch-title-overlay {
   position: absolute;
@@ -974,10 +973,11 @@ nav :is(a, button):focus-visible::before {
 }
 .hero-summary {
   max-width: 580px;
-  margin: clamp(24px, 3vh, 36px) 0 0 11.5vw;
+  margin: clamp(14px, 2vh, 24px) 0 0 11.5vw;
   font-size: clamp(0.95rem, 1.15vw, 1.15rem);
   line-height: 1.55;
-  color: var(--muted);
+  color: var(--foreground);
+  opacity: .7;
 }
 .hero-actions {
   display: flex;
@@ -987,21 +987,37 @@ nav :is(a, button):focus-visible::before {
   margin: clamp(20px, 3vh, 32px) 0 0 11.5vw;
 }
 .hero-actions :is(a, button) {
-  min-height: 44px;
-  padding: 0 16px;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 22px;
   border: 1px solid var(--foreground);
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
   font-family: var(--font-geist-mono);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-decoration: none;
   transition:
     background 0.16s,
     color 0.16s;
+}
+.hero-actions :is(a, button) > svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.hero-actions .primary-action {
+  justify-content: flex-start;
+  gap: 12px;
 }
 .hero-actions :is(a, button):not(:disabled):hover,
 .hero-actions :is(a, button):not(:disabled):focus-visible {
@@ -2594,14 +2610,142 @@ nav :is(a, button):focus-visible::before {
   display: flex;
   flex-direction: column;
 }
+.contact-channel-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+.contact-channel-status {
+  color: var(--muted);
+  text-align: right;
+}
+.contact-console {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(220px, 1.15fr);
+  gap: clamp(22px, 3vw, 42px);
+  margin-top: clamp(24px, 3vw, 38px);
+  align-items: start;
+}
+.contact-message .contact-lead {
+  margin: 12px 0 14px;
+  font-size: clamp(1.45rem, 2.2vw, 2.35rem);
+  line-height: .98;
+  letter-spacing: -.05em;
+}
+.contact-subcopy {
+  max-width: 28ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: .8rem;
+  line-height: 1.45;
+}
 .about-contact-reach .contact-lead {
   margin: clamp(22px, 2.5vw, 36px) 0 clamp(24px, 2.8vw, 40px);
   font-size: clamp(1.45rem, 2vw, 2.3rem);
   line-height: 1;
   letter-spacing: -0.045em;
 }
-.about-contact-reach .contact-actions {
-  margin-top: auto;
+.contact-link-groups {
+  display: grid;
+  gap: 24px;
+}
+.contact-link-group {
+  min-width: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--foreground);
+}
+.contact-link-group-personal {
+  border-top-color: var(--ghost);
+}
+.contact-email {
+  min-width: 0;
+  margin: 0;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: inherit;
+  font-family: var(--font-geist-mono);
+  font-size: clamp(.76rem, 1.15vw, .95rem);
+  font-weight: 700;
+  letter-spacing: .015em;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+.contact-link-icon {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid currentColor;
+}
+.contact-link-icon svg,
+.contact-link-row svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.contact-link-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 5px;
+}
+.contact-link-copy .mono-label {
+  color: inherit;
+  opacity: .7;
+  font-size: .52rem;
+}
+.contact-link-copy strong {
+  overflow-wrap: anywhere;
+  font-family: var(--font-geist-mono);
+  font-size: clamp(.68rem, 1vw, .84rem);
+  letter-spacing: .01em;
+}
+.contact-link-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.contact-link-row a {
+  min-height: 42px;
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: inherit;
+  font-family: var(--font-geist-mono);
+  font-size: .67rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-decoration: none;
+  border-bottom: 1px solid var(--ghost);
+}
+.contact-link-row a svg {
+  flex: 0 0 auto;
+  margin-right: 3px;
+}
+.contact-link-row a span:nth-child(2) {
+  flex: 1;
+}
+.contact-email:hover,
+.contact-email:focus-visible,
+.contact-link-row a:hover,
+.contact-link-row a:focus-visible {
+  color: var(--foreground);
+  background: var(--ghost);
+  outline: none;
 }
 .lab-page {
   min-height: calc(100vh - 76px);
@@ -3170,22 +3314,25 @@ footer a {
     min-height: 0;
   }
   .project-visual {
-    min-height: clamp(250px, 48vw, 360px);
+    min-height: clamp(220px, 40vw, 300px);
     border-right: 0;
     border-bottom: 1px solid var(--foreground);
   }
   .project-copy {
-    min-height: 340px;
+    min-height: 0;
   }
   .project-carousel {
-    grid-template-rows: 220px auto 50px;
+    grid-template-rows: clamp(180px, 32vw, 220px) auto 50px;
   }
   .carousel-stage {
-    min-height: 220px;
+    min-height: clamp(180px, 32vw, 220px);
   }
   .carousel-copy {
     min-height: 0;
     padding: 18px 20px;
+  }
+  .experience-flip-card {
+    min-height: 0;
   }
   .carousel-three-image,
   .carousel-project-image,
@@ -3203,8 +3350,8 @@ footer a {
     position: absolute;
     top: 50%;
     left: var(--card-left);
-    width: min(78%, 430px);
-    aspect-ratio: 1895 / 872;
+    width: min(88%, 430px);
+    aspect-ratio: 16 / 9;
     overflow: hidden;
     border: 1px solid var(--foreground);
     background: var(--background);
@@ -3319,8 +3466,8 @@ footer a {
   }
   .mobile-project-details p {
     margin: 6px 0 0;
-    font-size: 0.68rem;
-    line-height: 1.42;
+    font-size: 0.78rem;
+    line-height: 1.45;
     white-space: pre-line;
   }
   .carousel-controls {
@@ -3372,6 +3519,17 @@ footer a {
     padding-left: 0;
     border-top: 1px solid var(--foreground);
   }
+  .contact-console {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .contact-message .contact-lead {
+    max-width: 18ch;
+    font-size: clamp(1.65rem, 5.8vw, 2.8rem);
+  }
+  .contact-subcopy {
+    max-width: 44ch;
+  }
   .about-contact-reach .contact-lead {
     max-width: 720px;
   }
@@ -3404,7 +3562,7 @@ footer a {
     min-height: 220px;
   }
 }
-@media (max-width: 680px) {
+@media (max-width: 767px) {
   .hero {
     min-height: auto;
     padding-top: 28px;
@@ -3427,7 +3585,7 @@ footer a {
     z-index: 2;
     display: flex;
     flex-direction: column;
-    padding-top: clamp(224px, 62vw, 304px);
+    padding-top: clamp(210px, 58vw, 286px);
     pointer-events: none;
     transition: padding-top .72s cubic-bezier(.2,.75,.18,1);
   }
@@ -3462,13 +3620,13 @@ footer a {
     font-size: clamp(3rem, 12vw, 4.6rem);
   }
   .hero-summary {
-    margin-top: 22px;
+    margin-top: 14px;
   }
   .hero-portrait {
     grid-area: 1 / 1;
     z-index: 1;
-    width: calc(100% - clamp(42px, 13vw, 72px));
-    height: clamp(242px, 68vw, 330px);
+    width: min(calc(100% - clamp(42px, 13vw, 72px)), 430px);
+    height: clamp(228px, 64vw, 310px);
     margin: 0;
     aspect-ratio: auto;
     justify-self: end;
@@ -3579,6 +3737,41 @@ footer a {
     border-top: 0;
     padding-top: 78px;
   }
+  .project-copy {
+    min-height: 0;
+  }
+  .project-copy h3 {
+    margin-top: 30px;
+  }
+  .project-carousel {
+    grid-template-rows: clamp(180px, 40vw, 220px) auto 50px;
+  }
+  .carousel-stage {
+    min-height: clamp(180px, 40vw, 220px);
+  }
+  .experience-flip-card,
+  .experience-card-ui,
+  .experience-card-face {
+    min-height: 0;
+  }
+  .experience-card-list {
+    justify-content: flex-start;
+  }
+  .experience-card-description {
+    font-size: .84rem;
+    line-height: 1.5;
+  }
+  .experience-card-row h3 {
+    font-size: 1rem;
+  }
+  .stack-section .stack-grid article,
+  .stack-section .stack-grid article:nth-child(odd),
+  .stack-section .stack-grid article:nth-child(even) {
+    min-height: 0;
+  }
+  .contact-link-row a {
+    font-size: .7rem;
+  }
 }
 @media (max-width: 520px) {
   .site-header,
@@ -3649,7 +3842,7 @@ footer a {
     padding: 0;
   }
   .hero-title {
-    padding-top: clamp(205px, 62vw, 270px);
+    padding-top: clamp(198px, 58vw, 254px);
   }
   .hero-name {
     margin: 0;
@@ -3660,8 +3853,8 @@ footer a {
     letter-spacing: -0.075em;
   }
   .hero-portrait {
-    width: calc(100% - clamp(40px, 13vw, 58px));
-    height: clamp(232px, 72vw, 292px);
+    width: min(calc(100% - clamp(40px, 13vw, 58px)), 360px);
+    height: clamp(220px, 68vw, 276px);
     aspect-ratio: auto;
   }
   .hero-portrait.is-flipped {
@@ -3678,23 +3871,68 @@ footer a {
     font-size: 0.55rem;
   }
   .hero-summary {
-    margin-top: 20px;
+    margin-top: 16px;
   }
   .hero-actions {
+    position: relative;
     margin-top: 22px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--foreground);
+  }
+  .hero-actions::before {
+    content: "ACCESS / 03";
+    position: absolute;
+    top: -8px;
+    left: 10px;
+    padding: 0 7px;
+    color: var(--foreground);
+    background: var(--background);
+    font-family: var(--font-geist-mono), monospace;
+    font-size: .54rem;
+    font-weight: 700;
+    letter-spacing: .08em;
   }
   .hero-actions :is(a, button) {
     width: 100%;
     min-width: 0;
-    min-height: 46px;
+    min-height: 50px;
+    padding: 0 12px;
+    border-color: var(--foreground);
+    transition:
+      background .16s,
+      color .16s,
+      transform .16s steps(2, end),
+      clip-path .16s steps(2, end);
   }
   .hero-actions .primary-action {
     grid-column: 1/-1;
+    min-height: 48px;
+    padding-left: 14px;
+    border-width: 1px 1px 1px 4px;
+  }
+  .hero-actions .primary-action span {
+    font-size: .78rem;
+  }
+  .hero-actions > .hero-github-action {
+    grid-column: 1;
+    border-left-width: 3px;
+  }
+  .hero-actions > a:last-child {
+    grid-column: 2;
+    border-left-width: 3px;
+  }
+  .hero-actions :is(a, button):active {
+    transform: translateY(2px);
+  }
+  .hero-actions :is(a, button):not(:disabled):hover,
+  .hero-actions :is(a, button):not(:disabled):focus-visible {
+    transform: translateY(-1px);
   }
   .hero-meta {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 14px;
   }
   .hero-meta > div,
@@ -3711,6 +3949,66 @@ footer a {
   .hero-meta > div:nth-child(3) {
     grid-column: auto;
     border-top: 0;
+  }
+  .hero-meta {
+    margin-top: 28px;
+    padding-top: 18px;
+    padding-bottom: 2px;
+    border: 0;
+    border-top: 1px solid var(--foreground);
+    border-bottom: 1px solid var(--ghost);
+    background: linear-gradient(90deg, var(--ghost), var(--ghost)) 0 0 / 100% 1px no-repeat;
+    overflow: visible;
+  }
+  .hero-meta::before {
+    content: "SYSTEM READOUT / 03 SIGNALS";
+    position: absolute;
+    top: -8px;
+    left: 0;
+    padding: 0 6px;
+    color: var(--muted);
+    background: var(--background);
+    font-family: var(--font-geist-mono), monospace;
+    font-size: .5rem;
+    font-weight: 650;
+    letter-spacing: .08em;
+  }
+  .hero-meta > div,
+  .hero-meta > div:first-child,
+  .hero-meta > div:nth-child(3) {
+    min-height: 0;
+    padding: 13px 4px 14px 0;
+    border: 0;
+    border-bottom: 1px solid var(--ghost);
+    background: transparent;
+  }
+  .hero-meta > div:first-child {
+    grid-column: 1 / -1;
+    padding-top: 4px;
+    padding-bottom: 16px;
+  }
+  .hero-meta > div:nth-child(2) {
+    padding-right: 12px;
+    border-right: 1px solid var(--ghost);
+  }
+  .hero-meta > div:nth-child(3) {
+    padding-left: 12px;
+  }
+  .hero-meta > div::after { display: none; }
+  .hero-meta .mono-label {
+    color: var(--muted);
+    font-size: .56rem;
+  }
+  .hero-meta p {
+    max-width: none;
+    margin-top: 8px;
+    font-size: .8rem;
+    line-height: 1.35;
+    letter-spacing: .02em;
+  }
+  .hero-meta > div:first-child p {
+    font-size: clamp(1rem, 4.6vw, 1.3rem);
+    letter-spacing: -.025em;
   }
   .hero-actions .hero-github-action {
     min-width: 0;
@@ -3780,7 +4078,7 @@ footer a {
     padding: 28px 20px;
   }
   .project-copy h3 {
-    margin: 64px 0 18px;
+    margin: 28px 0 18px;
   }
   .project-bottom {
     align-items: flex-start;
@@ -3842,14 +4140,31 @@ footer a {
     padding-top: 32px;
     padding-bottom: 48px;
   }
+  .section-heading,
   .page-title {
-    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-columns: 72px minmax(0, 1fr);
     gap: 16px;
+    align-items: end;
     padding: 0 0 20px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--foreground);
   }
+  .section-heading .section-number,
+  .page-title .page-index {
+    font-size: clamp(3.35rem, 16vw, 4.8rem);
+    line-height: .72;
+  }
+  .section-heading h2,
   .page-title h2 {
-    font-size: clamp(2.15rem, 10vw, 3.1rem);
+    font-size: clamp(2.2rem, 10.8vw, 3.25rem);
+    line-height: .8;
+    letter-spacing: -.08em;
     overflow-wrap: anywhere;
+  }
+  .section-heading .mono-label,
+  .page-title .mono-label {
+    font-size: .58rem;
+    letter-spacing: .07em;
   }
   .role {
     grid-template-columns: auto minmax(0, 1fr);
@@ -3955,9 +4270,6 @@ footer a {
     position: relative;
     z-index: 1;
   }
-  .about-contact-reach .mono-label {
-    display: none;
-  }
   .experience-flip-card {
     min-height: 0;
   }
@@ -3988,15 +4300,21 @@ footer a {
   }
   .experience-card-description {
     margin-top: 7px;
-    font-size: .67rem;
-    line-height: 1.38;
+    font-size: .84rem;
+    line-height: 1.5;
   }
   .about-contact-profile .lead {
     font-size: clamp(1.55rem, 7.5vw, 2.15rem);
   }
   .about-contact-reach .contact-lead {
-    margin: 30px 0;
-    font-size: clamp(1.7rem, 8vw, 2.35rem);
+    margin: 12px 0 14px;
+    font-size: clamp(1.55rem, 7.5vw, 2.15rem);
+  }
+  .contact-console {
+    gap: 24px;
+  }
+  .contact-subcopy {
+    font-size: .76rem;
   }
   footer {
     grid-template-columns: 1fr;
@@ -4110,20 +4428,24 @@ footer a {
     padding: 6px 0;
   }
   .hero-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .hero-actions .primary-action {
-    grid-column: auto;
+    grid-column: 1/-1;
   }
   .hero-github-week:nth-child(-n + 9) {
     display: grid;
   }
+  .section-heading,
   .page-title {
+    grid-template-columns: 66px minmax(0, 1fr);
     gap: 12px;
   }
-  .page-index {
+  .section-heading .section-number,
+  .page-title .page-index {
     font-size: 3.6rem;
   }
+  .section-heading h2,
   .page-title h2 {
     font-size: clamp(1.9rem, 10vw, 2.4rem);
   }
@@ -4157,6 +4479,16 @@ footer a {
   }
   .hero-meta {
     margin-top: 20px;
+  }
+}
+@media (max-width: 340px) {
+  .hero-actions {
+    grid-template-columns: 1fr;
+  }
+  .hero-actions .primary-action,
+  .hero-actions > .hero-github-action,
+  .hero-actions > a:last-child {
+    grid-column: auto;
   }
 }
 @media (max-width: 800px) {

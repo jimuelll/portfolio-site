@@ -7,6 +7,7 @@ import {
   type Contribution,
   type ContributionsResponse,
 } from "../../lib/github";
+import { PlatformIcon } from "./platform-icon";
 
 const GITHUB_CONTRIBUTIONS_URL = "https://github-contributions-api.jogruber.de/v4/jimuelll?y=last";
 const GITHUB_PROFILE_URL = "https://api.github.com/users/jimuelll";
@@ -25,6 +26,7 @@ export function GithubContributions() {
       aria-label="View GitHub profile"
       title="GitHub profile"
     >
+      <PlatformIcon kind="github" />
       <span className="hero-github-label">GITHUB</span>
       <span className="hero-github-arrow" aria-hidden="true">↗</span>
     </a>

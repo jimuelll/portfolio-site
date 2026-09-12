@@ -2,6 +2,7 @@ import { GlitchTitle } from "./glitch-title";
 import { PhotoCard } from "./photo-card";
 import { RippleGrid } from "./ripple-grid";
 import { GithubContributions } from "./github-contributions";
+import { PlatformIcon } from "./platform-icon";
 
 export function Hero() {
   return (
@@ -24,7 +25,8 @@ export function Hero() {
                 disabled
                 title="CV download coming soon"
               >
-                DOWNLOAD CV <span aria-hidden="true">↓</span>
+                <PlatformIcon kind="download" />
+                <span>DOWNLOAD CV</span>
               </button>
               <GithubContributions />
               <a
@@ -32,7 +34,8 @@ export function Hero() {
                 target="_blank"
                 rel="noreferrer"
               >
-                LINKEDIN <span aria-hidden="true">↗</span>
+                <PlatformIcon kind="linkedin" />
+                <span>LINKEDIN</span><span aria-hidden="true">↗</span>
               </a>
             </div>
           </div>

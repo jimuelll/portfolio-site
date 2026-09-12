@@ -1,3 +1,5 @@
+import { PlatformIcon } from "./platform-icon";
+
 export function AboutView() {
   return (
     <section className="inner-page about-contact-section view" id="about">
@@ -47,32 +49,54 @@ export function AboutView() {
           </div>
         </div>
         <div className="about-contact-reach">
-          <span className="mono-label">START A CONVERSATION</span>
-          <p className="contact-lead">
-            Have a product to build, a problem to solve, or a team I could help?
-            Let&apos;s talk.
-          </p>
-          <div className="contact-actions">
-            <a
-              className="primary-action"
-              href="mailto:untalanjimueljean@gmail.com"
-            >
-              EMAIL ME <span aria-hidden="true">↗</span>
-            </a>
-            <a
-              href="https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"
-              target="_blank"
-              rel="noreferrer"
-            >
-              LINKEDIN <span aria-hidden="true">↗</span>
-            </a>
-            <a
-              href="https://github.com/jimuelll"
-              target="_blank"
-              rel="noreferrer"
-            >
-              GITHUB <span aria-hidden="true">↗</span>
-            </a>
+          <div className="contact-channel-heading">
+            <span className="mono-label">OPEN CHANNEL</span>
+            <span className="contact-channel-status mono-label">RESPONSE / AVAILABLE</span>
+          </div>
+          <div className="contact-console">
+            <div className="contact-message">
+              <span className="mono-label">TRANSMISSION / READY</span>
+              <p className="contact-lead">Let&apos;s build something useful.</p>
+              <p className="contact-subcopy">
+                Have a product to build, a problem to solve, or a team I could help?
+              </p>
+            </div>
+            <div className="contact-link-groups">
+              <a className="contact-email" href="mailto:untalanjimueljean@gmail.com">
+                <span className="contact-link-icon"><PlatformIcon kind="mail" /></span>
+                <span className="contact-link-copy">
+                  <span className="mono-label">EMAIL / PRIMARY</span>
+                  <strong>untalanjimueljean@gmail.com</strong>
+                </span>
+                <span className="contact-link-arrow" aria-hidden="true">↗</span>
+              </a>
+              <div className="contact-link-group">
+                <span className="mono-label">PROFESSIONAL / 01</span>
+                <div className="contact-link-row">
+                  <a href="https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5" target="_blank" rel="noreferrer">
+                    <PlatformIcon kind="linkedin" />
+                    <span>LINKEDIN</span><span aria-hidden="true">↗</span>
+                  </a>
+                  <a href="https://github.com/jimuelll" target="_blank" rel="noreferrer">
+                    <PlatformIcon kind="github" />
+                    <span>GITHUB</span><span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              </div>
+              <div className="contact-link-group contact-link-group-personal">
+                <span className="mono-label">ELSEWHERE / 02</span>
+                <div className="contact-link-row">
+                  <a href="https://www.instagram.com/jimuel.jean/" target="_blank" rel="noreferrer">
+                    <PlatformIcon kind="instagram" />
+                    <span>INSTAGRAM</span><span aria-hidden="true">↗</span>
+                  </a>
+                  <a href="https://www.facebook.com/jimueljean" target="_blank" rel="noreferrer">
+                    <PlatformIcon kind="facebook" />
+                    <span>FACEBOOK</span><span aria-hidden="true">↗</span>
+                  </a>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
