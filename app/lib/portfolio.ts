@@ -66,7 +66,8 @@ export const projects: Project[] = [
 export const stackGroups: StackGroup[] = [
   {
     name: "FRONTEND",
-    items: "TypeScript, React, Next.js, Vite, Tailwind CSS, TanStack Query, Framer Motion",
+    items:
+      "TypeScript, React, Next.js, Flutter, Vite, Tailwind CSS, TanStack Query, Framer Motion",
   },
   {
     name: "BACKEND",
@@ -74,7 +75,7 @@ export const stackGroups: StackGroup[] = [
   },
   {
     name: "DATA / STORAGE",
-    items: "MySQL, MariaDB, PostgreSQL, Redis, Cloudinary",
+    items: "MySQL, MariaDB, MongoDB, PostgreSQL, Redis, Cloudinary",
   },
   {
     name: "CLOUD / DEVOPS",

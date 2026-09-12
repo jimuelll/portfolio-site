@@ -1,15 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import { Euler, MathUtils, Quaternion, Vector2 } from "three";
 import { useGithubStats } from "./github-contributions";
+
+const coreSkills = [
+  { name: "TypeScript", slug: "typescript", color: "#3178c6" },
+  { name: "React", slug: "react", color: "#149eca" },
+  { name: "Next.js", slug: "nextdotjs", color: "#111111" },
+  { name: "Node.js", slug: "nodedotjs", color: "#339933" },
+  { name: "Express", slug: "express", color: "#222222" },
+  { name: "MySQL", slug: "mysql", color: "#00758f" },
+  { name: "PostgreSQL", slug: "postgresql", color: "#336791" },
+  { name: "MongoDB", slug: "mongodb", color: "#47a248" },
+  { name: "Tailwind CSS", slug: "tailwindcss", color: "#06b6d4" },
+  { name: "Flutter", slug: "flutter", color: "#54c5f8" },
+] as const;
 
 export function PhotoCard() {
   const cardRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const [flipped, setFlipped] = useState(false);
-  const { total, publicRepos, currentStreak, activeDays, loading, error, weeks } = useGithubStats();
+  const { total, loading, error, weeks } = useGithubStats();
 
   useEffect(() => {
     const card = cardRef.current;
@@ -77,7 +90,7 @@ export function PhotoCard() {
       role="button"
       tabIndex={0}
       aria-pressed={flipped}
-      aria-label={`Portrait and GitHub stats panel. Currently showing ${flipped ? "user stats" : "portrait"}. Click to flip.`}
+      aria-label={`Portrait and developer profile panel. Currently showing ${flipped ? "skills and contribution activity" : "portrait"}. Click to flip.`}
       onClick={() => setFlipped((value) => !value)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -103,8 +116,8 @@ export function PhotoCard() {
           <span className="portrait-code mono-label">CLICK / FLIP FOR STATS</span>
         </div>
         <div className="portrait-face portrait-back" aria-hidden={!flipped}>
-          <span className="portrait-back-kicker mono-label">USER / STATS</span>
-          <strong className="portrait-back-title">ACTIVITY LOG</strong>
+          <span className="portrait-back-kicker mono-label">CORE / TOOLKIT</span>
+          <strong className="portrait-back-title">SKILL SIGNAL</strong>
           <div className="portrait-contributions">
             <div className="portrait-contributions-top">
               <span className="mono-label">CONTRIBUTION SIGNAL / 18 WEEKS</span>
@@ -123,15 +136,30 @@ export function PhotoCard() {
                 </span>
               ))}
             </div>
+            <div className="portrait-contribution-axis mono-label" aria-hidden="true">
+              <span>−18W</span>
+              <span>NOW</span>
+            </div>
             <span className="portrait-contributions-note mono-label">
               {error ? "DATA LINK OFFLINE" : "LOW / HIGH ACTIVITY"}
             </span>
           </div>
-          <div className="portrait-stats-grid">
-            <div><span className="mono-label">PUBLIC REPOS</span><strong>{loading ? "···" : publicRepos ?? "—"}</strong></div>
-            <div><span className="mono-label">CURRENT STREAK</span><strong>{loading ? "···" : currentStreak === null ? "—" : `${currentStreak}D`}</strong></div>
-            <div><span className="mono-label">ACTIVE DAYS / 365D</span><strong>{loading ? "···" : error ? "—" : activeDays}</strong></div>
+          <div className="portrait-skill-grid" aria-label="Core skills: TypeScript, React, Next.js, Node.js, Express, MySQL, PostgreSQL, MongoDB, Tailwind CSS, and Flutter">
+            <span className="portrait-skills-label mono-label">SKILLS / 10</span>
+            {coreSkills.map((skill) => (
+              <span
+                className="portrait-skill-icon"
+                key={skill.name}
+                title={skill.name}
+                aria-hidden="true"
+                style={{ backgroundColor: skill.color, borderColor: skill.color } as CSSProperties}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className="portrait-skill-logo" src={`https://cdn.simpleicons.org/${skill.slug}/ffffff`} alt="" />
+              </span>
+            ))}
           </div>
+          <span className="portrait-availability mono-label">AVAILABLE / UTC +8</span>
           <span className="portrait-code mono-label">CLICK / RETURN TO PORTRAIT</span>
         </div>
       </div>
