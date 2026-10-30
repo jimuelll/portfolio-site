@@ -35,6 +35,7 @@ Desktop.ini
 /CLAUDE.md
 *.swp
 *.swo
+.claude
 
 # local caches and tooling
 .cache/
@@ -61,3 +62,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.impeccable

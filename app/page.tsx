@@ -1,5 +1,5 @@
-import { PortfolioShell } from "./components/portfolio/portfolio-shell";
+import { HomeSky } from "./components/home-sky";
 
 export default function Home() {
-  return <PortfolioShell initialPage="home" />;
+  return <HomeSky />;
 }
