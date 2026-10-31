@@ -1,0 +1,671 @@
+/*
+ * The cosmos: where holding the theme toggle takes you (top-nav.tsx), told in two parts. Each part stands on its
+ * own; together they're a trip.
+ *
+ * Voyage (three seconds, liftoff): the page drops away and you fly. An endless starfield streams out of the point
+ * you're heading for. Steer with the pointer, a finger or a tilted phone; hold anywhere to go to warp, where the
+ * stars stretch into streaks and blue-shift. Now and then a planet, a ringed giant or a nebula slides past.
+ *
+ * Vista (five seconds, arrival): you drop out of warp in front of the Milky Way and its nebulae. This sky is
+ * endless too, made from noise in tiles as you go, so you can drag or fling across it in any direction. Far stars
+ * move less than the gas and near ones more, so it has depth, and a tap ignites a newborn star that stays.
+ *
+ * Everything is monospace glyphs on one canvas, like the sky behind the site.
+ */
+
+import { RAMP, clamp, css, ease, hash, lineGlyph, mix, noise, rand, smoothstep, type Rgb } from "./engine";
+
+export type Stage = "voyage" | "vista";
+
+const TAU = Math.PI * 2;
+const SPACE: Rgb = [4, 5, 11];
+const STAR: Rgb = [214, 224, 240];
+const WARM: Rgb = [242, 186, 84];
+const COOL: Rgb = [128, 182, 240];
+/** What starlight turns at warp: blue ahead, as light is when you rush toward it. */
+const BLUESHIFT: Rgb = [150, 196, 255];
+const WHITE: Rgb = [255, 244, 232];
+const MAGENTA: Rgb = [226, 96, 172];
+const VIOLET: Rgb = [140, 112, 240];
+const TEAL: Rgb = [70, 196, 204];
+const AMBER: Rgb = [240, 168, 92];
+/** Planets and gas giants are drawn from these pairs: a body colour and a band colour. */
+const WORLDS: [Rgb, Rgb][] = [
+  [[214, 160, 112], [150, 96, 70]],
+  [[120, 170, 226], [70, 110, 190]],
+  [[196, 120, 96], [240, 200, 150]],
+  [[150, 210, 190], [80, 150, 150]],
+  [[210, 196, 236], [140, 120, 200]],
+];
+
+/** Forward speed in depth per second. A star at the back reaches you in 1/speed seconds. */
+const CRUISE = 0.16;
+const WARP = 1.5;
+/** The push you get at liftoff, easing down to a cruise. */
+const LIFTOFF = 0.95;
+const ARRIVE_SECONDS = 2.4;
+/** Matches the canvas's opacity transition in globals.css. */
+const FADE_MS = 1000;
+/** Vista tiles, in CSS px. The sky is made one tile at a time, a few per frame at most. */
+const TILE = 384;
+const TILES_PER_FRAME = 3;
+const MAX_TILES = 90;
+const SKY_FONT = 10;
+const MAX_BIRTHS = 40;
+const BIRTH_RING = 1.6;
+/** A press that moves less than this is a tap (a birth), not a drag. */
+const TAP_SLOP = 8;
+
+interface Mote { x: number; y: number; z: number; tint: Rgb }
+/** Something big passing on the voyage: where it is in flight space, how big, and what it looks like. */
+interface Wonder { kind: "planet" | "ringed" | "nebula"; x: number; y: number; z: number; size: number; body: Rgb; band: Rgb; seed: number; tilt: number }
+/** A star you lit in the vista, in sky px. */
+interface Birth { x: number; y: number; age: number; seed: number }
+interface Press { id: number; x: number; y: number; moved: boolean; last: number }
+
+const fbm = (x: number, y: number, seed: number) =>
+  noise(x, y, seed) * 0.5 + noise(x * 2.1, y * 2.1, seed + 1) * 0.3 + noise(x * 4.3, y * 4.3, seed + 2) * 0.2;
+
+export class Cosmos {
+  stage: Stage;
+  private canvas = document.createElement("canvas");
+  private ctx: CanvasRenderingContext2D;
+  private w = 1;
+  private h = 1;
+  private ratio = 1;
+  private family: string;
+  private time = 0;
+  private last = 0;
+  private raf = 0;
+  private reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  private coarse = window.matchMedia("(pointer: coarse)").matches;
+
+  private motes: Mote[] = [];
+  private speed = LIFTOFF;
+  private warp = false;
+  /** Where you're heading, -1 to 1 across the screen, eased toward its target; and the bank of the turn. */
+  private look = { x: 0, y: 0, tx: 0, ty: 0 };
+  private roll = 0;
+  private wonders: Wonder[] = [];
+  private nextWonder = rand(3, 6);
+  private travelled = 0;
+
+  /** When the arrival began (-1: never; the vista was there from the start). */
+  private arriveAt = -1;
+  private cam = { x: 0, y: 0, vx: 7, vy: 2 };
+  /** The pointer's pull on the parallax, eased, -1 to 1. */
+  private lean = { x: 0, y: 0 };
+  private tiles = new Map<string, HTMLCanvasElement>();
+  private births: Birth[] = [];
+  private lit = 0;
+
+  private press: Press | null = null;
+  private pointer = { x: 0, y: 0, active: false };
+  private tilt = { x: 0, y: 0, on: false };
+
+  /** On iOS, motion needs asking for, and only from inside a tap: the release of the hold counts. */
+  static askTilt() {
+    const D = window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined;
+    D?.requestPermission?.().catch(() => {});
+  }
+
+  constructor(stage: Stage = "voyage") {
+    this.stage = stage;
+    this.family = getComputedStyle(document.body).fontFamily || "monospace";
+    this.canvas.className = "cosmos-canvas";
+    this.canvas.setAttribute("aria-hidden", "true");
+    document.body.append(this.canvas);
+    this.ctx = this.canvas.getContext("2d")!;
+    this.resize();
+    for (let i = 0; i < this.moteCount(); i++) this.motes.push(this.makeMote(rand(0.05, 1)));
+    // Arrive somewhere worth seeing: of a few places near the Milky Way, the one with the most nebula in view.
+    let best = -1;
+    for (let i = 0; i < 24; i++) {
+      const x = rand(-6000, 6000), y = rand(-900, 900);
+      const f = this.field(x + this.w / 2, y + this.h / 2);
+      const score = f.neb + f.milky * 0.3;
+      if (score > best) { best = score; this.cam = { x, y, vx: 7, vy: 2 }; }
+    }
+    this.canvas.addEventListener("pointerdown", this.onDown);
+    window.addEventListener("pointermove", this.onMove, { passive: true });
+    window.addEventListener("pointerup", this.onUp);
+    window.addEventListener("pointercancel", this.onUp);
+    document.documentElement.addEventListener("pointerleave", this.onLeave);
+    window.addEventListener("resize", this.resize);
+    window.addEventListener("deviceorientation", this.onTilt);
+    document.addEventListener("visibilitychange", this.schedule);
+    // Fades in on the next frame (the opacity transition needs a frame at 0 first).
+    requestAnimationFrame(() => this.canvas.classList.add("on"));
+    this.schedule();
+  }
+
+  /** From the voyage: drop out of warp in front of the vista. */
+  arrive() {
+    if (this.stage === "vista") return;
+    this.stage = "vista";
+    // Without motion there's no drop out of warp to play: the vista is simply there.
+    this.arriveAt = this.reduced ? -1 : this.time;
+    this.warp = false;
+    this.speed = WARP * 1.3;
+    // Made now, so the view is all there as it fades in.
+    this.makeTiles(Infinity);
+    if (this.reduced) this.render();
+  }
+
+  /** Fades out, then lets go of everything. */
+  leave() {
+    this.canvas.classList.remove("on");
+    window.setTimeout(() => this.destroy(), this.reduced ? 0 : FADE_MS);
+  }
+
+  destroy() {
+    cancelAnimationFrame(this.raf);
+    this.raf = -1;
+    this.canvas.removeEventListener("pointerdown", this.onDown);
+    window.removeEventListener("pointermove", this.onMove);
+    window.removeEventListener("pointerup", this.onUp);
+    window.removeEventListener("pointercancel", this.onUp);
+    document.documentElement.removeEventListener("pointerleave", this.onLeave);
+    window.removeEventListener("resize", this.resize);
+    window.removeEventListener("deviceorientation", this.onTilt);
+    document.removeEventListener("visibilitychange", this.schedule);
+    this.canvas.remove();
+    this.tiles.clear();
+  }
+
+  private schedule = () => {
+    if (this.raf === -1) return;
+    cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    if (document.hidden) return;
+    if (this.reduced) {
+      this.render();
+      return;
+    }
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.frame);
+  };
+
+  private frame = (now: number) => {
+    const dt = Math.min(0.05, (now - this.last) / 1000);
+    this.last = now;
+    this.step(dt);
+    this.render();
+    this.raf = requestAnimationFrame(this.frame);
+  };
+
+  private resize = () => {
+    this.ratio = Math.min(window.devicePixelRatio || 1, 2);
+    this.w = window.innerWidth;
+    this.h = window.innerHeight;
+    this.canvas.width = Math.round(this.w * this.ratio);
+    this.canvas.height = Math.round(this.h * this.ratio);
+    if (this.reduced) this.render();
+  };
+
+  private moteCount() {
+    return Math.round(clamp((this.w * this.h) / 2600, 240, 720));
+  }
+
+  private makeMote(z: number): Mote {
+    const roll = Math.random();
+    return { x: rand(-1.6, 1.6), y: rand(-1.6, 1.6), z, tint: roll > 0.92 ? WARM : roll > 0.82 ? COOL : STAR };
+  }
+
+  // ── input ──────────────────────────────────────
+
+  private onDown = (e: PointerEvent) => {
+    try { this.canvas.setPointerCapture(e.pointerId); } catch {}
+    this.press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, last: performance.now() };
+    this.pointer = { x: e.clientX, y: e.clientY, active: true };
+    if (this.stage === "voyage") this.warp = true;
+    else { this.cam.vx = 0; this.cam.vy = 0; }
+    if (this.reduced) this.render();
+  };
+
+  private onMove = (e: PointerEvent) => {
+    const p = this.press;
+    if (p && p.id === e.pointerId) {
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      if (!p.moved && Math.hypot(dx, dy) > TAP_SLOP) p.moved = true;
+      if (p.moved && this.stage === "vista") {
+        // The sky moves with the finger, and remembers how fast, so letting go flings it on.
+        const now = performance.now();
+        const dt = Math.max(1 / 240, (now - p.last) / 1000);
+        this.cam.x -= dx;
+        this.cam.y -= dy;
+        this.cam.vx = this.cam.vx * 0.6 - (dx / dt) * 0.4;
+        this.cam.vy = this.cam.vy * 0.6 - (dy / dt) * 0.4;
+        p.last = now;
+        if (this.reduced) this.render();
+      }
+      if (p.moved || this.stage === "vista") { p.x = e.clientX; p.y = e.clientY; }
+    }
+    // A mouse steers wherever it is; a finger only while it's down.
+    if (e.pointerType === "mouse" || (p && p.id === e.pointerId)) this.pointer = { x: e.clientX, y: e.clientY, active: true };
+  };
+
+  private onUp = (e: PointerEvent) => {
+    const p = this.press;
+    if (e.pointerType !== "mouse") this.pointer.active = false;
+    if (!p || p.id !== e.pointerId) return;
+    this.press = null;
+    this.warp = false;
+    if (this.stage === "vista" && !p.moved) this.ignite(e.clientX, e.clientY);
+  };
+
+  private onLeave = () => {
+    this.pointer.active = false;
+  };
+
+  private onTilt = (e: DeviceOrientationEvent) => {
+    if (e.gamma === null || e.beta === null) return;
+    // Held at a comfortable reading angle (about 40° from flat), you fly straight; tip it to turn.
+    this.tilt = { x: clamp(e.gamma / 35, -1, 1), y: clamp((e.beta - 40) / 35, -1, 1), on: true };
+  };
+
+  /** A newborn star where the tap landed, in sky coordinates so it stays put as the sky moves. */
+  private ignite(x: number, y: number) {
+    this.births.push({ x: x + this.cam.x, y: y + this.cam.y, age: 0, seed: Math.random() * 1000 });
+    if (this.births.length > MAX_BIRTHS) this.births.shift();
+    this.lit++;
+    if (this.reduced) this.render();
+  }
+
+  // ── simulation ─────────────────────────────────
+
+  private step(dt: number) {
+    this.time += dt;
+    // Where to look: the pointer, else the phone's tilt, else drift back to straight ahead.
+    const p = this.pointer;
+    let tx = 0, ty = 0;
+    if (p.active) { tx = (p.x / this.w - 0.5) * 2; ty = (p.y / this.h - 0.5) * 2; }
+    else if (this.tilt.on) { tx = this.tilt.x; ty = this.tilt.y; }
+    this.look.tx = clamp(tx, -1, 1) * 0.85;
+    this.look.ty = clamp(ty, -1, 1) * 0.85;
+    this.look.x += (this.look.tx - this.look.x) * dt * 1.8;
+    this.look.y += (this.look.ty - this.look.y) * dt * 1.8;
+    // Bank into the turn, like anything flying.
+    this.roll += (-this.look.x * 0.28 - this.roll) * dt * 1.5;
+    this.lean.x += (this.look.tx - this.lean.x) * dt * 2;
+    this.lean.y += (this.look.ty - this.lean.y) * dt * 2;
+
+    if (this.stage === "voyage" || this.arriving()) this.stepVoyage(dt);
+    if (this.stage === "vista") this.stepVista(dt);
+  }
+
+  private arriving() {
+    return this.arriveAt >= 0 && this.time - this.arriveAt < ARRIVE_SECONDS;
+  }
+
+  private stepVoyage(dt: number) {
+    // Warp comes on hard and lets go gently; arriving, you brake right down.
+    const target = this.stage === "vista" ? 0 : this.warp ? WARP : CRUISE;
+    this.speed += (target - this.speed) * dt * (this.stage === "vista" ? 2.2 : this.warp ? 1.4 : 0.8);
+    this.travelled += this.speed * dt * 0.6;
+    const n = this.moteCount();
+    for (const m of this.motes) {
+      m.z -= this.speed * dt;
+      const q = this.project(m.x, m.y, Math.max(m.z, 0.001));
+      const gone = q.x < -60 || q.x > this.w + 60 || q.y < -60 || q.y > this.h + 60;
+      if (m.z <= 0.015 || (gone && m.z < 0.95)) Object.assign(m, this.makeMote(rand(0.92, 1)));
+    }
+    while (this.motes.length < n) this.motes.push(this.makeMote(rand(0.05, 1)));
+    this.motes.length = n;
+
+    for (let i = this.wonders.length - 1; i >= 0; i--) {
+      this.wonders[i].z -= this.speed * dt * 0.7;
+      if (this.wonders[i].z < 0.05) this.wonders.splice(i, 1);
+    }
+    // Wonders come round every so often, sooner at warp since you're covering more ground.
+    if (this.stage === "voyage" && (this.nextWonder -= dt * (this.speed / CRUISE)) <= 0 && this.wonders.length < 2) {
+      this.nextWonder = rand(9, 16);
+      const roll = Math.random();
+      const kind = roll < 0.4 ? "planet" : roll < 0.7 ? "ringed" : "nebula";
+      const [body, band] = WORLDS[Math.floor(Math.random() * WORLDS.length)];
+      // Off to one side, so it slides past rather than straight into you.
+      const a = rand(0, TAU), r = rand(0.35, 0.8);
+      this.wonders.push({
+        kind, x: Math.cos(a) * r, y: Math.sin(a) * r * 0.7, z: 1.3,
+        size: kind === "nebula" ? rand(0.3, 0.5) : rand(0.06, 0.13),
+        body: kind === "nebula" ? (Math.random() < 0.5 ? MAGENTA : TEAL) : body,
+        band: kind === "nebula" ? VIOLET : band,
+        seed: Math.floor(Math.random() * 1000), tilt: rand(-0.5, 0.5),
+      });
+    }
+  }
+
+  private stepVista(dt: number) {
+    const cam = this.cam;
+    if (!this.press) {
+      cam.x += cam.vx * dt;
+      cam.y += cam.vy * dt;
+      // A fling slows back down to the slow drift the sky always has.
+      cam.vx += (7 - cam.vx) * dt * 1.2;
+      cam.vy += (2 - cam.vy) * dt * 1.2;
+    }
+    for (const b of this.births) b.age += dt;
+    this.makeTiles(TILES_PER_FRAME);
+  }
+
+  // ── drawing ────────────────────────────────────
+
+  private put(ch: string, x: number, y: number, color: Rgb, alpha: number) {
+    if (alpha < 0.02 || x < -40 || y < -40 || x > this.w + 40 || y > this.h + 40) return;
+    this.ctx.globalAlpha = alpha > 1 ? 1 : alpha;
+    this.ctx.fillStyle = css(color);
+    this.ctx.fillText(ch, x, y);
+  }
+
+  private render() {
+    const { ctx } = this;
+    ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = css(SPACE);
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const since = this.time - this.arriveAt;
+    if (this.stage === "voyage" || this.arriving()) this.drawVoyage(this.stage === "vista" ? 1 - smoothstep(0, ARRIVE_SECONDS * 0.6, since) : 1);
+    if (this.stage === "vista") {
+      const k = this.arriveAt < 0 ? 1 : smoothstep(ARRIVE_SECONDS * 0.2, ARRIVE_SECONDS, since);
+      // Coming out of warp the view settles: a touch too close, easing back.
+      const s = 1 + 0.14 * (1 - ease(k));
+      ctx.translate(this.w / 2, this.h / 2);
+      ctx.scale(s, s);
+      ctx.translate(-this.w / 2, -this.h / 2);
+      this.drawVista(k);
+      ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
+    }
+    this.drawHud();
+    ctx.globalAlpha = 1;
+  }
+
+  /** The point you're flying toward, on screen. */
+  private vanish() {
+    return { x: this.w / 2 + this.look.x * this.w * 0.28, y: this.h / 2 + this.look.y * this.h * 0.28 };
+  }
+
+  private project(x: number, y: number, z: number) {
+    const v = this.vanish();
+    const f = Math.max(this.w, this.h) * 0.25;
+    const px = x / z, py = y / z;
+    const c = Math.cos(this.roll), s = Math.sin(this.roll);
+    return { x: v.x + (px * c - py * s) * f, y: v.y + (px * s + py * c) * f };
+  }
+
+  private drawVoyage(alpha: number) {
+    const { ctx } = this;
+    const warpK = smoothstep(CRUISE, WARP, this.speed);
+    for (const wd of [...this.wonders].sort((a, b) => b.z - a.z)) this.drawWonder(wd, alpha);
+    let font = "";
+    for (const m of this.motes) {
+      const p = this.project(m.x, m.y, m.z);
+      if (p.x < -30 || p.x > this.w + 30 || p.y < -30 || p.y > this.h + 30) continue;
+      const near = 1 - m.z;
+      const g = m.z > 0.75 ? "." : m.z > 0.5 ? "·" : m.z > 0.28 ? "+" : m.z > 0.12 ? "*" : "✦";
+      const size = Math.round(9 + near * near * 8);
+      const f = `${size}px ${this.family}`;
+      if (f !== font) { ctx.font = f; font = f; }
+      const color = mix(m.tint, BLUESHIFT, warpK * 0.75);
+      // Stars fade in from the back, so none ever pops into being.
+      const a = smoothstep(1, 0.78, m.z) * (0.3 + 0.7 * near) * alpha;
+      // Streaks: where the star was a moment ago, further back the faster you go.
+      if (this.speed > 0.3) {
+        const q = this.project(m.x, m.y, m.z + this.speed * (0.02 + warpK * 0.1));
+        const dx = p.x - q.x, dy = p.y - q.y;
+        const len = Math.hypot(dx, dy);
+        if (len > 6) {
+          const lg = lineGlyph(dx, dy);
+          const steps = Math.min(16, Math.floor(len / 7));
+          for (let i = 1; i <= steps; i++) this.put(lg, p.x - (dx * i) / steps, p.y - (dy * i) / steps, color, a * (1 - i / (steps + 1)) * 0.8);
+        }
+      }
+      this.put(g, p.x, p.y, color, a);
+    }
+  }
+
+  /**
+   * A planet, a ringed giant or a nebula, drawn on a grid whose glyphs grow with it, so a close pass stays cheap.
+   * Planets are lit from the upper left, with bands on the giants; nebulae are clouds of noise.
+   */
+  private drawWonder(wd: Wonder, alpha: number) {
+    const c = this.project(wd.x, wd.y, wd.z);
+    const f = Math.max(this.w, this.h) * 0.25;
+    const r = (wd.size * f) / wd.z;
+    const a = smoothstep(1.3, 1.0, wd.z) * smoothstep(0.05, 0.16, wd.z) * alpha;
+    if (a < 0.02 || r > Math.max(this.w, this.h) * 1.5) return;
+    if (r < 3) { this.ctx.font = `10px ${this.family}`; this.put("·", c.x, c.y, wd.body, a); return; }
+    const font = clamp(r / 16, 8, 26);
+    const cw = font * 0.62, ch = font * 1.08;
+    this.ctx.font = `${font}px ${this.family}`;
+    const reach = r * (wd.kind === "ringed" ? 2.3 : wd.kind === "nebula" ? 1.2 : 1.1);
+    const x0 = Math.max(-cw, c.x - reach), x1 = Math.min(this.w + cw, c.x + reach);
+    const y0 = Math.max(-ch, c.y - reach), y1 = Math.min(this.h + ch, c.y + reach);
+    const ring = (front: boolean) => {
+      // A ring seen at an angle: glyphs round an ellipse, the far half behind the planet and the near half in front.
+      const n = Math.round((r * 4) / cw);
+      for (let i = 0; i < n; i++) {
+        const t = (i / n) * TAU;
+        if ((Math.sin(t) > 0) !== front) continue;
+        for (const k of [1.55, 1.8, 2.05]) {
+          const ex = Math.cos(t) * r * k, ey = Math.sin(t) * r * k * 0.26;
+          const x = c.x + ex * Math.cos(wd.tilt) - ey * Math.sin(wd.tilt), y = c.y + ex * Math.sin(wd.tilt) + ey * Math.cos(wd.tilt);
+          if (!front && Math.hypot(x - c.x, y - c.y) < r) continue;
+          this.put(k === 1.8 ? "=" : "-", x, y, wd.band, a * (k === 1.8 ? 0.8 : 0.5));
+        }
+      }
+    };
+    if (wd.kind === "ringed") ring(false);
+    for (let y = Math.floor(y0 / ch) * ch; y <= y1; y += ch) {
+      for (let x = Math.floor(x0 / cw) * cw; x <= x1; x += cw) {
+        const nx = (x - c.x) / r, ny = (y - c.y) / r;
+        const d2 = nx * nx + ny * ny;
+        if (wd.kind === "nebula") {
+          if (d2 > 1.44) continue;
+          const dens = fbm(nx * 2.2 + wd.seed, ny * 2.2, 31) - 0.3 - Math.sqrt(d2) * 0.45;
+          if (dens <= 0) continue;
+          const col = mix(wd.body, wd.band, noise(nx * 3 + wd.seed, ny * 3, 32));
+          this.put(RAMP[clamp(Math.round(dens * 16), 1, 9)], x, y, mix(col, WHITE, smoothstep(0.25, 0.45, dens) * 0.5), a * clamp(dens * 2.4, 0, 0.9));
+          continue;
+        }
+        if (d2 > 1) {
+          if (d2 < 1.2) this.put(".", x, y, COOL, a * 0.35 * (1 - (d2 - 1) / 0.2));
+          continue;
+        }
+        const nz = Math.sqrt(1 - d2);
+        const lam = nx * -0.6 + ny * -0.45 + nz * 0.66;
+        const b = clamp(lam, 0, 1);
+        if (b < 0.04) { this.put(".", x, y, wd.body, a * 0.12); continue; }
+        const stripe = wd.kind === "ringed" || wd.seed % 2 ? noise(ny * 7 + wd.seed, nx * 0.6, 33) : noise(nx * 4 + wd.seed, ny * 4, 34);
+        const col = mix(wd.body, wd.band, smoothstep(0.35, 0.65, stripe));
+        this.put(RAMP[clamp(Math.round(b * 9), 1, 9)], x, y, col, a * (0.35 + 0.65 * b));
+      }
+    }
+    if (wd.kind === "ringed") ring(true);
+  }
+
+  /** What the sky holds at a point (sky px): the Milky Way's band with a dark rift, and nebulae of warped noise. */
+  private field(x: number, y: number) {
+    // The band runs on a diagonal and wanders a little, with its dust rift wandering inside it.
+    const along = x * 0.8 + y * 0.6;
+    const across = -x * 0.6 + y * 0.8 + Math.sin(along / 1400) * 260;
+    const band = Math.exp(-((across / 560) ** 2));
+    const rift = smoothstep(0.5, 0.72, noise(along / 240, across / 110, 81)) * Math.exp(-(((across - 50 * Math.sin(along / 700)) / 130) ** 2));
+    const grain = noise(x / 42, y / 42, 82) * 0.6 + noise(x / 11, y / 11, 97) * 0.4;
+    const milky = band * (0.3 + 0.7 * grain) * (1 - rift * 0.9);
+    // Nebulae: noise pushed around by more noise, so the clouds curl instead of blobbing.
+    const wx = x / 760 + noise(x / 1000, y / 1000, 83) * 1.7, wy = y / 760 + noise(x / 1000 + 7, y / 1000, 84) * 1.7;
+    const neb = smoothstep(0.53, 0.86, fbm(wx, wy, 85));
+    return { milky, neb, hue: noise(x / 1800, y / 1800, 86), grain };
+  }
+
+  private nebulaColour(hue: number, x: number, y: number) {
+    const fine = noise(x / 120, y / 120, 87);
+    return hue < 0.38 ? mix(MAGENTA, VIOLET, fine) : hue < 0.62 ? mix(TEAL, VIOLET, fine * 0.7) : mix(AMBER, MAGENTA, fine);
+  }
+
+  /** One tile of the sky, drawn once and kept. Glyphs sit on one grid across all tiles, so tiles meet seamlessly. */
+  private makeTile(tx: number, ty: number) {
+    const tr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const tile = document.createElement("canvas");
+    tile.width = tile.height = Math.round(TILE * tr);
+    const t = tile.getContext("2d")!;
+    t.setTransform(tr, 0, 0, tr, 0, 0);
+    t.font = `${SKY_FONT}px ${this.family}`;
+    t.textAlign = "center";
+    t.textBaseline = "middle";
+    const cw = SKY_FONT * 0.62, ch = SKY_FONT * 1.08;
+    const ox = tx * TILE, oy = ty * TILE;
+    // Cells overlapping the edge are drawn in both tiles, each clipped to its own half.
+    for (let iy = Math.floor((oy - ch) / ch); iy * ch <= oy + TILE + ch; iy++) {
+      for (let ix = Math.floor((ox - cw) / cw); ix * cw <= ox + TILE + cw; ix++) {
+        const x = ix * cw + cw / 2, y = iy * ch + ch / 2;
+        const f = this.field(x, y);
+        let g = "", col: Rgb = STAR, a = 0;
+        // Gas: filaments from finer noise inside each cloud, dithered so the thin parts are wisps, not a wall.
+        const d = Math.min(1, f.neb * (0.35 + 1.1 * fbm(x / 90, y / 90, 88)));
+        if (f.neb > 0.03 && hash(ix, iy, 98) < d * 2.6) {
+          g = RAMP[clamp(Math.round(d * 10), 1, 9)];
+          col = mix(this.nebulaColour(f.hue, x, y), WHITE, smoothstep(0.6, 0.95, d) * 0.6);
+          a = 0.2 + 0.8 * d;
+        } else if (hash(ix, iy, 89) < f.milky * 0.75) {
+          // Each star in the band its own brightness, so it reads as grain rather than blocks of one glyph.
+          const v = f.milky * (0.45 + hash(ix, iy, 96));
+          g = v > 0.95 ? "*" : v > 0.7 ? "+" : v > 0.45 ? "·" : ".";
+          col = mix(STAR, WARM, f.grain * 0.45);
+          a = 0.12 + 0.5 * Math.min(1, v);
+        }
+        if (!g) continue;
+        t.globalAlpha = a;
+        t.fillStyle = css(col);
+        t.fillText(g, x - ox, y - oy);
+      }
+    }
+    return tile;
+  }
+
+  /** The tiles in view (and a ring round it), made at most `budget` at a time; far-off ones are let go. */
+  private makeTiles(budget: number) {
+    const { x0, y0, x1, y1 } = this.tileSpan();
+    for (let ty = y0; ty <= y1 && budget > 0; ty++) {
+      for (let tx = x0; tx <= x1 && budget > 0; tx++) {
+        const key = `${tx},${ty}`;
+        if (this.tiles.has(key)) continue;
+        this.tiles.set(key, this.makeTile(tx, ty));
+        budget--;
+      }
+    }
+    if (this.tiles.size > MAX_TILES) {
+      for (const key of this.tiles.keys()) {
+        const [tx, ty] = key.split(",").map(Number);
+        if (tx < x0 - 2 || tx > x1 + 2 || ty < y0 - 2 || ty > y1 + 2) this.tiles.delete(key);
+      }
+    }
+  }
+
+  private tileSpan() {
+    // A margin covers the parallax lean and the settle zoom on arrival.
+    const m = 120;
+    const ox = this.cam.x + this.lean.x * 24, oy = this.cam.y + this.lean.y * 24;
+    return {
+      x0: Math.floor((ox - m) / TILE), x1: Math.floor((ox + this.w + m) / TILE),
+      y0: Math.floor((oy - m) / TILE), y1: Math.floor((oy + this.h + m) / TILE),
+    };
+  }
+
+  /**
+   * The vista in three depths: far stars barely moving, the gas and the Milky Way in tiles, and a few bright
+   * near stars sliding past fastest. Leaning the pointer (or the phone) shifts them by different amounts.
+   */
+  private drawVista(alpha: number) {
+    const { ctx, cam, lean, time: t } = this;
+    // Far: faint dust of stars, a third as quick as the sky.
+    ctx.font = `9px ${this.family}`;
+    const fx = cam.x * 0.35 + lean.x * 8, fy = cam.y * 0.35 + lean.y * 8;
+    const FAR = 34;
+    for (let iy = Math.floor(fy / FAR); iy * FAR <= fy + this.h; iy++) {
+      for (let ix = Math.floor(fx / FAR); ix * FAR <= fx + this.w; ix++) {
+        const hh = hash(ix, iy, 90);
+        if (hh > 0.5) continue;
+        const x = ix * FAR + hash(ix, iy, 91) * FAR - fx, y = iy * FAR + hash(ix, iy, 92) * FAR - fy;
+        const tw = 0.6 + 0.4 * Math.sin(t * (0.6 + hh * 2) + hh * 40);
+        this.put(hh < 0.08 ? "·" : ".", x, y, hh < 0.05 ? COOL : STAR, (0.15 + hh * 0.5) * tw * alpha);
+      }
+    }
+    // The sky itself.
+    const sx = cam.x + lean.x * 24, sy = cam.y + lean.y * 24;
+    const { x0, y0, x1, y1 } = this.tileSpan();
+    ctx.globalAlpha = alpha;
+    for (let ty = y0; ty <= y1; ty++) {
+      for (let tx = x0; tx <= x1; tx++) {
+        const tile = this.tiles.get(`${tx},${ty}`);
+        if (tile) ctx.drawImage(tile, tx * TILE - sx, ty * TILE - sy, TILE, TILE);
+      }
+    }
+    // Near: a few bright stars, quicker than the sky.
+    const nx = cam.x * 1.3 + lean.x * 40, ny = cam.y * 1.3 + lean.y * 40;
+    const NEAR = 150;
+    for (let iy = Math.floor(ny / NEAR); iy * NEAR <= ny + this.h; iy++) {
+      for (let ix = Math.floor(nx / NEAR); ix * NEAR <= nx + this.w; ix++) {
+        const hh = hash(ix, iy, 93);
+        if (hh > 0.22) continue;
+        const x = ix * NEAR + hash(ix, iy, 94) * NEAR - nx, y = iy * NEAR + hash(ix, iy, 95) * NEAR - ny;
+        const tw = 0.7 + 0.3 * Math.sin(t * 1.6 + hh * 90);
+        ctx.font = `${hh < 0.06 ? 15 : 12}px ${this.family}`;
+        this.put(hh < 0.06 ? "✦" : hh < 0.14 ? "*" : "+", x, y, hh < 0.04 ? WARM : hh < 0.1 ? COOL : STAR, (0.5 + hh * 2) * tw * alpha);
+      }
+    }
+    this.drawBirths(sx, sy, alpha);
+  }
+
+  /** The stars you lit: a flash, a ring of light blowing out through the gas, and a star that stays and twinkles. */
+  private drawBirths(sx: number, sy: number, alpha: number) {
+    for (const b of this.births) {
+      const x = b.x - sx, y = b.y - sy;
+      if (x < -120 || y < -120 || x > this.w + 120 || y > this.h + 120) continue;
+      if (b.age < BIRTH_RING) {
+        const k = b.age / BIRTH_RING;
+        const r = 6 + ease(k) * 90;
+        this.ctx.font = `11px ${this.family}`;
+        const n = 22;
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * TAU + b.seed;
+          this.put(i % 3 ? "·" : "*", x + Math.cos(a) * r, y + Math.sin(a) * r, mix(WHITE, MAGENTA, k), (1 - k) * 0.9 * alpha);
+        }
+      }
+      // A soft halo of light round it, then the star.
+      const settle = smoothstep(0, 0.5, b.age);
+      this.ctx.font = `9px ${this.family}`;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + b.seed + this.time * 0.15;
+        this.put("·", x + Math.cos(a) * 13, y + Math.sin(a) * 9, WARM, 0.35 * settle * (0.6 + 0.4 * Math.sin(this.time * 2 + i)) * alpha);
+      }
+      const flash = 1 - smoothstep(0, 0.6, b.age);
+      this.ctx.font = `${Math.round(16 + flash * 14)}px ${this.family}`;
+      this.put("✦", x, y, mix(WARM, WHITE, 0.4 + flash * 0.6), (0.85 + 0.15 * Math.sin(this.time * 2.4 + b.seed)) * alpha);
+    }
+  }
+
+  /** The readout, in the same small print as the sky's stats: where you are, and what you can do. */
+  private drawHud() {
+    const { ctx } = this;
+    const right = this.w - (this.w >= 1024 ? this.w * 0.14 : 24);
+    const top = this.w >= 1024 ? 30 : 70;
+    ctx.textAlign = "right";
+    ctx.font = `11px ${this.family}`;
+    let lines: string[], hint: string;
+    if (this.stage === "voyage") {
+      lines = [`voyage · ${this.travelled.toFixed(2)} ly`, this.speed > CRUISE * 1.6 ? `warp ${(this.speed / CRUISE).toFixed(1)}` : "cruising"];
+      hint = this.coarse ? "hold to warp · drag or tilt to steer ↯" : "hold to warp · steer with the cursor ↯";
+    } else {
+      const ra = ((((this.cam.x / 3000) % 24) + 24) % 24).toFixed(1);
+      const dec = clamp(-this.cam.y / 90, -90, 90).toFixed(0);
+      lines = [`vista · ra ${ra}h · dec ${dec}°`, `${this.lit} ${this.lit === 1 ? "star" : "stars"} born`];
+      hint = "drag to roam · tap to ignite a star ↯";
+    }
+    lines.forEach((l, i) => this.put(l, right, top + i * 19, STAR, 0.4));
+    this.put(hint, right, top + lines.length * 19 + Math.sin(this.time * 2) * 1.5, [196, 214, 255], 0.75);
+    ctx.textAlign = "center";
+  }
+}

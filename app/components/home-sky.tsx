@@ -51,7 +51,12 @@ export function HomeSky() {
           data-sky-avoid
           key={stats.scene}
         >
-          {stats.scene === "earth" ? (
+          {stats.scene === "deep" ? (
+            <>
+              <div>{stats.detail}</div>
+              <div className="hint">drag to drift · pinch or scroll to zoom ↯</div>
+            </>
+          ) : stats.scene === "earth" ? (
             <>
               <div>{stats.detail}</div>
               <div key={stats.sats} className="flash">

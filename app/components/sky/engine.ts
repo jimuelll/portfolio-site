@@ -17,15 +17,23 @@
  * from the moon or sun to a turning ASCII Earth drawn from a real coastline map, with clouds, city lights on the
  * night side and the moon going round it. Clicking puts a satellite into orbit where you click.
  *
+ * The galaxy (a hidden fourth theme, "deep"): press and hold the moon, sun or Earth for five seconds. A ring charges
+ * round it while the stars strain toward it, then hyperdrive: the disc collapses to a point, the stars stream past
+ * in streaks, and you drop out in front of an ASCII spiral galaxy with the sun marked on one arm. Drag to drift
+ * through it; scroll or pinch to zoom. The toggle jumps back the same way.
+ *
+ * While the theme toggle is held the sky is a long exposure: the stars draw trails round the toggle as their
+ * pole, until the hold lifts off into the cosmos (sky/cosmos.ts).
+ *
  * Anything on the page marked [data-sky-avoid] dims the sky underneath it so text always stays readable.
  */
 
-export type Scene = "night" | "day" | "earth";
+export type Scene = "night" | "day" | "earth" | "deep";
 /** detail: the moon's phase by night, the sunspot count by day. Empty when there's no moon or sun on screen. */
 export type SkyStats = { scene: Scene; detail: string; comets: number; flares: number; sats: number; launched: number; flared: number };
 /** full: the home page sky. quiet: a faint starfield behind interior pages. emblem: a small framed sky. */
 export type SkyVariant = "full" | "quiet" | "emblem";
-type Rgb = [number, number, number];
+export type Rgb = [number, number, number];
 type Box = { left: number; top: number; right: number; bottom: number };
 type Vec = [number, number, number];
 
@@ -36,7 +44,7 @@ const TRAIL = 150;
 const DIM_UNDER_CONTENT = 0.12;
 const AVOID = "[data-sky-avoid]";
 const INTERACTIVE = "a, button, input, textarea, select, label, [role='button'], [data-sky-ignore]";
-const RAMP = " .:-=+*#%@";
+export const RAMP = " .:-=+*#%@";
 /** How long the eclipse takes when the theme changes. The nav keeps its transition class on a little longer. */
 export const TURN_SECONDS = 2.8;
 /** Set on <html> while an inner page's theme fades over (see top-nav.tsx): the sky switches at once, no eclipse. */
@@ -60,6 +68,29 @@ const SPOTS = 3;
 /** The zoom between Earth and the moon or sun. */
 const ZOOM_SECONDS = 1.8;
 const TWILIGHT_BG: Rgb = [14, 22, 46];
+/**
+ * The long exposure while the theme toggle is held (top-nav.tsx writes it): k runs 0 → 1, and the stars wheel
+ * round (x, y), the toggle in viewport px, leaving trails.
+ */
+export const exposure = { k: 0, x: 0, y: 0 };
+/** Fired on window when the hero has been held long enough: top-nav.tsx switches to the galaxy. */
+export const HYPERDRIVE_EVENT = "sky-hyperdrive";
+/** How long the moon, sun or Earth has to be held. */
+const CHARGE_MS = 5000;
+/** The jump through hyperdrive, either way. */
+const HYPER_SECONDS = 2.6;
+const DEEP_BG: Rgb = [5, 6, 13];
+const BLUESHIFT: Rgb = [150, 196, 255];
+const GALAXY_CORE: Rgb = [255, 226, 180];
+const GALAXY_ARM: Rgb = [150, 172, 255];
+const GALAXY_NEBULA: Rgb = [236, 120, 190];
+/** Spiral arms wind out as a logarithmic spiral, r ∝ e^(bθ); b = 0.32 is a pitch of about 18°, like the Milky Way's. */
+const ARM_PITCH = 0.32;
+/** The galaxy's disc seen at an angle: squashed and turned a little on screen. */
+const GALAXY_SQUASH = 0.6;
+const GALAXY_TURN = -0.32;
+/** Where the sun sits: partway out along one arm. */
+const SUN_ORBIT = 0.58;
 const MAX_SATS = 30;
 /** One satellite at 1.3 Earth radii goes round in 8 s; further out is slower, by Kepler's third law. */
 const SAT_W0 = (TAU / 8) * 1.3 ** 1.5;
@@ -79,7 +110,8 @@ function isLand(lon: number, lat: number) {
   const i = y * 128 + x;
   return (landBits[i >> 3] >> (7 - (i & 7))) & 1;
 }
-const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+export const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const zooms = (s: Scene) => s === "earth" || s === "deep";
 
 interface Palette {
   star: Rgb;
@@ -124,6 +156,7 @@ const EARTH_NIGHT: Rgb = [70, 92, 150];
 const EARTH_CITY: Rgb = [255, 206, 122];
 const EARTH_SAT: Rgb = [228, 236, 255];
 const LIGHT_BG: Rgb = [243, 239, 228];
+const bgOf = (s: Scene) => (s === "day" ? LIGHT_BG : s === "earth" ? TWILIGHT_BG : s === "deep" ? DEEP_BG : DARK_BG);
 
 const LIGHT: Palette = {
   star: [30, 42, 66],
@@ -137,21 +170,21 @@ const LIGHT: Palette = {
   alpha: 0.92,
 };
 
-const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
-const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
-const smoothstep = (a: number, b: number, x: number) => {
+export const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v);
+export const rand = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
+export const smoothstep = (a: number, b: number, x: number) => {
   const t = clamp((x - a) / (b - a), 0, 1);
   return t * t * (3 - 2 * t);
 };
 
-function hash(x: number, y: number, z: number) {
+export function hash(x: number, y: number, z: number) {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(z | 0, 1442695041);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
 
-function noise(x: number, y: number, seed: number) {
+export function noise(x: number, y: number, seed: number) {
   const xi = Math.floor(x), yi = Math.floor(y);
   const u = smoothstep(0, 1, x - xi), v = smoothstep(0, 1, y - yi);
   const a = hash(xi, yi, seed), b = hash(xi + 1, yi, seed), c = hash(xi, yi + 1, seed), d = hash(xi + 1, yi + 1, seed);
@@ -159,7 +192,7 @@ function noise(x: number, y: number, seed: number) {
 }
 
 /** A glyph that follows a direction on screen, for comet tails, meteor streaks and rays. */
-function lineGlyph(dx: number, dy: number) {
+export function lineGlyph(dx: number, dy: number) {
   const d = Math.hypot(dx, dy) || 1;
   if (Math.abs(dy) < 0.38 * d) return "-";
   if (Math.abs(dx) < 0.38 * d) return "|";
@@ -173,8 +206,8 @@ function overlap(d: number, r: number) {
   return (2 * Math.acos(q) - 2 * q * Math.sqrt(1 - q * q)) / Math.PI;
 }
 
-const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-const css = (c: Rgb) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+export const css = (c: Rgb) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const norm = (v: Vec): Vec => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 
 interface Star { x: number; y: number; z: number; phase: number; speed: number; glyph: string; tint: 0 | 1 | 2 }
@@ -252,6 +285,23 @@ export class SkyEngine {
   private astro: Astro | null = null;
   private nextAstro = rand(8, 16);
   private overAstro = false;
+  /** The long exposure (eased toward exposure.k), its pole in canvas px, and where the canvas sits in the viewport. */
+  private trail = 0;
+  private pole = { x: 0, y: 0 };
+  private origin = { left: 0, top: 0 };
+  /** The galaxy's camera: pan in px, zoom, and the drift it keeps after a fling. */
+  private cam = { x: 0, y: 0, z: 1, vx: 0, vy: 0 };
+  private grabs = new Map<number, { x: number; y: number }>();
+  private lastDrag = 0;
+  /** The middle of what's on screen, in canvas px. */
+  private view = { x: 0, y: 0 };
+  /** The hold on the hero: which pointer, when it began, its timer, and the charge (0 → 1) for drawing. */
+  private charging = { id: -1, start: 0, timer: 0 };
+  private charge = 0;
+  /** How far the stars have streamed during hyperdrive. */
+  private warpPos = 0;
+  /** The click that ends a hold on the hero isn't also a comet. */
+  private swallowUntil = 0;
   private reported = "";
   private reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   private resizeObserver = new ResizeObserver(() => this.resize());
@@ -283,6 +333,13 @@ export class SkyEngine {
     if (variant === "full") window.addEventListener("click", this.onClick);
     if (variant === "emblem") window.addEventListener(LAUNCH_EVENT, this.onLaunch);
     if (variant === "full") window.addEventListener(DELIVER_EVENT, this.onDeliver);
+    if (variant !== "emblem") {
+      window.addEventListener("pointerdown", this.onGrab);
+      window.addEventListener("pointerup", this.onLetGo);
+      window.addEventListener("pointercancel", this.onLetGo);
+      window.addEventListener("wheel", this.onWheel, { passive: false });
+      window.addEventListener("contextmenu", this.onMenu);
+    }
     this.resize();
     this.schedule();
   }
@@ -301,6 +358,12 @@ export class SkyEngine {
     window.removeEventListener("click", this.onClick);
     window.removeEventListener(LAUNCH_EVENT, this.onLaunch);
     window.removeEventListener(DELIVER_EVENT, this.onDeliver);
+    window.removeEventListener("pointerdown", this.onGrab);
+    window.removeEventListener("pointerup", this.onLetGo);
+    window.removeEventListener("pointercancel", this.onLetGo);
+    window.removeEventListener("wheel", this.onWheel);
+    window.removeEventListener("contextmenu", this.onMenu);
+    window.clearTimeout(this.charging.timer);
     if (this.overAstro && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
   }
 
@@ -326,14 +389,17 @@ export class SkyEngine {
 
   private readTheme() {
     const theme = document.documentElement.dataset.theme;
-    const next: Scene = theme === "light" ? "day" : theme === "twilight" ? "earth" : "night";
+    const next: Scene = theme === "light" ? "day" : theme === "twilight" ? "earth" : theme === "deep" ? "deep" : "night";
     if (next === this.scene) return;
+    // Each visit to the galaxy starts from the same view.
+    if (next === "deep") this.cam = { x: 0, y: 0, z: 1, vx: 0, vy: 0 };
     // Inner pages fade their colours over instead, so the sky switches at once.
     const sunrise = document.documentElement.classList.contains(SUNRISE_CLASS);
     // The first read just picks the scene; later changes play the eclipse.
     if (this.started && !this.reduced.matches && this.raf && !sunrise) {
-      const zoom = this.scene === "earth" || next === "earth";
-      this.turn = { from: this.scene, to: next, start: this.time, dur: zoom ? ZOOM_SECONDS : TURN_SECONDS };
+      const deep = this.scene === "deep" || next === "deep";
+      const zoom = zooms(this.scene) || zooms(next);
+      this.turn = { from: this.scene, to: next, start: this.time, dur: deep ? HYPER_SECONDS : zoom ? ZOOM_SECONDS : TURN_SECONDS };
       this.scene = next;
       this.syncTextColour();
       // Paint the first frame now, before the browser shows the new page background.
@@ -427,12 +493,16 @@ export class SkyEngine {
 
   private measure() {
     const origin = this.canvas.getBoundingClientRect();
+    this.origin = { left: origin.left, top: origin.top };
+    // The canvas can be taller than the window (phones scroll the home page), so centre on what's visible.
+    this.view = this.variant === "emblem" ? { x: this.hero.x, y: this.hero.y } : { x: window.innerWidth / 2 - origin.left, y: window.innerHeight / 2 - origin.top };
     this.boxes = Array.from(document.querySelectorAll(AVOID), (el) => el.getBoundingClientRect())
       .filter((b) => b.width > 0 && b.height > 0)
       .map((b) => ({ left: b.left - origin.left - 14, top: b.top - origin.top - 10, right: b.right - origin.left + 14, bottom: b.bottom - origin.top + 10 }));
   }
 
   private dim(x: number, y: number) {
+    if (this.scene === "deep") return 1;
     for (const b of this.boxes) if (x > b.left && x < b.right && y > b.top && y < b.bottom) return DIM_UNDER_CONTENT;
     return 1;
   }
@@ -493,7 +563,11 @@ export class SkyEngine {
   private report() {
     const hero = this.variant !== "quiet";
     let detail = "";
-    if (hero && this.scene === "earth") {
+    if (hero && this.charge > 0.04 && !this.turn) {
+      detail = `hyperdrive · ${Math.round(this.charge * 100)}%`;
+    } else if (hero && this.scene === "deep") {
+      detail = `milky way · ${this.cam.z.toFixed(1)}×`;
+    } else if (hero && this.scene === "earth") {
       detail = "earth · twilight";
     } else if (hero && this.scene === "night") {
       const { lit, waxing } = this.moonPhase();
@@ -513,6 +587,26 @@ export class SkyEngine {
     this.time += dt;
     if (this.turn && this.time - this.turn.start > this.turn.dur) this.turn = null;
     this.boil += dt * (1 + this.hov * 2.5);
+    // The shutter opens slowly and closes quickly.
+    this.trail += (exposure.k - this.trail) * dt * (exposure.k > this.trail ? 4 : 7);
+    this.pole = { x: exposure.x - this.origin.left, y: exposure.y - this.origin.top };
+    this.charge = this.charging.start ? clamp((performance.now() - this.charging.start) / CHARGE_MS, 0, 1) : 0;
+    // In hyperdrive the stars stream outward, fastest at the jump's midpoint.
+    if (this.turn && (this.turn.to === "deep" || this.turn.from === "deep")) this.warpPos += dt * (0.15 + 2.2 * this.hyperIntensity((this.time - this.turn.start) / this.turn.dur));
+    // A flung camera drifts on and slows; a held one stops. It never strays far past the galaxy's edge.
+    const cam = this.cam;
+    if (this.grabs.size) {
+      cam.vx *= Math.exp(-10 * dt);
+      cam.vy *= Math.exp(-10 * dt);
+    } else {
+      cam.x += cam.vx * dt;
+      cam.y += cam.vy * dt;
+      cam.vx *= Math.exp(-2.5 * dt);
+      cam.vy *= Math.exp(-2.5 * dt);
+    }
+    const reach = this.galaxyRadius() * 1.1;
+    cam.x = clamp(cam.x, -reach, reach);
+    cam.y = clamp(cam.y, -reach, reach);
     // Spots form, drift round with the sun, and fade; new ones keep the count up.
     for (let i = this.spots.length - 1; i >= 0; i--) if (this.time - this.spots[i].born > this.spots[i].life) this.spots.splice(i, 1);
     if (this.spots.length < SPOTS && Math.random() < dt / 6) this.spots.push(this.makeSpot(this.time));
@@ -643,8 +737,14 @@ export class SkyEngine {
     this.moonAt = { x: this.hero.x, y: this.hero.y };
     if (this.turn) {
       const k = clamp((this.time - this.turn.start) / this.turn.dur, 0, 1);
-      if (this.turn.from === "earth" || this.turn.to === "earth") this.drawZoom(k);
+      if (this.turn.from === "deep" || this.turn.to === "deep") this.drawHyperdrive(k);
+      else if (this.turn.from === "earth" || this.turn.to === "earth") this.drawZoom(k);
       else this.drawEclipse(k);
+    } else if (this.scene === "deep") {
+      this.use(DARK, 1);
+      this.drawStars("deep");
+      const c = this.galaxyCentre();
+      this.drawGalaxy(c.x, c.y, this.galaxyRadius() * (this.variant === "emblem" ? 1 : this.cam.z), 1);
     } else if (this.scene === "earth") {
       this.use(DARK, 0.75);
       this.drawStars("earth");
@@ -675,6 +775,7 @@ export class SkyEngine {
       if (full) this.drawAstro();
     }
     if (full && !this.turn) this.drawDelivery();
+    if (full && !this.turn && this.charge > 0) this.drawCharge();
     ctx.globalAlpha = 1;
     this.sceneAlpha = 1;
   }
@@ -828,7 +929,7 @@ export class SkyEngine {
    * halfway. This runs inside the theme change, before styles recalculate, so the CSS transition picks it up.
    */
   private syncTextColour() {
-    if (this.turn && (this.turn.from === "earth" || this.turn.to === "earth")) {
+    if (this.turn && (zooms(this.turn.from) || zooms(this.turn.to))) {
       document.documentElement.style.setProperty("--text-turn-delay", `${(this.turn.dur * 0.42).toFixed(3)}s`);
       return;
     }
@@ -860,6 +961,21 @@ export class SkyEngine {
         // Distant stars barely move; close ones drift and follow the pointer more.
         x = ((s.x * this.w + t * (2 + s.z * 7)) % (this.w + 20)) - 10 - p.sx * s.z * 26;
         y = s.y * this.h - p.sy * s.z * 18;
+        if (scene === "deep") {
+          // In the galaxy the camera moves, and nearer stars slide past faster.
+          x = ((((x + 10 + this.cam.x * s.z * 0.12) % (this.w + 20)) + this.w + 20) % (this.w + 20)) - 10;
+          y = (((y + this.cam.y * s.z * 0.12) % this.h) + this.h) % this.h;
+        }
+      }
+      // Charging for hyperdrive: the stars strain toward the held disc, nearer ones more.
+      const strain = this.charge * this.charge * (this.variant === "full" && !this.turn ? 1 : 0);
+      let sdx = 0, sdy = 0;
+      if (strain > 0.001) {
+        const dx = hero.x - x, dy = hero.y - y, d = Math.hypot(dx, dy) || 1;
+        sdx = dx / d;
+        sdy = dy / d;
+        x += sdx * strain * 14 * s.z;
+        y += sdy * strain * 14 * s.z;
       }
       let boost = 0;
       if (p.lens > 0.01 && !day && !this.turn && this.variant === "full") {
@@ -874,7 +990,7 @@ export class SkyEngine {
           boost = fall * (1 - Math.min(1, Math.abs(d + push - einstein * 1.6) / einstein)) * 0.8;
         }
       }
-      if (!quiet && !this.turn) {
+      if (!quiet && !this.turn && scene !== "deep") {
         // Nothing shows through the moon or Earth, or in front of the sun.
         const cx = day ? hero.x : this.moonAt.x, cy = day ? hero.y : this.moonAt.y;
         if (Math.hypot(x - cx, y - cy) < hero.r * (day ? 1.15 : scene === "earth" ? 0.95 : 1)) continue;
@@ -889,6 +1005,24 @@ export class SkyEngine {
       if (f !== font) { ctx.font = f; font = f; }
       const color = day ? (s.tint === 2 ? pal.cool : pal.orbit) : s.tint === 1 ? pal.warm : s.tint === 2 ? pal.cool : pal.star;
       const base = (0.18 + s.z * 0.62) * (quiet ? 0.55 : 1) * (day ? 0.6 : 1);
+      if (this.trail > 0.01 && this.variant !== "emblem") {
+        // A long exposure: each star has wheeled a little way round the pole (the toggle being held), and the
+        // arc it swept stays on the plate, longer the further out it is.
+        const ox = x - this.pole.x, oy = y - this.pole.y;
+        const sweep = this.trail * 0.2;
+        const n = clamp(Math.round((Math.hypot(ox, oy) * sweep) / 6), 1, 24);
+        for (let j = 1; j <= n; j++) {
+          const a = -sweep * (j / n);
+          const c = Math.cos(a), sn = Math.sin(a);
+          this.glyph(".", this.pole.x + ox * c - oy * sn, this.pole.y + ox * sn + oy * c, color, base * (1 - j / (n + 1)) * this.trail * 0.8);
+        }
+      }
+      if (strain > 0.05) {
+        // A short streak behind each star, pointing at the disc.
+        const len = strain * 26 * s.z;
+        const lg = lineGlyph(sdx, sdy);
+        for (let j = 1; j <= 3; j++) this.glyph(lg, x - sdx * len * (j / 3), y - sdy * len * (j / 3), color, base * strain * (1 - j / 4));
+      }
       this.glyph(g, x, y, glint ? pal.warm : color, base * twinkle + boost + (glint ? 0.4 : 0));
     }
   }
@@ -1347,7 +1481,7 @@ export class SkyEngine {
 
   private stepAstro(dt: number) {
     if (this.variant !== "full") return;
-    if (!this.astro && !this.turn && this.scene !== "earth" && this.w >= 1024 && (this.nextAstro -= dt) <= 0) this.spawnAstro();
+    if (!this.astro && !this.turn && !zooms(this.scene) && this.w >= 1024 && (this.nextAstro -= dt) <= 0) this.spawnAstro();
     const a = this.astro;
     if (a) {
       a.x += a.vx * dt;
@@ -1376,7 +1510,7 @@ export class SkyEngine {
 
   private astroHit(x: number, y: number) {
     const a = this.astro;
-    return !!a && !a.fled && !this.turn && this.scene !== "earth" && Math.abs(x - a.x) < 24 && Math.abs(y - a.y) < 30;
+    return !!a && !a.fled && !this.turn && !zooms(this.scene) && Math.abs(x - a.x) < 24 && Math.abs(y - a.y) < 30;
   }
 
   private drawAstro() {
@@ -1615,7 +1749,6 @@ export class SkyEngine {
     const e = ease(k);
     const p = turn.to === "earth" ? e : 1 - e;
     const other: Scene = turn.to === "earth" ? turn.from : turn.to;
-    const bgOf = (sc: Scene) => (sc === "day" ? LIGHT_BG : sc === "earth" ? TWILIGHT_BG : DARK_BG);
     if (this.variant !== "emblem") {
       ctx.globalAlpha = 1;
       ctx.fillStyle = css(mix(bgOf(turn.from), bgOf(turn.to), e));
@@ -1633,6 +1766,189 @@ export class SkyEngine {
     const { x, y, r } = this.hero;
     this.around(x - 1.9 * r * p, y - 0.8 * r * p, 1 - 0.8 * p, 1 - smoothstep(0.55, 1, p), () => this.drawHero(other));
     this.around(x, y + 1.1 * r * (1 - p), 0.35 + 0.65 * p, smoothstep(0, 0.45, p), () => this.drawHero("earth"));
+  }
+
+  /** The galaxy's radius at a zoom of 1: most of the window, or most of the emblem's frame. */
+  private galaxyRadius() {
+    if (this.variant === "emblem") return this.hero.r * 1.25;
+    return Math.min(this.w, window.innerHeight) * 0.44;
+  }
+
+  private galaxyCentre() {
+    if (this.variant === "emblem") return { x: this.view.x, y: this.view.y };
+    return { x: this.view.x + this.cam.x, y: this.view.y + this.cam.y };
+  }
+
+  /** Where the sun is in the galaxy, as an offset from its centre for a galaxy of radius R. */
+  private sunOffset(R: number) {
+    // On the arm: the spiral's phase is zero where θ = ln(r) / b, plus however far the disc has turned.
+    const th = Math.log(SUN_ORBIT + 0.02) / ARM_PITCH + (this.time * TAU) / 400;
+    const u = Math.cos(th) * SUN_ORBIT * R, v = Math.sin(th) * SUN_ORBIT * R * GALAXY_SQUASH;
+    const c = Math.cos(GALAXY_TURN), s = Math.sin(GALAXY_TURN);
+    return { x: u * c - v * s, y: u * s + v * c };
+  }
+
+  /** How hard the hyperdrive is running at progress k: it builds to the jump at the midpoint, then falls away. */
+  private hyperIntensity(k: number) {
+    return k < 0.5 ? smoothstep(0.05, 0.5, k) : 1 - smoothstep(0.5, 0.95, k);
+  }
+
+  /**
+   * Hyperdrive, either way. Going out, the moon, sun or Earth collapses to a point while the stars stream out
+   * of it in lengthening streaks; at the jump there's a wash of blue-white light, and you drop out with the galaxy
+   * settling into view. Coming home, the galaxy rushes past and the disc opens out of the point it left from.
+   */
+  private drawHyperdrive(k: number) {
+    const { ctx, w, h } = this;
+    const turn = this.turn!;
+    const going = turn.to === "deep";
+    const home: Scene = going ? turn.from : turn.to;
+    if (this.variant !== "emblem") {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = css(mix(bgOf(turn.from), bgOf(turn.to), smoothstep(0.3, 0.6, k)));
+      ctx.fillRect(0, 0, w, h);
+    }
+    const c = this.variant === "quiet" ? { x: this.view.x, y: this.view.y } : { x: this.hero.x, y: this.hero.y };
+    const R = this.galaxyRadius();
+    const drawHome = (alpha: number, scale: number) => {
+      if (home === "day") { this.use(LIGHT, alpha); this.drawStars("day"); }
+      else { this.use(DARK, alpha); this.drawStars(home === "earth" ? "earth" : "night"); }
+      if (this.variant !== "quiet") this.around(c.x, c.y, scale, alpha, () => this.drawHero(home));
+    };
+    if (k < 0.5) {
+      const a = 1 - smoothstep(0.3, 0.5, k);
+      if (going) drawHome(a, 1 - 0.96 * smoothstep(0, 0.48, k));
+      else {
+        // The galaxy swells past you, centred on the sun, as you leave it.
+        const g = 1 + 6 * smoothstep(0, 0.5, k) ** 2;
+        const sun = this.sunOffset(R);
+        this.use(DARK, a);
+        this.drawStars("deep");
+        this.drawGalaxy(c.x - sun.x * g, c.y - sun.y * g, R * g, a);
+      }
+    } else {
+      const a = smoothstep(0.55, 0.85, k);
+      if (going) {
+        this.use(DARK, a);
+        this.drawStars("deep");
+        const c2 = this.galaxyCentre();
+        this.drawGalaxy(c2.x, c2.y, R * (1 + 3 * (1 - smoothstep(0.5, 1, k)) ** 2), a);
+      } else drawHome(a, smoothstep(0.5, 0.95, k));
+    }
+    this.drawWarp(c, this.hyperIntensity(k));
+    const flash = Math.max(0, 1 - Math.abs(k - 0.5) / 0.07);
+    if (flash > 0 && this.variant !== "emblem") {
+      ctx.globalAlpha = flash * 0.32;
+      ctx.fillStyle = css(BLUESHIFT);
+      ctx.fillRect(0, 0, w, h);
+    }
+    this.sceneAlpha = 1;
+  }
+
+  /** The stars in hyperdrive: streaming out of the centre point, each a streak that lengthens with the speed. */
+  private drawWarp(c: { x: number; y: number }, intensity: number) {
+    if (intensity < 0.02) return;
+    const { w, h } = this;
+    const reach = Math.hypot(Math.max(c.x, w - c.x), Math.max(c.y, h - c.y));
+    this.use(DARK, 1);
+    this.ctx.font = `11px ${this.family}`;
+    const col = mix(DARK.star, BLUESHIFT, intensity);
+    for (const s of this.stars) {
+      const th = s.x * TAU + s.y * 7;
+      // Out from the centre, slow at first and quicker as it nears you (squared), then round again.
+      const rho = (s.phase / TAU + this.warpPos * (0.4 + s.z)) % 1;
+      const r = rho * rho * reach;
+      const len = intensity * intensity * (12 + rho * reach * 0.35);
+      const dx = Math.cos(th), dy = Math.sin(th);
+      const lg = lineGlyph(dx, dy);
+      const n = clamp(Math.floor(len / 8), 1, 14);
+      for (let j = 0; j <= n; j++) {
+        const rr = r - (len * j) / n;
+        if (rr < 4) break;
+        this.glyph(j === 0 ? "*" : lg, c.x + dx * rr, c.y + dy * rr, col, intensity * (0.25 + 0.75 * rho) * (1 - j / (n + 1)));
+      }
+    }
+  }
+
+  /**
+   * The hold on the moon, sun or Earth: a ring of glyphs charges round it clockwise from the top, and past halfway
+   * sparks start leaping off its rim, more and more until the jump.
+   */
+  private drawCharge() {
+    const pl = this.hero;
+    const k = this.charge;
+    const day = this.scene === "day";
+    this.use(day ? LIGHT : DARK, 1);
+    const col = day ? LIGHT.warm : this.scene === "earth" ? EARTH_ATMO : DARK.warm;
+    this.ctx.font = `${clamp(pl.font + 2, 8, 13)}px ${this.family}`;
+    const r = pl.r * (1.14 + 0.02 * Math.sin(this.time * 24) * k);
+    const n = Math.round((pl.r * TAU) / 9);
+    for (let i = 0; i < n && i / n <= k; i++) {
+      const a = -Math.PI / 2 + (i / n) * TAU;
+      this.glyph(i % 4 === 0 ? "+" : "·", pl.x + Math.cos(a) * r, pl.y + Math.sin(a) * r, col, 0.4 + 0.6 * k);
+    }
+    if (k > 0.5) {
+      const beat = Math.floor(this.time * 12);
+      for (let j = 0; j < Math.round((k - 0.5) * 20); j++) {
+        const a = hash(j, beat, 5) * TAU, rr = pl.r * (1.02 + hash(j, beat, 6) * 0.3 * k);
+        this.glyph(hash(j, beat, 7) < 0.5 ? "'" : "*", pl.x + Math.cos(a) * rr, pl.y + Math.sin(a) * rr, col, k);
+      }
+    }
+  }
+
+  /**
+   * A spiral galaxy in glyphs: a bright warm bulge, two logarithmic arms of cool blue stars broken up by noise,
+   * dark dust lanes along their inner edges, and pink star-forming knots in the arms. The disc turns slowly.
+   * Cells are dithered against their density, so the outskirts thin to scattered stars.
+   */
+  private drawGalaxy(cx: number, cy: number, R: number, alpha: number) {
+    if (alpha < 0.02) return;
+    const { w, h } = this;
+    const emblem = this.variant === "emblem";
+    const font = emblem ? 7 : 10;
+    const cw = font * 0.62, ch = font * 1.08;
+    const ct = Math.cos(GALAXY_TURN), st = Math.sin(GALAXY_TURN);
+    const spin = (this.time * TAU) / 400;
+    this.sceneAlpha = alpha;
+    this.ctx.font = `${font}px ${this.family}`;
+    const reach = R * 1.15;
+    const x0 = Math.max(0, Math.floor((cx - reach) / cw) * cw), x1 = Math.min(w, cx + reach);
+    const y0 = Math.max(0, Math.floor((cy - reach) / ch) * ch), y1 = Math.min(h, cy + reach);
+    for (let y = y0; y <= y1; y += ch) {
+      for (let x = x0; x <= x1; x += cw) {
+        const gx = x + cw / 2, gy = y + ch / 2;
+        const dx = gx - cx, dy = gy - cy;
+        // Back onto the disc: undo the turn, then the squash.
+        const u = (dx * ct + dy * st) / R, v = (-dx * st + dy * ct) / (R * GALAXY_SQUASH);
+        const r = Math.hypot(u, v);
+        if (r > 1.15) continue;
+        const ix = Math.round(x / cw), iy = Math.round(y / ch);
+        const th = Math.atan2(v, u) - spin;
+        const phase = th - Math.log(r + 0.02) / ARM_PITCH;
+        const core = Math.exp(-((r / 0.13) ** 2));
+        const arm = (0.5 + 0.5 * Math.cos(2 * phase)) ** 3 * Math.exp(-r / 0.75) * smoothstep(0.04, 0.2, r) * (1 - smoothstep(0.95, 1.15, r));
+        const lane = (0.5 + 0.5 * Math.cos(2 * phase + 0.7)) ** 14 * smoothstep(0.12, 0.3, r);
+        const n = noise(u * 9 + 3, v * 9, 61);
+        const d = core * 1.3 + arm * (0.8 + 1.1 * n) + 0.07 * Math.exp(-r / 0.6) * n - lane * 0.25;
+        if (d <= 0 || hash(ix, iy, 63) > d * 2.2) continue;
+        const tw = 0.8 + 0.2 * Math.sin(this.time * 1.3 + hash(ix, iy, 64) * TAU);
+        const knot = arm > 0.35 && n > 0.7 && hash(ix, iy, 65) < 0.5;
+        const g = knot ? "*" : RAMP[clamp(Math.round(d * 9), 1, 9)];
+        const col = knot ? GALAXY_NEBULA : mix(GALAXY_ARM, GALAXY_CORE, clamp(core * 1.4 + (1 - r) * 0.25, 0, 1));
+        this.glyph(g, gx, gy, col, (0.25 + 0.75 * Math.min(1, d)) * tw);
+      }
+    }
+    // You are here: the sun, one star partway out along an arm.
+    if (!emblem && !this.turn) {
+      const s = this.sunOffset(R);
+      this.ctx.font = `13px ${this.family}`;
+      this.glyph("✦", cx + s.x, cy + s.y, DARK.warm, 1);
+      this.ctx.font = `10px ${this.family}`;
+      this.ctx.textAlign = "left";
+      this.glyph("you are here", cx + s.x + 12, cy + s.y + 1, DARK.warm, 0.7);
+      this.ctx.textAlign = "center";
+    }
+    this.sceneAlpha = 1;
   }
 
   /** A point on a flare's loop: t runs 0 → 1 from one foot, out round the apex, and back to the other. */
@@ -1714,7 +2030,99 @@ export class SkyEngine {
     this.report();
   }
 
+  /**
+   * A press on the moon, sun or Earth starts charging the hyperdrive; in the galaxy, a press on empty sky takes
+   * hold of the camera instead (two take hold to pinch).
+   */
+  private onGrab = (e: PointerEvent) => {
+    if (this.turn || e.button !== 0) return;
+    if (e.composedPath().some((n) => n instanceof Element && n.matches(INTERACTIVE))) return;
+    if (this.scene === "deep") {
+      this.grabs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      this.lastDrag = performance.now();
+      return;
+    }
+    if (this.variant !== "full" || this.charging.start) return;
+    const rect = this.canvas.getBoundingClientRect();
+    if (Math.hypot(e.clientX - rect.left - this.hero.x, e.clientY - rect.top - this.hero.y) > this.hero.r) return;
+    // Timed, so the jump lands at five seconds even if frames are dropped.
+    this.charging = { id: e.pointerId, start: performance.now(), timer: window.setTimeout(this.fire, CHARGE_MS) };
+    this.canvas.parentElement?.setAttribute("data-charging", "");
+  };
+
+  private onLetGo = (e: PointerEvent) => {
+    this.grabs.delete(e.pointerId);
+    if (e.pointerId !== this.charging.id) return;
+    // A long press that gave up isn't a click on the sky either.
+    if (performance.now() - this.charging.start > 500) this.swallowUntil = performance.now() + 400;
+    this.endCharge();
+  };
+
+  /** Held long enough: hyperdrive. The page switches theme, and readTheme plays the jump. */
+  private fire = () => {
+    this.endCharge();
+    window.dispatchEvent(new Event(HYPERDRIVE_EVENT));
+  };
+
+  private endCharge() {
+    window.clearTimeout(this.charging.timer);
+    this.charging = { id: -1, start: 0, timer: 0 };
+    this.canvas.parentElement?.removeAttribute("data-charging");
+    if (this.reduced.matches || !this.raf) this.render();
+  }
+
+  /** A long press on a phone would open a menu; while charging, it's ours. */
+  private onMenu = (e: Event) => {
+    if (this.charging.start) e.preventDefault();
+  };
+
+  private onWheel = (e: WheelEvent) => {
+    if (this.scene !== "deep" || this.turn) return;
+    e.preventDefault();
+    this.zoomAt(e.clientX - this.origin.left, e.clientY - this.origin.top, Math.exp(-e.deltaY * 0.0015));
+  };
+
+  /** Zoom by f, keeping whatever is under (px, py) where it is. */
+  private zoomAt(px: number, py: number, f: number) {
+    const cam = this.cam;
+    const z = clamp(cam.z * f, 0.6, 4);
+    const k = z / cam.z;
+    cam.x = px - this.view.x - (px - this.view.x - cam.x) * k;
+    cam.y = py - this.view.y - (py - this.view.y - cam.y) * k;
+    cam.z = z;
+    if (!this.raf) this.render();
+  }
+
+  private drag(e: PointerEvent) {
+    const g = this.grabs.get(e.pointerId)!;
+    const other = [...this.grabs].find(([id]) => id !== e.pointerId)?.[1];
+    if (other) {
+      // Pinch: zoom by how far the fingers have spread, about the point between them.
+      const before = Math.hypot(g.x - other.x, g.y - other.y), after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+      if (before > 10) this.zoomAt((e.clientX + other.x) / 2 - this.origin.left, (e.clientY + other.y) / 2 - this.origin.top, after / before);
+    } else {
+      const now = performance.now();
+      const dt = Math.max(1 / 240, (now - this.lastDrag) / 1000);
+      this.lastDrag = now;
+      const dx = e.clientX - g.x, dy = e.clientY - g.y;
+      this.cam.x += dx;
+      this.cam.y += dy;
+      // Remembered, smoothed, so letting go flings the view on.
+      this.cam.vx = this.cam.vx * 0.6 + (dx / dt) * 0.4;
+      this.cam.vy = this.cam.vy * 0.6 + (dy / dt) * 0.4;
+      if (!this.raf) this.render();
+    }
+    g.x = e.clientX;
+    g.y = e.clientY;
+  }
+
   private onPointerMove = (e: PointerEvent) => {
+    if (this.grabs.has(e.pointerId)) this.drag(e);
+    if (e.pointerId === this.charging.id) {
+      // Sliding off the disc lets go of the charge.
+      const r = this.canvas.getBoundingClientRect();
+      if (Math.hypot(e.clientX - r.left - this.hero.x, e.clientY - r.top - this.hero.y) > this.hero.r * 1.3) this.endCharge();
+    }
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     this.pointer.x = x;
@@ -1734,7 +2142,7 @@ export class SkyEngine {
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
-    if (this.turn) return;
+    if (this.turn || this.scene === "deep" || performance.now() < this.swallowUntil) return;
     if (this.astroHit(x, y)) {
       // It stops to wave before kicking off.
       const a = this.astro!;

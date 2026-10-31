@@ -46,6 +46,23 @@
   --fg: #1c2840;
   --accent: #c44a28;
 }
+/* The galaxy: a hidden fourth theme, reached by holding the moon, sun or Earth for five seconds (sky/engine.ts).
+   The page steps aside (only the nav and the sky's readout stay) and the sky takes drags, pinches and scrolls. */
+:root[data-theme="deep"] {
+  color-scheme: dark;
+  --bg: #05060d;
+  --fg: #e8e5f7;
+  --accent: #c3a6ff;
+  overflow: hidden;
+}
+/* Out in the cosmos (held toggle, see sky/cosmos.ts) the nav goes deep-space dark, whatever the sky was. */
+:root.cosmos {
+  color-scheme: dark;
+  --bg: #04050b;
+  --fg: #e6e9f4;
+  --accent: #9fc4ff;
+  overflow: hidden;
+}
 :root {
   --muted: color-mix(in srgb, var(--fg) 62%, transparent);
   --faint: color-mix(in srgb, var(--fg) 38%, transparent);
@@ -124,6 +141,27 @@ button { font: inherit; color: inherit; }
   transition: opacity 0.15s, transform 0.4s;
 }
 .toggle-pad button:hover { opacity: 1; transform: rotate(-25deg); }
+/* Long presses belong to the toggle (see the hold below), not to the browser's menus or text selection. */
+.toggle-pad button { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.toggle-pad button[data-holding] { opacity: 1; }
+/* Held: a ring charges round the toggle over five seconds (--hold, 0 → 1, set by top-nav.tsx). The dot just
+   outside it marks three seconds, liftoff; the full ring is the arrival. */
+.toggle-pad button::before,
+.toggle-pad button::after {
+  content: ""; position: absolute; border-radius: 50%; pointer-events: none;
+  opacity: min(calc(var(--hold, 0) * 30), 1);
+}
+.toggle-pad button::after {
+  inset: -7px;
+  background: conic-gradient(var(--accent) calc(var(--hold, 0) * 1turn), var(--line) 0);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.5px), #000 calc(100% - 1px));
+}
+.toggle-pad button::before {
+  inset: -11px;
+  background: radial-gradient(circle 1.5px at 50% 1.5px, var(--fg) 98%, transparent);
+  rotate: 216deg;
+}
+.toggle-pad button > span { display: inline-block; rotate: calc(var(--hold, 0) * -200deg); }
 /* Hangs just under the pill while Earth unlocks; the nav is the positioning parent. */
 .egg-note {
   position: absolute;
@@ -143,6 +181,31 @@ button { font: inherit; color: inherit; }
 }
 .egg-note:empty { display: none; }
 .egg-note.on { opacity: 1; translate: -50% 0; }
+
+/* ── the cosmos (hold the toggle) ────────────────── */
+/* The voyage and the vista float over every page, under the nav (sky/cosmos.ts), fading in and out. */
+.cosmos-canvas {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 29;
+  opacity: 0; transition: opacity 1s ease;
+  touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none;
+}
+.cosmos-canvas.on { opacity: 1; }
+/* Liftoff: the page drops away below, slowly and then fast, as the ground does. Landing, it rises back. */
+.home-main, .page-main, .page-footer, .plate, .sky-stats { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }
+:root.cosmos :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { opacity: 0; translate: 0 40vh; pointer-events: none; }
+:root.cosmos :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
+/* Once it's gone, the sky behind can stop drawing: hidden, its engine pauses itself. */
+:root.cosmos-still .sky-canvas { display: none; }
+
+/* ── the galaxy (hold the moon, sun or Earth) ────── */
+/* While the disc is held, a long press is ours: no text selection or phone menus. */
+.home[data-charging] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: progress; }
+/* In the galaxy the page fades out of the way and stops taking clicks; the sky is dragged instead. */
+:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer, .plate) { opacity: 0; }
+:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer, .plate) * { pointer-events: none; }
+:root[data-theme="deep"] body { touch-action: none; }
+:root[data-theme="deep"] :is(.home, .page) { cursor: grab; }
+:root[data-theme="deep"] :is(.home, .page):active { cursor: grabbing; }
 
 /* ── sky canvas ──────────────────────────────────── */
 .sky-canvas { display: block; pointer-events: none; }
