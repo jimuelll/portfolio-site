@@ -375,13 +375,13 @@ export class SkyEngine {
       p.x = w * 0.71;
       p.y = h * 0.37;
     } else {
-      // Phones and tablets: a big disc bleeding off the top-right corner, like a planet filling the sky, with
-      // the text in one column underneath. Sized from the window, not the canvas: here the canvas grows with
-      // the page, which this size helps set.
+      // Phones and tablets: the whole disc as a figure plate under the folio line, a little right of centre so
+      // the quote can run up its left side, with the name overlapping its foot. Sized from the window, not the
+      // canvas: here the canvas grows with the page, which this size helps set.
       const vh = window.innerHeight;
-      p.r = Math.min(w * 0.58, vh * 0.3);
-      p.x = w * 0.9;
-      p.y = vh * 0.16;
+      p.r = Math.min(w * 0.34, vh * 0.19);
+      p.x = w * 0.58;
+      p.y = 116 + p.r;
     }
     // The home page places its CV receiver from these, so it sits just under the disc on any screen.
     if (this.variant === "full") {

@@ -84,13 +84,15 @@ export function HomeSky() {
           )}
         </div>
       )}
+      {/* Phones only: corner marks framing the disc like a figure plate (placed from --hero-x/y/r). */}
+      <div className="plate" aria-hidden="true" />
       <main className="home-main gutter">
         {/* Desktop only: the name fills the empty sky across from the moon. Phones keep the short greeting below. */}
         <header className="hero fade-in" data-sky-avoid>
           <h1 className="hero-name">
             Jimuel Jean
             <br />
-            Untalan
+            <em>Untalan</em>
           </h1>
           <p className="hero-role">
             full-stack developer · seeking a software internship
@@ -102,7 +104,6 @@ export function HomeSky() {
           <span className="caret" aria-hidden="true" />
         </blockquote>
         <div className="intro fade-in delay" data-sky-avoid>
-          <h1 className="hi">Hi, I&apos;m Jean.</h1>
           {/* Desktop only: what a recruiter scans for, under the name. */}
           <p className="home-info">
             CS student at MSEUF-CI in Quezon. I like building things people
@@ -112,10 +113,24 @@ export function HomeSky() {
             <span className="label">core stack</span>
             {coreStack.join(" · ")}
           </p>
-          <Socials />
+          {/* Phones only: the facts as a spec sheet under the lede. */}
+          <dl className="spec">
+            <dt>role</dt>
+            <dd>full-stack developer</dd>
+            <dt>status</dt>
+            <dd><span className="status-dot" aria-hidden="true" />open to internships</dd>
+            <dt>based</dt>
+            <dd>Quezon, PH · UTC+8</dd>
+            <dt>stack</dt>
+            <dd>{coreStack.join(" · ")}</dd>
+          </dl>
         </div>
-        {/* Under the moon on desktop; the last line of the column on phones. */}
-        <CvReceiver />
+        {/* Kept out of .intro: its fade animates transform, which would trap the receiver's absolute position. */}
+        <div className="actions" data-sky-avoid>
+          <Socials />
+          {/* Under the moon on desktop; beside the links on phones. */}
+          <CvReceiver />
+        </div>
       </main>
     </div>
   );

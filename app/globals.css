@@ -176,8 +176,6 @@ button { font: inherit; color: inherit; }
 }
 @keyframes blink { 50% { opacity: 0; } }
 .intro { display: flex; flex-direction: column; gap: 10px; line-height: 1.7; }
-.intro h1 { font-size: inherit; font-weight: 400; }
-.intro h1::before { content: "✦ "; color: var(--accent); }
 .hero, .core-stack, .home-info { display: none; }
 @media (min-width: 1024px) {
   /* Desktop: the name takes the top-left, across from the moon; the quote hangs under it and the intro stays low. */
@@ -187,33 +185,86 @@ button { font: inherit; color: inherit; }
   .hero-role { margin-top: 20px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
   .home-main > .quote { margin-top: -14px; margin-bottom: auto; }
   .quote br { display: none; }
-  .intro { font-size: 16px; max-width: 40rem; }
-  .intro .hi { display: none; }
+  /* Stops short of the receiver under the moon (centred on --hero-x, ~144px wide), which a short window
+     drops to the intro's height. */
+  .intro { font-size: 16px; max-width: min(40rem, calc(var(--hero-x, 71vw) - 96px - var(--gutter))); }
   .home-info { display: block; max-width: 36rem; }
   .core-stack { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
   .core-stack .label { display: inline; margin: 0 12px 0 0; }
 }
+/* The receiver and the links: one row on phones; on desktop the links sit under the intro and the receiver
+   floats under the moon. Fades on opacity only, so the receiver still positions against .home-main. */
+.actions { animation: fade-op 0.5s 0.2s ease-out both; }
+@keyframes fade-op { from { opacity: 0; } }
+.actions .socials { margin-top: 0; }
+.hero-name em { font-style: normal; }
+.plate, .spec { display: none; }
+@media (min-width: 1024px) {
+  .home-main > .actions { margin-top: -16px; }
+}
 @media (max-width: 1023px) {
-  /* Phones and tablets: a big disc bleeds off the top-right corner (the engine puts it there) and everything
-     else is one left-aligned column starting where the disc ends, receiver last. A short phone scrolls a little
-     rather than overlapping. */
+  /* Phones and tablets: an editorial cover. A folio rule (the sky stats) under the nav, the whole disc framed
+     as a figure plate with the quote running up its side, an oversized name overlapping the plate's foot,
+     a serif lede, a spec sheet, and the links and receiver on one closing row. Scrolls if it has to. */
   .home { height: auto; min-height: 100dvh; overflow: visible; }
   .home-main {
-    height: auto; justify-content: flex-start; gap: 14px;
-    padding-top: calc(var(--hero-y, 130px) + var(--hero-r, 220px) * 0.8); padding-bottom: 40px;
+    height: auto; justify-content: flex-start; gap: 0;
+    padding-top: calc(var(--hero-y, 240px) + var(--hero-r, 125px) * 0.82); padding-bottom: 40px;
   }
-  .home .sky-stats { right: auto; left: var(--gutter); text-align: left; }
-  .home-main > .cv-receiver { position: static; translate: none; margin-top: 8px; }
+  .home-main > * { width: auto; max-width: 34rem; }
+
+  .home .sky-stats {
+    top: 66px; left: var(--gutter); right: var(--gutter);
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 7px 0; border-block: 1px solid var(--line);
+    font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left;
+  }
+  .home .sky-stats > div { opacity: 0.55; }
+  .home .sky-stats .hint { opacity: 0.9; }
+
+  .plate {
+    display: block; position: absolute; z-index: 15; pointer-events: none;
+    --s: 16px; --c: color-mix(in srgb, var(--accent) 70%, transparent);
+    left: calc(var(--hero-x) - var(--hero-r) - 18px); top: calc(var(--hero-y) - var(--hero-r) - 18px);
+    width: calc(var(--hero-r) * 2 + 36px); height: calc(var(--hero-r) * 2 + 36px);
+    background:
+      linear-gradient(var(--c), var(--c)) top left / var(--s) 1px no-repeat,
+      linear-gradient(var(--c), var(--c)) top left / 1px var(--s) no-repeat,
+      linear-gradient(var(--c), var(--c)) bottom right / var(--s) 1px no-repeat,
+      linear-gradient(var(--c), var(--c)) bottom right / 1px var(--s) no-repeat;
+  }
+  /* The quote as the plate's caption, set vertically up its left edge. */
+  .home-main > .quote {
+    position: absolute; left: var(--gutter); top: calc(var(--hero-y) - var(--hero-r) - 18px);
+    height: calc(var(--hero-r) * 2 + 36px);
+    writing-mode: vertical-rl; rotate: 180deg; text-align: right; white-space: nowrap;
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .quote::before { content: "fig. 1 — "; color: var(--accent); }
+  .quote br, .quote .caret { display: none; }
+
   .hero { display: block; }
-  .hero-name { font-family: var(--serif); font-weight: 400; font-size: clamp(42px, 11.5vw, 64px); line-height: 0.95; letter-spacing: -0.01em; }
-  .hero-role { margin-top: 12px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
-  .quote { font-size: 12px; }
-  .quote br { display: none; }
-  .intro { font-size: 14px; }
-  .intro .hi { display: none; }
-  .home-info, .core-stack { display: block; }
-  .core-stack { font-size: 12px; color: var(--muted); }
-  .core-stack .label { display: inline; margin: 0 10px 0 0; }
+  .hero-name { font-family: var(--serif); font-weight: 400; font-size: clamp(54px, 18vw, 104px); line-height: 0.88; letter-spacing: -0.02em; }
+  .hero-name em { font-style: italic; color: var(--accent); }
+  .hero-role { display: none; }
+
+  .intro { margin-top: 26px; gap: 0; font-size: 14px; }
+  .core-stack { display: none; }
+  .home-info { display: block; font-family: var(--serif); font-size: clamp(22px, 6.2vw, 30px); line-height: 1.2; }
+  .spec {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0 18px;
+    margin-top: 26px; font-size: 12px; line-height: 1.5;
+  }
+  .spec dt, .spec dd { padding: 8px 0; border-top: 1px solid var(--line); }
+  .spec dt { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); padding-top: 10px; }
+  .spec dd { color: var(--muted); }
+
+  .actions {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-top: 0; padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  .actions .socials { font-size: 12px; }
+  .actions .cv-receiver { position: static; translate: none; padding: 8px 12px; font-size: 11px; }
 }
 
 /* The CV receiver, just under the moon, sun or Earth (the sky engine sets --hero-x/y/r on .home). */
@@ -333,6 +384,10 @@ button { font: inherit; color: inherit; }
 }
 .dossier-body > .about-row:first-child { padding-top: 0; border-top: 0; }
 .dossier-body .about-row { grid-template-columns: 150px minmax(0, 1fr); }
+/* Too narrow for heading, body and the pinned column side by side: each heading sits over its body instead. */
+@media (max-width: 1279px) {
+  .dossier-body .about-row { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+}
 .awards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .awards li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .awards .redacted { font-size: 13px; }

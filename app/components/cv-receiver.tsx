@@ -24,10 +24,18 @@ export function CvReceiver() {
   function receive(e: MouseEvent<HTMLButtonElement>) {
     if (stage !== "ready") return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduced) window.dispatchEvent(new CustomEvent(DELIVER_EVENT, { detail: { x: rect.left + rect.width / 2, y: rect.top } }));
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (!reduced)
+      window.dispatchEvent(
+        new CustomEvent(DELIVER_EVENT, {
+          detail: { x: rect.left + rect.width / 2, y: rect.top },
+        }),
+      );
     setStage("incoming");
-    const at = (ms: number, fn: () => void) => timers.current.push(window.setTimeout(fn, ms));
+    const at = (ms: number, fn: () => void) =>
+      timers.current.push(window.setTimeout(fn, ms));
     at(reduced ? 0 : DELIVER_SECONDS * 1000, () => {
       setStage("caught");
       download.current?.click();
@@ -35,13 +43,35 @@ export function CvReceiver() {
     at((reduced ? 0 : DELIVER_SECONDS * 1000) + 3200, () => setStage("ready"));
   }
 
-  const label = stage === "incoming" ? "✦ incoming…" : stage === "caught" ? (cv.href ? "✦ cv received ↓" : "✦ cv landing soon") : "✦ receive cv ↓";
+  const label =
+    stage === "incoming"
+      ? "✦ incoming…"
+      : stage === "caught"
+        ? cv.href
+          ? "✦ cv received ↓"
+          : "✦ cv landing soon"
+        : "✦ Download CV ↓";
   return (
     <>
-      <button type="button" className={`cv-receiver ${stage}`} onClick={receive} data-sky-ignore aria-label="Receive CV">
+      <button
+        type="button"
+        className={`cv-receiver ${stage}`}
+        onClick={receive}
+        data-sky-ignore
+        aria-label="Receive CV"
+      >
         <span aria-live="polite">{label}</span>
       </button>
-      {cv.href && <a ref={download} href={cv.href} download hidden tabIndex={-1} aria-hidden="true" />}
+      {cv.href && (
+        <a
+          ref={download}
+          href={cv.href}
+          download
+          hidden
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+      )}
     </>
   );
 }
