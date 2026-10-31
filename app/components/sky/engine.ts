@@ -113,13 +113,13 @@ const GALAXY_ARM: Rgb = [150, 172, 255];
 const GALAXY_NEBULA: Rgb = [236, 120, 190];
 /** Spiral arms wind out as a logarithmic spiral, r ∝ e^(bθ); b = 0.32 is a pitch of about 18°, like the Milky Way's. */
 const ARM_PITCH = 0.32;
-/** The galaxy's disc seen at an angle: squashed and turned a little on screen. */
-const GALAXY_SQUASH = 0.6;
+/** The galaxy's disc seen at an angle: squashed and turned a little on screen (see galaxySquash for phones). */
+const GALAXY_SQUASH_WIDE = 0.6;
 const GALAXY_TURN = -0.32;
 /** Where the sun sits: partway out along one arm. */
 const SUN_ORBIT = 0.58;
 const GALAXY_ACCENT: Rgb = [195, 166, 255];
-const GALAXY_FAINT: Rgb = [130, 128, 160];
+const GALAXY_FAINT: Rgb = [154, 150, 184];
 /** How close the camera comes to the sun for the pilot's card. */
 const SUN_ZOOM = 2.4;
 const PILOT_CARD = ["pilot · jimuel jean untalan", "full-stack developer", "seeking a software internship", "read the dossier →"];
@@ -1938,10 +1938,19 @@ export class SkyEngine {
     this.around(x, y + 1.1 * r * (1 - p), 0.35 + 0.65 * p, smoothstep(0, 0.45, p), () => this.drawHero("earth"));
   }
 
+  /**
+   * How flat the galaxy's disc looks. Wide screens see it tilted, a long ellipse that suits them; a tall phone sees
+   * it more face-on, so the spiral fills the portrait frame instead of lying in a thin band across the middle.
+   */
+  private galaxySquash() {
+    if (this.variant === "emblem") return GALAXY_SQUASH_WIDE;
+    return clamp((window.innerHeight / Math.max(1, this.w)) * 0.5, GALAXY_SQUASH_WIDE, 0.92);
+  }
+
   /** The galaxy's radius at a zoom of 1: most of the window, or most of the emblem's frame. */
   private galaxyRadius() {
     if (this.variant === "emblem") return this.hero.r * 1.25;
-    return Math.min(this.w, window.innerHeight) * 0.44;
+    return Math.min(this.w * 0.48, window.innerHeight * 0.44);
   }
 
   private galaxyCentre() {
@@ -1953,7 +1962,7 @@ export class SkyEngine {
   private armOffset(R: number, r: number, arm: number) {
     // On the arm: the spiral's phase is zero where θ = ln(r) / b, plus however far the disc has turned.
     const th = Math.log(r + 0.02) / ARM_PITCH + (this.time * TAU) / 400 + arm * Math.PI;
-    const u = Math.cos(th) * r * R, v = Math.sin(th) * r * R * GALAXY_SQUASH;
+    const u = Math.cos(th) * r * R, v = Math.sin(th) * r * R * this.galaxySquash();
     const c = Math.cos(GALAXY_TURN), s = Math.sin(GALAXY_TURN);
     return { x: u * c - v * s, y: u * s + v * c };
   }
@@ -2205,6 +2214,7 @@ export class SkyEngine {
     const cw = font * 0.62, ch = font * 1.08;
     const ct = Math.cos(GALAXY_TURN), st = Math.sin(GALAXY_TURN);
     const spin = (this.time * TAU) / 400;
+    const squash = this.galaxySquash();
     this.sceneAlpha = alpha;
     this.ctx.font = `${font}px ${this.family}`;
     const reach = R * 1.15;
@@ -2215,7 +2225,7 @@ export class SkyEngine {
         const gx = x + cw / 2, gy = y + ch / 2;
         const dx = gx - cx, dy = gy - cy;
         // Back onto the disc: undo the turn, then the squash.
-        const u = (dx * ct + dy * st) / R, v = (-dx * st + dy * ct) / (R * GALAXY_SQUASH);
+        const u = (dx * ct + dy * st) / R, v = (-dx * st + dy * ct) / (R * squash);
         const r = Math.hypot(u, v);
         if (r > 1.15) continue;
         const ix = Math.round(x / cw), iy = Math.round(y / ch);

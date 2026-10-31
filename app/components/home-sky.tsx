@@ -66,7 +66,7 @@ export function HomeSky() {
                 {stats.sats} {stats.sats === 1 ? "satellite" : "satellites"}
               </div>
               {stats.sats === 0 && (
-                <div className="hint">click to launch a satellite ↯</div>
+                <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to launch a satellite ↯</div>
               )}
             </>
           ) : stats.scene === "night" ? (
@@ -76,7 +76,7 @@ export function HomeSky() {
                 {stats.comets} {stats.comets === 1 ? "comet" : "comets"}
               </div>
               {stats.launched === 0 && (
-                <div className="hint">click the sky ↯</div>
+                <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> the sky ↯</div>
               )}
             </>
           ) : (
@@ -86,7 +86,7 @@ export function HomeSky() {
                 {stats.flares} {stats.flares === 1 ? "flare" : "flares"}
               </div>
               {stats.flared === 0 && (
-                <div className="hint">click to flare ↯</div>
+                <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to flare ↯</div>
               )}
             </>
           )}

@@ -66,7 +66,7 @@ const OVERLAY_FADE = 0.6;
 /** How fast the ship's log types, in characters a second. */
 const TYPE_RATE = 46;
 const ACCENT: Rgb = [159, 196, 255];
-const FAINT: Rgb = [120, 130, 160];
+const FAINT: Rgb = [146, 154, 184];
 /** The about, as the ship's log reads it out. The last line is the way to the full dossier. */
 const LOG_LINES = [
   "incoming transmission ···",
@@ -763,6 +763,13 @@ export class Cosmos {
         if (tile) ctx.drawImage(tile, tx * TILE - sx, ty * TILE - sy, TILE, TILE);
       }
     }
+    // While the nav's answer is out, the gas dims behind it, so a constellation or a name reads even where the
+    // nebula is brightest (a small screen is often all nebula).
+    if (this.overlay) {
+      ctx.globalAlpha = 0.62 * smoothstep(0, 0.5, t - this.overlay.at) * this.out() * alpha;
+      ctx.fillStyle = css(SPACE);
+      ctx.fillRect(0, 0, this.w, this.h);
+    }
     // Near: a few bright stars, quicker than the sky.
     const nx = cam.x * 1.3 + lean.x * 40, ny = cam.y * 1.3 + lean.y * 40;
     const NEAR = 150;
@@ -826,7 +833,24 @@ export class Cosmos {
       hint = narrow ? "drag to roam · tap for a star ↯" : "drag to roam · tap to ignite a star ↯";
     }
     const top = narrow ? this.h - 20 - lines.length * 18 : this.w >= 1024 ? 30 : 70;
-    lines.forEach((l, i) => this.put(l, x, top + i * 18, STAR, 0.4));
+    // A dark backing so the readout holds over bright gas: a band fading up from the bottom on phones, a soft
+    // panel behind it on wider screens.
+    if (narrow) {
+      const band = ctx.createLinearGradient(0, top - 40, 0, this.h);
+      band.addColorStop(0, `rgba(${SPACE.join(",")},0)`);
+      band.addColorStop(0.45, `rgba(${SPACE.join(",")},0.82)`);
+      band.addColorStop(1, `rgba(${SPACE.join(",")},0.92)`);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = band;
+      ctx.fillRect(0, top - 40, this.w, this.h - top + 40);
+    } else {
+      const bw = Math.max(...[...lines, hint].map((l) => ctx.measureText(l).width)) + 28;
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = css(SPACE);
+      ctx.fillRect(x - bw + 14, top - 16, bw, (lines.length + 1) * 18 + 16);
+    }
+    // Muted, not faint: at 62% the readout keeps about 6.5:1 against the dark.
+    lines.forEach((l, i) => this.put(l, x, top + i * 18, STAR, 0.62));
     this.put(hint, x, top + lines.length * 18 + Math.sin(this.time * 2) * 1.5, [196, 214, 255], 0.75);
     ctx.textAlign = "center";
   }

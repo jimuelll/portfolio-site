@@ -44,7 +44,11 @@
   color-scheme: light;
   --bg: #f3efe4;
   --fg: #1c2840;
-  --accent: #c44a28;
+  /* The day's red, a shade deeper than the sun on the canvas so small accent labels hold 4.5:1 on the paper. */
+  --accent: #b84424;
+  /* Ink on paper loses contrast faster as it thins than light on dark does, so its secondary inks stay stronger. */
+  --muted-k: 76%;
+  --faint-k: 66%;
 }
 /* The galaxy: a hidden fourth theme, reached by holding the moon, sun or Earth for five seconds (sky/engine.ts).
    The page steps aside (only the nav and the sky's readout stay) and the sky takes drags, pinches and scrolls. */
@@ -61,11 +65,18 @@
   --bg: #04050b;
   --fg: #e6e9f4;
   --accent: #9fc4ff;
+  --muted-k: 62%;
+  --faint-k: 52%;
   overflow: hidden;
 }
+/* Secondary text is the foreground thinned toward the page; both strengths keep at least 4.5:1 against it. */
 :root {
-  --muted: color-mix(in srgb, var(--fg) 62%, transparent);
-  --faint: color-mix(in srgb, var(--fg) 38%, transparent);
+  --muted-k: 62%;
+  --faint-k: 52%;
+}
+:root {
+  --muted: color-mix(in srgb, var(--fg) var(--muted-k), transparent);
+  --faint: color-mix(in srgb, var(--fg) var(--faint-k), transparent);
   --line: color-mix(in srgb, var(--fg) 14%, transparent);
   --gutter: 24px;
   --mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -87,6 +98,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 h1, h2, p, figure, blockquote, ol, dl, dd { margin: 0; }
+h1, h2 { text-wrap: balance; }
 a { color: inherit; text-decoration: none; }
 button { font: inherit; color: inherit; }
 ::selection { background: var(--accent); color: var(--bg); }
@@ -124,8 +136,8 @@ button { font: inherit; color: inherit; }
   background: var(--bg);
   border: 1px solid var(--line);
 }
-.top-nav a { opacity: 0.5; transition: opacity 0.15s; }
-.top-nav a:hover, .top-nav a[aria-current="page"] { opacity: 1; }
+.top-nav a { color: var(--muted); transition: color 0.15s; }
+.top-nav a:hover, .top-nav a[aria-current="page"] { color: var(--fg); }
 .top-nav a { position: relative; }
 /* The marker hangs in the gap, so links sit in the same place on every page. */
 .top-nav a[aria-current="page"]::before { content: "✦"; color: var(--accent); position: absolute; right: calc(100% + 5px); }
@@ -183,7 +195,13 @@ button { font: inherit; color: inherit; }
 .egg-note.on { opacity: 1; translate: -50% 0; }
 /* Phones and tablets: the home page's folio row sits just under the pill, so notes hang below it instead. */
 @media (max-width: 1023px) {
-  .egg-note { top: calc(100% + 54px); }
+  .egg-note { top: calc(100% + 64px); }
+}
+/* Hints name the gesture the visitor actually has: a click with a mouse, a tap on a touchscreen. */
+.say-tap { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .say-click { display: none; }
+  .say-tap { display: inline; }
 }
 /* A readout's hint, long on wide screens and short on phones, so the folio row never wraps. */
 .narrow-only { display: none; }
@@ -298,10 +316,12 @@ button { font: inherit; color: inherit; }
     top: 66px; left: var(--gutter); right: var(--gutter);
     display: flex; justify-content: space-between; gap: 12px;
     padding: 7px 0; border-block: 1px solid var(--line);
-    font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left;
   }
-  .home .sky-stats > div { opacity: 0.55; white-space: nowrap; }
-  .home .sky-stats .hint { opacity: 0.9; }
+  /* Read on the token, not by fading the text, so the folio keeps its contrast in every sky. */
+  .home .sky-stats > div { opacity: 1; color: var(--muted); white-space: nowrap; }
+  .home .sky-stats .flash { animation-name: flash-ink; }
+  .home .sky-stats .hint { opacity: 1; color: var(--accent); }
 
   .plate {
     display: block; position: absolute; z-index: 15; pointer-events: none;
@@ -320,6 +340,8 @@ button { font: inherit; color: inherit; }
     height: calc(var(--hero-r) * 2 + 36px);
     writing-mode: vertical-rl; rotate: 180deg; text-align: right; white-space: nowrap;
     font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    /* Ends just above the name, which overlaps the plate's foot. */
+    height: calc(var(--hero-r) * 1.82 + 8px);
   }
   .quote::before { content: "fig. 1 — "; color: var(--accent); }
   .quote br, .quote .caret { display: none; }
@@ -337,7 +359,7 @@ button { font: inherit; color: inherit; }
     margin-top: 26px; font-size: 12px; line-height: 1.5;
   }
   .spec dt, .spec dd { padding: 8px 0; border-top: 1px solid var(--line); }
-  .spec dt { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); padding-top: 10px; }
+  .spec dt { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); padding-top: 10px; }
   .spec dd { color: var(--muted); }
 
   .actions {
@@ -346,6 +368,15 @@ button { font: inherit; color: inherit; }
   }
   .actions .socials { font-size: 12px; }
   .actions .cv-receiver { position: static; translate: none; padding: 8px 12px; font-size: 11px; }
+}
+/* Narrow phones: the folio row shows the first-visit hint instead of the running count beside it until the hint
+   has been used, and the plate's caption tightens (and below 360px drops its "fig. 1" prefix) to clear the name. */
+@media (max-width: 389px) {
+  .home .sky-stats:has(.hint) > div:nth-child(2):not(.hint) { display: none; }
+  .home-main > .quote { letter-spacing: 0.02em; }
+}
+@media (max-width: 359px) {
+  .quote::before { content: none; }
 }
 
 /* The CV receiver, just under the moon, sun or Earth (the sky engine sets --hero-x/y/r on .home). */
@@ -384,6 +415,7 @@ button { font: inherit; color: inherit; }
 .sky-stats .flash { animation: flash 0.7s ease-out both; }
 .sky-stats .hint { color: var(--accent); opacity: 0.8; animation: drift 3s ease-in-out infinite; }
 @keyframes flash { from { opacity: 1; } to { opacity: 0.35; } }
+@keyframes flash-ink { from { color: var(--fg); } }
 @keyframes drift { 50% { transform: translateY(2px); } }
 
 .fade-in { animation: fade 0.5s ease-out both; }
@@ -472,7 +504,7 @@ button { font: inherit; color: inherit; }
 .awards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .awards li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .awards .redacted { font-size: 13px; }
-.kicker { display: flex; align-items: center; margin-top: 18px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
+.kicker { display: flex; align-items: center; margin-top: 18px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; text-wrap: balance; }
 .about-pitch { margin-top: 22px; max-width: 34rem; font-size: 15px; line-height: 1.7; color: color-mix(in srgb, var(--fg) 85%, transparent); }
 .contact-line { list-style: none; padding: 0; margin: 22px 0 0; display: flex; flex-wrap: wrap; gap: 6px 0; font-size: 13px; color: var(--muted); }
 .contact-line li:not(:last-child)::after { content: "·"; margin: 0 12px; color: var(--faint); }
@@ -502,7 +534,7 @@ button { font: inherit; color: inherit; }
 .duotone::after { content: ""; position: absolute; inset: 0; background: var(--duo-lo); mix-blend-mode: lighten; pointer-events: none; }
 .photo-placeholder { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 12px; }
 .photo-placeholder pre { margin: 0; font-family: var(--mono); font-size: 5px; line-height: 4.6px; color: var(--muted); }
-.photo-placeholder span { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.photo-placeholder span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
 
 /* Under the contact links in the dossier. */
 .cv-btn {
@@ -546,7 +578,8 @@ button { font: inherit; color: inherit; }
 .dossier-body .star-log.on { max-height: 640px; padding-block: 32px; opacity: 1; border-top-color: var(--line); }
 .star-chart { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 16px; color: var(--faint); }
 .star-chart .lit { color: var(--accent); }
-.star-chart .faint { margin-left: 6px; }
+.star-chart .faint { flex-basis: 100%; }
+@media (min-width: 641px) { .star-chart .faint { flex-basis: auto; margin-left: 6px; } }
 .star-entries { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
 .star-entries li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .star-entries .redacted { font-size: 13px; }
@@ -585,6 +618,21 @@ button { font: inherit; color: inherit; }
   .sky-stats { top: 64px; }
   .home-main { padding-bottom: 40px; }
   .page-main { padding-top: 104px; }
+}
+
+/* Touch: fingers need more than the type gives. Hit areas grow past the text; where the extra would push the
+   layout, a matching negative margin holds everything where it was. */
+@media (pointer: coarse) {
+  .top-nav a { padding: 14px 8px; margin: -14px -8px; }
+  /* The toggle is the way into the secrets, so it gets a full fingertip; its charge ring stays the same size. */
+  .toggle-pad { margin: -1px; padding: 1px; }
+  .toggle-pad button { padding: 15px; margin: -15px; }
+  .toggle-pad button::after { inset: 8px; }
+  .toggle-pad button::before { inset: 4px; }
+  .socials a, .contact-line a, .project-lines a, .pi-links a { padding-block: 15px; }
+  .more { padding-block: 12px; margin-block: -12px; }
+  .cv-btn, .cv-receiver, .actions .cv-receiver { min-height: 44px; }
+  .cv-btn { display: inline-flex; align-items: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
