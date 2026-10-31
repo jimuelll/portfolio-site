@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
-import { HYPERDRIVE_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure } from "./sky/engine";
+import { GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
+import { found } from "../lib/secrets";
 import { Cosmos, type Stage } from "./sky/cosmos";
 
 const LINKS = [
@@ -25,6 +26,10 @@ const FADE_MS = 500;
 /** Holding the toggle is a launch: at three seconds you lift off into the voyage, at five you arrive at the vista. */
 const LIFTOFF_MS = 3000;
 const ARRIVE_MS = 5000;
+/** From the voyage, a fresh hold only needs the rest of the way: two more seconds. */
+const ONWARD_MS = ARRIVE_MS - LIFTOFF_MS;
+/** How long the cosmos takes to fade away when you land. Matches .cosmos-canvas in globals.css. */
+const LAND_MS = 1000;
 /** The click that ends a hold is swallowed, so letting go doesn't also flip day and night. */
 const HOLD_SWALLOW = 400;
 /** Once the page has dropped away, the sky behind it stops drawing (it's covered). Matches globals.css. */
@@ -40,6 +45,7 @@ const buzz = (pattern: number | number[]) => { if (navigator.userActivation?.has
 
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [theme, setTheme] = useState<Theme>("dark");
   const [stage, setStage] = useState<Stage | null>(null);
   const [note, setNote] = useState("");
@@ -48,8 +54,11 @@ export function TopNav() {
   const lockUntil = useRef(0);
   const noteTimer = useRef(0);
   const button = useRef<HTMLButtonElement>(null);
-  /** The hold in progress: when it began, how far it has got (0 none, 1 voyage, 2 vista), its frame and stage timers. */
-  const hold = useRef({ start: 0, stage: 0, raf: 0, timers: [] as number[], swallowUntil: 0 });
+  /**
+   * The hold in progress: when it began (backdated by three seconds for a re-hold from the voyage, which is
+   * onward), how far it has got (0 none, 1 voyage, 2 vista), its frame and stage timers.
+   */
+  const hold = useRef({ start: 0, stage: 0, onward: false, raf: 0, timers: [] as number[], swallowUntil: 0 });
 
   const onEscape = useEffectEvent((e: KeyboardEvent) => {
     // Out of the cosmos or the galaxy, the same as a tap on the toggle.
@@ -64,7 +73,16 @@ export function TopNav() {
     root.dataset.galaxyHome = readTheme(root.dataset.theme);
     apply("deep");
     buzz([12, 60, 12]);
+    found("milkyway");
     showNote("✦ hyperdrive · tap ✧ to jump home");
+  });
+
+  /** Something out there asked to go to a page (a project, the dossier): come home first, then go. */
+  const onGo = useEffectEvent((href: string) => {
+    const wasDeep = document.documentElement.dataset.theme === "deep";
+    if (!cosmos && !wasDeep) return router.push(href);
+    toggle();
+    window.setTimeout(() => router.push(href), wasDeep ? HYPER_SECONDS * 1000 : LAND_MS);
   });
 
   useEffect(() => {
@@ -75,8 +93,10 @@ export function TopNav() {
     const held = hold.current;
     const onKey = (e: KeyboardEvent) => onEscape(e);
     const onJump = () => onHyperdrive();
+    const onGoTo = (e: Event) => onGo((e as CustomEvent<string>).detail);
     window.addEventListener("keydown", onKey);
     window.addEventListener(HYPERDRIVE_EVENT, onJump);
+    window.addEventListener(GO_EVENT, onGoTo);
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(held.raf);
@@ -84,6 +104,7 @@ export function TopNav() {
       window.clearTimeout(noteTimer.current);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener(HYPERDRIVE_EVENT, onJump);
+      window.removeEventListener(GO_EVENT, onGoTo);
       exposure.k = 0;
     };
   }, []);
@@ -183,6 +204,7 @@ export function TopNav() {
       presses.current = [];
       lockUntil.current = now + UNLOCK_LOCK;
       apply("twilight");
+      found("earth");
       showNote("✦ earth unlocked · press ⊕ to return");
       return;
     }
@@ -200,7 +222,8 @@ export function TopNav() {
     root.dataset.dropTimer = String(window.setTimeout(() => root.classList.add("cosmos-still"), DROP_MS));
     setStage("voyage");
     buzz(12);
-    showNote("✦ liftoff · keep holding to arrive", 60000);
+    found("voyage");
+    showNote("✦ liftoff · keep holding to arrive", ONWARD_MS + 600);
   }
 
   /** Five seconds: out of warp, in front of the vista. */
@@ -208,24 +231,28 @@ export function TopNav() {
     cosmos?.arrive();
     setStage("vista");
     buzz([12, 60, 12]);
+    found("vista");
     showNote("✦ arrival · tap ✧ to land");
   }
 
   function startHold() {
     const root = document.documentElement;
     const h = hold.current;
-    // Only from the day or night sky; from anywhere else a tap is the way back.
-    if (cosmos || !plain(root.dataset.theme ?? "dark") || h.start) return;
-    h.start = performance.now();
-    h.stage = 0;
+    // From the day or night sky, or from Earth; out in the galaxy or at the vista, a tap is the way back.
+    if (h.start || root.dataset.theme === "deep" || cosmos?.stage === "vista") return;
+    // Already flying: the hold picks up where the first one left off, two seconds from arrival.
+    const onward = cosmos?.stage === "voyage";
+    h.start = performance.now() - (onward ? LIFTOFF_MS : 0);
+    h.stage = onward ? 1 : 0;
+    h.onward = onward;
     const b = button.current!.getBoundingClientRect();
     exposure.x = b.left + b.width / 2;
     exposure.y = b.top + b.height / 2;
     button.current!.dataset.holding = "";
     // The stages run on timers, so they land on time even if frames are dropped; frames only draw the ring.
     h.timers = [
-      window.setTimeout(() => { h.stage = 1; liftoff(); }, LIFTOFF_MS),
-      window.setTimeout(() => { h.stage = 2; arrive(); }, ARRIVE_MS),
+      ...(onward ? [] : [window.setTimeout(() => { h.stage = 1; liftoff(); }, LIFTOFF_MS)]),
+      window.setTimeout(() => { h.stage = 2; arrive(); }, onward ? ONWARD_MS : ARRIVE_MS),
     ];
     const tick = () => {
       const held = performance.now() - h.start;
@@ -246,15 +273,19 @@ export function TopNav() {
     button.current?.style.removeProperty("--hold");
     if (button.current) delete button.current.dataset.holding;
     exposure.k = 0;
-    const stage = h.start ? h.stage : 0;
+    const began = h.start;
+    const stage = began ? h.stage : 0;
     h.start = 0;
     h.stage = 0;
-    if (stage > 0) {
+    // A re-hold from the voyage counts from liftoff, so a quick tap there is still just a tap (a landing).
+    const onwardTap = h.onward && stage === 1 && performance.now() - began < LIFTOFF_MS + 300;
+    h.onward = false;
+    if (stage > 0 && !onwardTap) {
       h.swallowUntil = performance.now() + HOLD_SWALLOW;
       Cosmos.askTilt();
     }
-    if (stage === 1) showNote("✦ voyage · tap ✧ to land");
-    return stage;
+    if (stage === 1 && !onwardTap) showNote("✦ voyage · hold ✧ to arrive · tap to land");
+    return onwardTap ? 0 : stage;
   }
 
   function onKeyDown(e: KeyEvent) {
@@ -277,7 +308,21 @@ export function TopNav() {
   return (
     <nav className="top-nav" aria-label="Main" data-sky-avoid>
       {LINKS.map(({ label, href }) => (
-        <Link key={href} href={href} aria-current={pathname === href ? "page" : undefined}>{label}</Link>
+        <Link
+          key={href}
+          href={href}
+          aria-current={pathname === href ? "page" : undefined}
+          onClick={(e) => {
+            // Out in the galaxy or the cosmos the page is out of sight, so the links answer out there instead:
+            // "sky" brings you home, and the sky itself shows the projects or the about.
+            if (!away) return;
+            e.preventDefault();
+            if (href === "/") toggle();
+            else window.dispatchEvent(new CustomEvent<NavTarget>(NAV_EVENT, { detail: href === "/projects" ? "projects" : "about" }));
+          }}
+        >
+          {label}
+        </Link>
       ))}
       {/* Dead space around the toggle, so a near miss doesn't launch a comet behind it. */}
       <span className="toggle-pad" data-sky-ignore>

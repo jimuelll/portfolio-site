@@ -181,6 +181,16 @@ button { font: inherit; color: inherit; }
 }
 .egg-note:empty { display: none; }
 .egg-note.on { opacity: 1; translate: -50% 0; }
+/* Phones and tablets: the home page's folio row sits just under the pill, so notes hang below it instead. */
+@media (max-width: 1023px) {
+  .egg-note { top: calc(100% + 54px); }
+}
+/* A readout's hint, long on wide screens and short on phones, so the folio row never wraps. */
+.narrow-only { display: none; }
+@media (max-width: 640px) {
+  .wide-only { display: none; }
+  .narrow-only { display: inline; }
+}
 
 /* ── the cosmos (hold the toggle) ────────────────── */
 /* The voyage and the vista float over every page, under the nav (sky/cosmos.ts), fading in and out. */
@@ -282,7 +292,7 @@ button { font: inherit; color: inherit; }
     padding: 7px 0; border-block: 1px solid var(--line);
     font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left;
   }
-  .home .sky-stats > div { opacity: 0.55; }
+  .home .sky-stats > div { opacity: 0.55; white-space: nowrap; }
   .home .sky-stats .hint { opacity: 0.9; }
 
   .plate {
@@ -519,6 +529,20 @@ button { font: inherit; color: inherit; }
 .project-lines .muted { font-size: 13px; }
 .more { font-size: 12px; justify-self: start; }
 .off-hours { padding-top: 24px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+/* The star log (star-log.tsx): folded away to nothing until the reader reaches the end, then it unfolds. */
+.dossier-body .star-log {
+  margin-top: 24px; max-height: 0; padding-block: 0; overflow: hidden; opacity: 0;
+  border-top-color: transparent;
+  transition: opacity 0.9s ease 0.2s, max-height 1.2s ease, padding 0.6s ease, border-color 0.6s;
+}
+.dossier-body .star-log.on { max-height: 640px; padding-block: 32px; opacity: 1; border-top-color: var(--line); }
+.star-chart { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 16px; color: var(--faint); }
+.star-chart .lit { color: var(--accent); }
+.star-chart .faint { margin-left: 6px; }
+.star-entries { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.star-entries li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.star-entries .redacted { font-size: 13px; }
+.star-log-end { height: 1px; }
 
 .constellation { display: grid; gap: 14px; }
 .constellation-grid { display: flex; gap: 2px; font-size: 12px; line-height: 1.2; overflow: hidden; }

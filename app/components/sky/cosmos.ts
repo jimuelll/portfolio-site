@@ -10,10 +10,16 @@
  * endless too, made from noise in tiles as you go, so you can drag or fling across it in any direction. Far stars
  * move less than the gas and near ones more, so it has depth, and a tap ignites a newborn star that stays.
  *
+ * Out here the nav's "projects" and "about" are answered by the sky (NAV_EVENT). On the voyage, your projects
+ * come up ahead as named worlds to fly past, and "about" is a transmission typed out on the ship's log. At the
+ * vista, the projects are drawn into the sky as new constellations, and your name is traced in stars. Tapping a
+ * project or the dossier link asks top-nav (GO_EVENT) to land and open it.
+ *
  * Everything is monospace glyphs on one canvas, like the sky behind the site.
  */
 
-import { RAMP, clamp, css, ease, hash, lineGlyph, mix, noise, rand, smoothstep, type Rgb } from "./engine";
+import { coreStack, projects } from "../../lib/portfolio";
+import { GO_EVENT, NAV_EVENT, RAMP, clamp, css, ease, hash, lineGlyph, mix, noise, rand, smoothstep, type NavTarget, type Rgb } from "./engine";
 
 export type Stage = "voyage" | "vista";
 
@@ -55,10 +61,28 @@ const MAX_BIRTHS = 40;
 const BIRTH_RING = 1.6;
 /** A press that moves less than this is a tap (a birth), not a drag. */
 const TAP_SLOP = 8;
+/** How fast the ship's log types, in characters a second. */
+const TYPE_RATE = 46;
+const ACCENT: Rgb = [159, 196, 255];
+const FAINT: Rgb = [120, 130, 160];
+/** The about, as the ship's log reads it out. The last line is the way to the full dossier. */
+const LOG_LINES = [
+  "incoming transmission ···",
+  "pilot    jimuel jean untalan",
+  "role     full-stack developer",
+  "status   open to internships",
+  "base     quezon, ph · utc+8",
+  `stack    ${coreStack.join(" · ")}`,
+  "open the dossier →",
+];
 
 interface Mote { x: number; y: number; z: number; tint: Rgb }
 /** Something big passing on the voyage: where it is in flight space, how big, and what it looks like. */
-interface Wonder { kind: "planet" | "ringed" | "nebula"; x: number; y: number; z: number; size: number; body: Rgb; band: Rgb; seed: number; tilt: number }
+interface Wonder { kind: "planet" | "ringed" | "nebula"; x: number; y: number; z: number; size: number; body: Rgb; band: Rgb; seed: number; tilt: number; label?: string; href?: string; dim?: boolean }
+/** Something tappable drawn this frame (a project, the dossier link), in screen px. */
+interface Hit { x: number; y: number; w: number; h: number; href: string }
+/** A project as a constellation at the vista: its stars in sky px, revealed one by one. */
+interface Figure { label: string; href: string; dim: boolean; stars: [number, number][] }
 /** A star you lit in the vista, in sky px. */
 interface Birth { x: number; y: number; age: number; seed: number }
 interface Press { id: number; x: number; y: number; moved: boolean; last: number }
@@ -99,6 +123,13 @@ export class Cosmos {
   private births: Birth[] = [];
   private lit = 0;
 
+  /** Which of the nav's answers is showing, and since when. */
+  private overlay: { kind: NavTarget; at: number } | null = null;
+  private figures: Figure[] = [];
+  /** Your name traced in stars at the vista, in sky px, with the point the caption hangs from. */
+  private nameStars: { pts: [number, number][]; x: number; y: number } | null = null;
+  private hits: Hit[] = [];
+
   private press: Press | null = null;
   private pointer = { x: 0, y: 0, active: false };
   private tilt = { x: 0, y: 0, on: false };
@@ -134,6 +165,7 @@ export class Cosmos {
     window.addEventListener("resize", this.resize);
     window.addEventListener("deviceorientation", this.onTilt);
     document.addEventListener("visibilitychange", this.schedule);
+    window.addEventListener(NAV_EVENT, this.onNav);
     // Fades in on the next frame (the opacity transition needs a frame at 0 first).
     requestAnimationFrame(() => this.canvas.classList.add("on"));
     this.schedule();
@@ -147,6 +179,8 @@ export class Cosmos {
     this.arriveAt = this.reduced ? -1 : this.time;
     this.warp = false;
     this.speed = WARP * 1.3;
+    this.overlay = null;
+    this.wonders = this.wonders.filter((wd) => !wd.href);
     // Made now, so the view is all there as it fades in.
     this.makeTiles(Infinity);
     if (this.reduced) this.render();
@@ -169,6 +203,7 @@ export class Cosmos {
     window.removeEventListener("resize", this.resize);
     window.removeEventListener("deviceorientation", this.onTilt);
     document.removeEventListener("visibilitychange", this.schedule);
+    window.removeEventListener(NAV_EVENT, this.onNav);
     this.canvas.remove();
     this.tiles.clear();
   }
@@ -251,8 +286,95 @@ export class Cosmos {
     if (!p || p.id !== e.pointerId) return;
     this.press = null;
     this.warp = false;
-    if (this.stage === "vista" && !p.moved) this.ignite(e.clientX, e.clientY);
+    if (p.moved) return;
+    const hit = this.hits.find((h) => e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h);
+    if (hit) window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.href }));
+    // A tap on empty sky puts the answer away; with nothing showing, at the vista it lights a star.
+    else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.dismiss();
+    else if (this.stage === "vista") this.ignite(e.clientX, e.clientY);
   };
+
+  /** The nav's "projects" or "about", answered in this part of the trip. Asked again, it's put away. */
+  private onNav = (e: Event) => {
+    const kind = (e as CustomEvent<NavTarget>).detail;
+    if (this.overlay?.kind === kind) return this.dismiss();
+    this.dismiss();
+    this.overlay = { kind, at: this.time };
+    if (this.stage === "voyage" && kind === "projects") this.setCourse();
+    if (this.stage === "vista" && kind === "projects") this.chartProjects();
+    if (this.stage === "vista" && kind === "about") this.traceName();
+    if (this.reduced) this.render();
+  };
+
+  private dismiss() {
+    this.overlay = null;
+    this.figures = [];
+    this.nameStars = null;
+    this.wonders = this.wonders.filter((wd) => !wd.href);
+    if (this.reduced) this.render();
+  }
+
+  /** Set course: the projects come up ahead one after another, as named worlds to fly past. */
+  private setCourse() {
+    projects.forEach((pr, i) => {
+      const [body, band] = WORLDS[(i * 2 + 1) % WORLDS.length];
+      const side = i % 2 ? -1 : 1;
+      this.wonders.push({
+        kind: i === 0 ? "ringed" : "planet", x: side * rand(0.35, 0.5), y: rand(-0.25, 0.25), z: 1.3 + i * 0.55,
+        size: i === 0 ? 0.12 : 0.08, body, band, seed: 7 + i * 31, tilt: rand(-0.4, 0.4),
+        label: pr.status === "launched" ? pr.name.toLowerCase() : "░░░░ unannounced", href: `/projects#${pr.slug}`, dim: pr.status !== "launched",
+      });
+    });
+    // Approach at cruise, so there's time to read them.
+    this.warp = false;
+  }
+
+  /** New constellations: each project's stars, spread across the view in sky px, linked as they're revealed. */
+  private chartProjects() {
+    const n = projects.length;
+    const narrow = this.w < 640;
+    this.figures = projects.map((pr, i) => {
+      // Phones stack them down the screen; wider screens set them side by side.
+      const cx = this.cam.x + (narrow ? this.w / 2 : (this.w * (i + 0.5)) / n);
+      const cy = this.cam.y + (narrow ? this.h * (0.18 + (0.5 * (i + 0.5)) / n) : this.h * (0.36 + (i % 2) * 0.14));
+      const count = pr.status === "launched" ? 7 : 4;
+      const spread = Math.min(this.w / (narrow ? 1.6 : n), 220) * 0.45;
+      const stars: [number, number][] = [];
+      for (let k = 0; k < count; k++) {
+        const a = (k / count) * TAU + hash(i, k, 71) * 1.4;
+        const r = spread * (0.35 + hash(i, k, 72) * 0.65);
+        stars.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r * (narrow ? 0.4 : 0.55)]);
+      }
+      return { label: pr.status === "launched" ? pr.name.toLowerCase() : "░░░░ unannounced", href: `/projects#${pr.slug}`, dim: pr.status !== "launched", stars };
+    });
+  }
+
+  /** Your name traced in stars: drawn once on a hidden canvas, then sampled into points across the view. */
+  private traceName() {
+    const narrow = this.w < 640;
+    const lines = narrow ? ["jimuel jean", "untalan"] : ["jimuel jean untalan"];
+    const size = Math.min(narrow ? this.w * 0.2 : this.w * 0.085, 120);
+    const off = document.createElement("canvas");
+    off.width = Math.round(this.w);
+    off.height = Math.round(size * 1.15 * lines.length + 20);
+    const o = off.getContext("2d")!;
+    const serif = getComputedStyle(document.body).getPropertyValue("--serif").trim() || "Georgia, serif";
+    o.font = `${size}px ${serif}`;
+    o.textAlign = "center";
+    o.textBaseline = "top";
+    o.fillStyle = "#fff";
+    lines.forEach((l, i) => o.fillText(l, off.width / 2, 10 + i * size * 1.15));
+    const data = o.getImageData(0, 0, off.width, off.height).data;
+    const step = Math.max(5, Math.round(size / 11));
+    const top = this.h * (narrow ? 0.26 : 0.3);
+    const pts: [number, number][] = [];
+    for (let y = 0; y < off.height; y += step) {
+      for (let x = 0; x < off.width; x += step) {
+        if (data[(y * off.width + x) * 4 + 3] > 140) pts.push([this.cam.x + x + (hash(x, y, 73) - 0.5) * 2, this.cam.y + top + y]);
+      }
+    }
+    this.nameStars = { pts, x: this.cam.x + this.w / 2, y: this.cam.y + top + off.height + 18 };
+  }
 
   private onLeave = () => {
     this.pointer.active = false;
@@ -365,6 +487,8 @@ export class Cosmos {
     ctx.fillRect(0, 0, this.w, this.h);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    // Whatever is tappable is collected afresh as it's drawn.
+    this.hits = [];
     const since = this.time - this.arriveAt;
     if (this.stage === "voyage" || this.arriving()) this.drawVoyage(this.stage === "vista" ? 1 - smoothstep(0, ARRIVE_SECONDS * 0.6, since) : 1);
     if (this.stage === "vista") {
@@ -377,6 +501,7 @@ export class Cosmos {
       this.drawVista(k);
       ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
     }
+    if (this.overlay) this.drawOverlay();
     this.drawHud();
     ctx.globalAlpha = 1;
   }
@@ -483,6 +608,24 @@ export class Cosmos {
       }
     }
     if (wd.kind === "ringed") ring(true);
+    if (wd.label && wd.href) this.label(wd.label, c.x, Math.min(this.h - 40, c.y + r * (wd.kind === "ringed" ? 0.9 : 1.15) + 16), wd.href, wd.dim ?? false, a);
+  }
+
+  /** A tappable name under something: the name, and a quieter "open →" beneath it. */
+  private label(text: string, x: number, y: number, href: string, dim: boolean, alpha: number) {
+    const { ctx } = this;
+    if (alpha < 0.15) return;
+    ctx.font = `12px ${this.family}`;
+    const w = ctx.measureText(text).width;
+    x = clamp(x, w / 2 + 16, this.w - w / 2 - 16);
+    // A dark backing, so the name reads even over the brightest gas.
+    ctx.globalAlpha = 0.72 * alpha;
+    ctx.fillStyle = css(SPACE);
+    ctx.fillRect(x - w / 2 - 8, y - 10, w + 16, 36);
+    this.put(text, x, y, dim ? FAINT : ACCENT, alpha);
+    ctx.font = `10px ${this.family}`;
+    this.put("open →", x, y + 16, FAINT, alpha * 0.8);
+    this.hits.push({ x: x - w / 2 - 10, y: y - 14, w: w + 20, h: 40, href });
   }
 
   /** What the sky holds at a point (sky px): the Milky Way's band with a dark rift, and nebulae of warped noise. */
@@ -650,22 +793,114 @@ export class Cosmos {
   /** The readout, in the same small print as the sky's stats: where you are, and what you can do. */
   private drawHud() {
     const { ctx } = this;
-    const right = this.w - (this.w >= 1024 ? this.w * 0.14 : 24);
-    const top = this.w >= 1024 ? 30 : 70;
-    ctx.textAlign = "right";
+    // Wide screens read it top right, as the sky's stats; phones at the bottom, clear of the nav and its notes.
+    const narrow = this.w < 640;
+    const x = narrow ? 20 : this.w - (this.w >= 1024 ? this.w * 0.14 : 24);
+    ctx.textAlign = narrow ? "left" : "right";
     ctx.font = `11px ${this.family}`;
     let lines: string[], hint: string;
     if (this.stage === "voyage") {
       lines = [`voyage · ${this.travelled.toFixed(2)} ly`, this.speed > CRUISE * 1.6 ? `warp ${(this.speed / CRUISE).toFixed(1)}` : "cruising"];
-      hint = this.coarse ? "hold to warp · drag or tilt to steer ↯" : "hold to warp · steer with the cursor ↯";
+      hint = this.coarse ? "hold to warp · drag to steer ↯" : "hold to warp · steer with the cursor ↯";
     } else {
       const ra = ((((this.cam.x / 3000) % 24) + 24) % 24).toFixed(1);
       const dec = clamp(-this.cam.y / 90, -90, 90).toFixed(0);
       lines = [`vista · ra ${ra}h · dec ${dec}°`, `${this.lit} ${this.lit === 1 ? "star" : "stars"} born`];
-      hint = "drag to roam · tap to ignite a star ↯";
+      hint = narrow ? "drag to roam · tap for a star ↯" : "drag to roam · tap to ignite a star ↯";
     }
-    lines.forEach((l, i) => this.put(l, right, top + i * 19, STAR, 0.4));
-    this.put(hint, right, top + lines.length * 19 + Math.sin(this.time * 2) * 1.5, [196, 214, 255], 0.75);
+    const top = narrow ? this.h - 20 - lines.length * 18 : this.w >= 1024 ? 30 : 70;
+    lines.forEach((l, i) => this.put(l, x, top + i * 18, STAR, 0.4));
+    this.put(hint, x, top + lines.length * 18 + Math.sin(this.time * 2) * 1.5, [196, 214, 255], 0.75);
     ctx.textAlign = "center";
+  }
+
+  /** The nav's answers that live on the screen rather than on a passing world. */
+  private drawOverlay() {
+    const o = this.overlay!;
+    const since = this.time - o.at;
+    if (o.kind === "about" && this.stage === "voyage") this.drawLog(since);
+    else if (o.kind === "projects" && this.stage === "vista") this.drawFigures(since);
+    else if (o.kind === "about" && this.stage === "vista") this.drawName(since);
+    // Once the last of the course has gone by, the answer is done.
+    else if (o.kind === "projects" && this.stage === "voyage" && !this.wonders.some((wd) => wd.href)) this.overlay = null;
+  }
+
+  /** The ship's log: the about typed out line by line in a panel low on the screen, ending in the way to the dossier. */
+  private drawLog(since: number) {
+    const { ctx } = this;
+    const narrow = this.w < 640;
+    const lh = 19;
+    const pw = Math.min(this.w - 32, 440), ph = LOG_LINES.length * lh + 22;
+    const px = narrow ? 16 : this.w >= 1024 ? this.w * 0.14 : 24;
+    // On phones the readout is at the bottom, so the log sits above it.
+    const py = this.h - ph - (narrow ? 96 : 32);
+    const a = smoothstep(0, 0.4, since);
+    ctx.globalAlpha = 0.86 * a;
+    ctx.fillStyle = css(SPACE);
+    ctx.fillRect(px, py, pw, ph);
+    ctx.globalAlpha = 0.3 * a;
+    ctx.strokeStyle = css(ACCENT);
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+    ctx.textAlign = "left";
+    ctx.font = `${narrow ? 11 : 12}px ${this.family}`;
+    let budget = Math.floor((since - 0.3) * TYPE_RATE);
+    LOG_LINES.forEach((line, i) => {
+      if (budget <= 0) return;
+      const shown = line.slice(0, budget);
+      budget -= line.length;
+      const last = i === LOG_LINES.length - 1;
+      const y = py + 20 + i * lh;
+      this.put(shown, px + 14, y, i === 0 || last ? ACCENT : STAR, (i === 0 ? 0.6 : 0.85) * a);
+      if (last && shown.length === line.length) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, href: "/about" });
+      // The cursor sits at the end of whatever is being typed.
+      if (budget < 0 && Math.floor(this.time * 2) % 2) this.put("█", px + 14 + ctx.measureText(shown).width + 4, y, ACCENT, 0.7);
+    });
+    ctx.textAlign = "center";
+  }
+
+  /** The projects as constellations: stars appear one by one, joined by dotted lines, then the name beneath. */
+  private drawFigures(since: number) {
+    const sx = this.cam.x + this.lean.x * 24, sy = this.cam.y + this.lean.y * 24;
+    this.figures.forEach((f, fi) => {
+      const t = since - fi * 0.5;
+      if (t <= 0) return;
+      const shown = Math.min(f.stars.length, Math.floor(t / 0.28) + 1);
+      const col = f.dim ? FAINT : ACCENT;
+      this.ctx.font = `9px ${this.family}`;
+      for (let k = 1; k < shown; k++) {
+        const [ax, ay] = f.stars[k - 1], [bx, by] = f.stars[k];
+        const n = Math.max(2, Math.floor(Math.hypot(bx - ax, by - ay) / 9));
+        for (let j = 1; j < n; j++) this.put("·", ax + ((bx - ax) * j) / n - sx, ay + ((by - ay) * j) / n - sy, col, 0.45);
+      }
+      for (let k = 0; k < shown; k++) {
+        this.ctx.font = `${k === 0 ? 16 : 12}px ${this.family}`;
+        this.put(k === 0 ? "✦" : "*", f.stars[k][0] - sx, f.stars[k][1] - sy, col, 0.9);
+      }
+      if (shown === f.stars.length) {
+        const by = Math.max(...f.stars.map((st) => st[1])) - sy + 22;
+        const cx = f.stars.reduce((m, st) => m + st[0], 0) / f.stars.length - sx;
+        this.label(f.label, cx, by, f.href, f.dim, smoothstep(0, 0.5, t - f.stars.length * 0.28));
+      }
+    });
+  }
+
+  /** Your name in the stars, swept in left to right, with a caption and the way to the dossier beneath. */
+  private drawName(since: number) {
+    const ns = this.nameStars;
+    if (!ns) return;
+    const sx = this.cam.x + this.lean.x * 24, sy = this.cam.y + this.lean.y * 24;
+    const sweep = ns.x - this.w / 2 + since * this.w * 0.6;
+    for (const [x, y] of ns.pts) {
+      if (x > sweep) continue;
+      const hh = hash(Math.round(x), Math.round(y), 74);
+      const tw = 0.7 + 0.3 * Math.sin(this.time * 1.8 + hh * 50);
+      this.ctx.font = `${hh < 0.08 ? 13 : 10}px ${this.family}`;
+      this.put(hh < 0.08 ? "✦" : hh < 0.4 ? "·" : ".", x - sx, y - sy, hh < 0.15 ? WARM : WHITE, (hh < 0.4 ? 0.95 : 0.7) * tw);
+    }
+    const a = smoothstep(1.4, 2.2, since);
+    if (a <= 0) return;
+    this.ctx.font = `12px ${this.family}`;
+    this.put("full-stack developer · open to internships", ns.x - sx, ns.y - sy, STAR, 0.7 * a);
+    this.label("open the dossier", ns.x - sx, ns.y - sy + 26, "/about", false, a);
   }
 }

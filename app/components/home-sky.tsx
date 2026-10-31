@@ -54,7 +54,10 @@ export function HomeSky() {
           {stats.scene === "deep" ? (
             <>
               <div>{stats.detail}</div>
-              <div className="hint">drag to drift · pinch or scroll to zoom ↯</div>
+              <div className="hint">
+                <span className="wide-only">drag to drift · pinch or scroll to zoom</span>
+                <span className="narrow-only">drag · pinch</span> ↯
+              </div>
             </>
           ) : stats.scene === "earth" ? (
             <>

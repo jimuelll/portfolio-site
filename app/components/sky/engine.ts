@@ -20,7 +20,8 @@
  * The galaxy (a hidden fourth theme, "deep"): press and hold the moon, sun or Earth for five seconds. A ring charges
  * round it while the stars strain toward it, then hyperdrive: the disc collapses to a point, the stars stream past
  * in streaks, and you drop out in front of an ASCII spiral galaxy with the sun marked on one arm. Drag to drift
- * through it; scroll or pinch to zoom. The toggle jumps back the same way.
+ * through it; scroll or pinch to zoom. The toggle jumps back the same way. Out there the nav's "projects" lights
+ * your projects as star systems on the arms, and "about" flies you to the sun with a pilot's card.
  *
  * While the theme toggle is held the sky is a long exposure: the stars draw trails round the toggle as their
  * pole, until the hold lifts off into the cosmos (sky/cosmos.ts).
@@ -36,6 +37,8 @@ export type SkyVariant = "full" | "quiet" | "emblem";
 export type Rgb = [number, number, number];
 type Box = { left: number; top: number; right: number; bottom: number };
 type Vec = [number, number, number];
+
+import { projects } from "../../lib/portfolio";
 
 const TAU = Math.PI * 2;
 const STEP = 1 / 120;
@@ -75,10 +78,18 @@ const TWILIGHT_BG: Rgb = [14, 22, 46];
 export const exposure = { k: 0, x: 0, y: 0 };
 /** Fired on window when the hero has been held long enough: top-nav.tsx switches to the galaxy. */
 export const HYPERDRIVE_EVENT = "sky-hyperdrive";
+/**
+ * Out in the galaxy or the cosmos, the nav's "projects" and "about" are answered by the sky itself: top-nav.tsx
+ * fires NAV_EVENT with which one, and the sky shows it its own way. GO_EVENT (detail: a path) asks top-nav to bring
+ * you home and then open that page, when something out there is tapped.
+ */
+export const NAV_EVENT = "sky-nav";
+export const GO_EVENT = "sky-go";
+export type NavTarget = "projects" | "about";
 /** How long the moon, sun or Earth has to be held. */
 const CHARGE_MS = 5000;
 /** The jump through hyperdrive, either way. */
-const HYPER_SECONDS = 2.6;
+export const HYPER_SECONDS = 2.6;
 const DEEP_BG: Rgb = [5, 6, 13];
 const BLUESHIFT: Rgb = [150, 196, 255];
 const GALAXY_CORE: Rgb = [255, 226, 180];
@@ -91,6 +102,11 @@ const GALAXY_SQUASH = 0.6;
 const GALAXY_TURN = -0.32;
 /** Where the sun sits: partway out along one arm. */
 const SUN_ORBIT = 0.58;
+const GALAXY_ACCENT: Rgb = [195, 166, 255];
+const GALAXY_FAINT: Rgb = [130, 128, 160];
+/** How close the camera comes to the sun for the pilot's card. */
+const SUN_ZOOM = 2.4;
+const PILOT_CARD = ["pilot · jimuel jean untalan", "full-stack developer", "seeking a software internship", "read the dossier →"];
 const MAX_SATS = 30;
 /** One satellite at 1.3 Earth radii goes round in 8 s; further out is slower, by Kepler's third law. */
 const SAT_W0 = (TAU / 8) * 1.3 ** 1.5;
@@ -291,7 +307,13 @@ export class SkyEngine {
   private origin = { left: 0, top: 0 };
   /** The galaxy's camera: pan in px, zoom, and the drift it keeps after a fling. */
   private cam = { x: 0, y: 0, z: 1, vx: 0, vy: 0 };
-  private grabs = new Map<number, { x: number; y: number }>();
+  /** Pointers holding the galaxy: where each is now, and where it went down (a press that barely moves is a tap). */
+  private grabs = new Map<number, { x: number; y: number; sx: number; sy: number }>();
+  /** The nav's answer showing in the galaxy (star systems, or the pilot's card), and where the camera is easing to. */
+  private galaxyNav: NavTarget | null = null;
+  private camAim: "whole" | "sun" | null = null;
+  /** Whatever is tappable this frame (a star system, the dossier link), in canvas px. */
+  private hits: { x: number; y: number; w: number; h: number; href: string }[] = [];
   private lastDrag = 0;
   /** The middle of what's on screen, in canvas px. */
   private view = { x: 0, y: 0 };
@@ -339,6 +361,7 @@ export class SkyEngine {
       window.addEventListener("pointercancel", this.onLetGo);
       window.addEventListener("wheel", this.onWheel, { passive: false });
       window.addEventListener("contextmenu", this.onMenu);
+      window.addEventListener(NAV_EVENT, this.onNav);
     }
     this.resize();
     this.schedule();
@@ -363,6 +386,7 @@ export class SkyEngine {
     window.removeEventListener("pointercancel", this.onLetGo);
     window.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("contextmenu", this.onMenu);
+    window.removeEventListener(NAV_EVENT, this.onNav);
     window.clearTimeout(this.charging.timer);
     if (this.overAstro && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
   }
@@ -393,6 +417,8 @@ export class SkyEngine {
     if (next === this.scene) return;
     // Each visit to the galaxy starts from the same view.
     if (next === "deep") this.cam = { x: 0, y: 0, z: 1, vx: 0, vy: 0 };
+    this.galaxyNav = null;
+    this.camAim = null;
     // Inner pages fade their colours over instead, so the sky switches at once.
     const sunrise = document.documentElement.classList.contains(SUNRISE_CLASS);
     // The first read just picks the scene; later changes play the eclipse.
@@ -604,7 +630,18 @@ export class SkyEngine {
       cam.vx *= Math.exp(-2.5 * dt);
       cam.vy *= Math.exp(-2.5 * dt);
     }
-    const reach = this.galaxyRadius() * 1.1;
+    // Asked to show something, the camera glides there on its own, until someone takes hold of it.
+    if (this.camAim && !this.grabs.size) {
+      const z = this.camAim === "sun" ? SUN_ZOOM : 1;
+      const sun = this.sunOffset(this.galaxyRadius() * z);
+      const tx = this.camAim === "sun" ? -sun.x : 0, ty = this.camAim === "sun" ? -sun.y : 0;
+      const k = 1 - Math.exp(-2.6 * dt);
+      cam.x += (tx - cam.x) * k;
+      cam.y += (ty - cam.y) * k;
+      cam.z += (z - cam.z) * k;
+      cam.vx = cam.vy = 0;
+    }
+    const reach = this.galaxyRadius() * 1.1 * Math.max(1, cam.z);
     cam.x = clamp(cam.x, -reach, reach);
     cam.y = clamp(cam.y, -reach, reach);
     // Spots form, drift round with the sun, and fade; new ones keep the count up.
@@ -728,6 +765,7 @@ export class SkyEngine {
 
   render() {
     const { ctx, w, h } = this;
+    this.hits = [];
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, w, h);
     ctx.textAlign = "center";
@@ -1779,13 +1817,96 @@ export class SkyEngine {
     return { x: this.view.x + this.cam.x, y: this.view.y + this.cam.y };
   }
 
-  /** Where the sun is in the galaxy, as an offset from its centre for a galaxy of radius R. */
-  private sunOffset(R: number) {
+  /** A point on one of the two arms, r out from the centre (0 → 1), as an offset for a galaxy of radius R. */
+  private armOffset(R: number, r: number, arm: number) {
     // On the arm: the spiral's phase is zero where θ = ln(r) / b, plus however far the disc has turned.
-    const th = Math.log(SUN_ORBIT + 0.02) / ARM_PITCH + (this.time * TAU) / 400;
-    const u = Math.cos(th) * SUN_ORBIT * R, v = Math.sin(th) * SUN_ORBIT * R * GALAXY_SQUASH;
+    const th = Math.log(r + 0.02) / ARM_PITCH + (this.time * TAU) / 400 + arm * Math.PI;
+    const u = Math.cos(th) * r * R, v = Math.sin(th) * r * R * GALAXY_SQUASH;
     const c = Math.cos(GALAXY_TURN), s = Math.sin(GALAXY_TURN);
     return { x: u * c - v * s, y: u * s + v * c };
+  }
+
+  /** Where the sun is in the galaxy, as an offset from its centre for a galaxy of radius R. */
+  private sunOffset(R: number) {
+    return this.armOffset(R, SUN_ORBIT, 0);
+  }
+
+  /** The nav's "projects" or "about" while in the galaxy. Asked again, it's put away. */
+  private onNav = (e: Event) => {
+    // Asked mid-jump, it's simply waiting when you arrive.
+    if (this.scene !== "deep") return;
+    const kind = (e as CustomEvent<NavTarget>).detail;
+    this.galaxyNav = this.galaxyNav === kind ? null : kind;
+    this.camAim = this.galaxyNav === "projects" ? "whole" : this.galaxyNav === "about" ? "sun" : null;
+    if (!this.raf) this.render();
+  };
+
+  /** A label you can tap: drawn left of the point if there's no room to its right. */
+  private tapLabel(text: string, x: number, y: number, href: string, color: Rgb) {
+    const { ctx } = this;
+    ctx.font = `11px ${this.family}`;
+    const tw = ctx.measureText(text).width;
+    const right = x + 14 + tw < this.w - 12;
+    const lx = right ? x + 14 : x - 14 - tw;
+    // A dark backing, so the name reads over the arms.
+    ctx.globalAlpha = 0.7 * this.sceneAlpha;
+    ctx.fillStyle = css(DEEP_BG);
+    ctx.fillRect(lx - 6, y - 9, tw + 12, 30);
+    ctx.textAlign = "left";
+    this.glyph(text, lx, y, color, 0.95);
+    ctx.font = `9px ${this.family}`;
+    this.glyph("open →", lx, y + 13, GALAXY_FAINT, 0.8);
+    ctx.textAlign = "center";
+    this.hits.push({ x: Math.min(x, lx) - 10, y: y - 14, w: tw + 34, h: 36, href });
+  }
+
+  /**
+   * Your projects as star systems along the arms: each a star with a slow pulsing ring and its name, launched ones
+   * bright, unannounced ones dim. Tapping one goes home and opens it.
+   */
+  private drawSystems(cx: number, cy: number, R: number) {
+    projects.forEach((pr, i) => {
+      const o = this.armOffset(R, 0.3 + i * 0.2, (i + 1) % 2);
+      const x = cx + o.x, y = cy + o.y;
+      const lit = pr.status === "launched";
+      const col = lit ? GALAXY_ACCENT : GALAXY_FAINT;
+      const ring = 9 + 3 * Math.sin(this.time * 2.2 + i);
+      this.ctx.font = `9px ${this.family}`;
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * TAU + this.time * 0.4;
+        this.glyph("·", x + Math.cos(a) * ring, y + Math.sin(a) * ring * 0.7, col, 0.6);
+      }
+      this.ctx.font = `${lit ? 15 : 12}px ${this.family}`;
+      this.glyph("✦", x, y, col, 1);
+      this.tapLabel(lit ? pr.name.toLowerCase() : "░░░░ unannounced", x, y - 2, `/projects#${pr.slug}`, col);
+    });
+  }
+
+  /** The pilot's card beside the sun once the camera has flown there; on phones it sits low on the screen instead. */
+  private drawPilot(sx: number, sy: number) {
+    const { ctx } = this;
+    const arrived = 1 - smoothstep(0.15, 0.5, Math.abs(this.cam.z - SUN_ZOOM));
+    if (arrived < 0.05) return;
+    const narrow = this.w < 640;
+    ctx.font = `${narrow ? 11 : 12}px ${this.family}`;
+    const pw = Math.min(this.w - 32, Math.max(...PILOT_CARD.map((l) => ctx.measureText(l).width)) + 32), ph = PILOT_CARD.length * 19 + 20;
+    const bottom = window.innerHeight - this.origin.top;
+    const px = narrow ? 16 : clamp(sx + 28, 16, this.w - pw - 16);
+    const py = narrow ? bottom - ph - 72 : clamp(sy - ph / 2, 80, bottom - ph - 24);
+    ctx.globalAlpha = 0.86 * arrived;
+    ctx.fillStyle = css(DEEP_BG);
+    ctx.fillRect(px, py, pw, ph);
+    ctx.globalAlpha = 0.35 * arrived;
+    ctx.strokeStyle = css(GALAXY_ACCENT);
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+    ctx.textAlign = "left";
+    PILOT_CARD.forEach((line, i) => {
+      const last = i === PILOT_CARD.length - 1;
+      const y = py + 19 + i * 19;
+      this.glyph(line, px + 16, y, i === 0 || last ? GALAXY_ACCENT : DARK.star, (i === 0 || last ? 1 : 0.8) * arrived);
+      if (last) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 16, h: 24, href: "/about" });
+    });
+    ctx.textAlign = "center";
   }
 
   /** How hard the hyperdrive is running at progress k: it builds to the jump at the midpoint, then falls away. */
@@ -1947,6 +2068,8 @@ export class SkyEngine {
       this.ctx.textAlign = "left";
       this.glyph("you are here", cx + s.x + 12, cy + s.y + 1, DARK.warm, 0.7);
       this.ctx.textAlign = "center";
+      if (this.galaxyNav === "projects") this.drawSystems(cx, cy, R);
+      if (this.galaxyNav === "about") this.drawPilot(cx + s.x, cy + s.y);
     }
     this.sceneAlpha = 1;
   }
@@ -2038,7 +2161,10 @@ export class SkyEngine {
     if (this.turn || e.button !== 0) return;
     if (e.composedPath().some((n) => n instanceof Element && n.matches(INTERACTIVE))) return;
     if (this.scene === "deep") {
-      this.grabs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const x = e.clientX - this.origin.left, y = e.clientY - this.origin.top;
+      const hit = this.hits.find((h) => x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h);
+      if (hit) return void window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.href }));
+      this.grabs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY });
       this.lastDrag = performance.now();
       return;
     }
@@ -2051,7 +2177,13 @@ export class SkyEngine {
   };
 
   private onLetGo = (e: PointerEvent) => {
+    const g = this.grabs.get(e.pointerId);
     this.grabs.delete(e.pointerId);
+    // A tap on empty sky in the galaxy puts away whatever the nav was showing.
+    if (g && this.galaxyNav && Math.hypot(g.x - g.sx, g.y - g.sy) < 8) {
+      this.galaxyNav = null;
+      this.camAim = null;
+    }
     if (e.pointerId !== this.charging.id) return;
     // A long press that gave up isn't a click on the sky either.
     if (performance.now() - this.charging.start > 500) this.swallowUntil = performance.now() + 400;
