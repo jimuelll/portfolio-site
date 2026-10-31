@@ -61,6 +61,8 @@ const MAX_BIRTHS = 40;
 const BIRTH_RING = 1.6;
 /** A press that moves less than this is a tap (a birth), not a drag. */
 const TAP_SLOP = 8;
+/** How long an answer takes to put itself away: the log fades, constellations retract, the name scatters. */
+const OVERLAY_FADE = 0.6;
 /** How fast the ship's log types, in characters a second. */
 const TYPE_RATE = 46;
 const ACCENT: Rgb = [159, 196, 255];
@@ -125,6 +127,8 @@ export class Cosmos {
 
   /** Which of the nav's answers is showing, and since when. */
   private overlay: { kind: NavTarget; at: number } | null = null;
+  /** When the answer started putting itself away (-1: it isn't). */
+  private closing = -1;
   private figures: Figure[] = [];
   /** Your name traced in stars at the vista, in sky px, with the point the caption hangs from. */
   private nameStars: { pts: [number, number][]; x: number; y: number } | null = null;
@@ -179,8 +183,7 @@ export class Cosmos {
     this.arriveAt = this.reduced ? -1 : this.time;
     this.warp = false;
     this.speed = WARP * 1.3;
-    this.overlay = null;
-    this.wonders = this.wonders.filter((wd) => !wd.href);
+    this.clear();
     // Made now, so the view is all there as it fades in.
     this.makeTiles(Infinity);
     if (this.reduced) this.render();
@@ -286,19 +289,20 @@ export class Cosmos {
     if (!p || p.id !== e.pointerId) return;
     this.press = null;
     this.warp = false;
-    if (p.moved) return;
+    // While an answer is putting itself away, taps wait, so a quick second tap doesn't light a stray star.
+    if (p.moved || this.closing >= 0) return;
     const hit = this.hits.find((h) => e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h);
     if (hit) window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.href }));
     // A tap on empty sky puts the answer away; with nothing showing, at the vista it lights a star.
-    else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.dismiss();
+    else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.close();
     else if (this.stage === "vista") this.ignite(e.clientX, e.clientY);
   };
 
   /** The nav's "projects" or "about", answered in this part of the trip. Asked again, it's put away. */
   private onNav = (e: Event) => {
     const kind = (e as CustomEvent<NavTarget>).detail;
-    if (this.overlay?.kind === kind) return this.dismiss();
-    this.dismiss();
+    if (this.overlay?.kind === kind && this.closing < 0) return this.close();
+    this.clear();
     this.overlay = { kind, at: this.time };
     if (this.stage === "voyage" && kind === "projects") this.setCourse();
     if (this.stage === "vista" && kind === "projects") this.chartProjects();
@@ -306,8 +310,21 @@ export class Cosmos {
     if (this.reduced) this.render();
   };
 
-  private dismiss() {
+  /** Puts the answer away gently; without motion, at once. */
+  private close() {
+    if (!this.overlay || this.closing >= 0) return;
+    if (this.reduced) return this.clear();
+    this.closing = this.time;
+  }
+
+  /** How much of the answer is left as it puts itself away, 1 → 0. */
+  private out() {
+    return this.closing < 0 ? 1 : 1 - smoothstep(0, OVERLAY_FADE, this.time - this.closing);
+  }
+
+  private clear() {
     this.overlay = null;
+    this.closing = -1;
     this.figures = [];
     this.nameStars = null;
     this.wonders = this.wonders.filter((wd) => !wd.href);
@@ -558,7 +575,7 @@ export class Cosmos {
     const c = this.project(wd.x, wd.y, wd.z);
     const f = Math.max(this.w, this.h) * 0.25;
     const r = (wd.size * f) / wd.z;
-    const a = smoothstep(1.3, 1.0, wd.z) * smoothstep(0.05, 0.16, wd.z) * alpha;
+    const a = smoothstep(1.3, 1.0, wd.z) * smoothstep(0.05, 0.16, wd.z) * alpha * (wd.href ? this.out() : 1);
     if (a < 0.02 || r > Math.max(this.w, this.h) * 1.5) return;
     if (r < 3) { this.ctx.font = `10px ${this.family}`; this.put("·", c.x, c.y, wd.body, a); return; }
     const font = clamp(r / 16, 8, 26);
@@ -625,7 +642,7 @@ export class Cosmos {
     this.put(text, x, y, dim ? FAINT : ACCENT, alpha);
     ctx.font = `10px ${this.family}`;
     this.put("open →", x, y + 16, FAINT, alpha * 0.8);
-    this.hits.push({ x: x - w / 2 - 10, y: y - 14, w: w + 20, h: 40, href });
+    if (this.closing < 0) this.hits.push({ x: x - w / 2 - 10, y: y - 14, w: w + 20, h: 40, href });
   }
 
   /** What the sky holds at a point (sky px): the Milky Way's band with a dark rift, and nebulae of warped noise. */
@@ -816,6 +833,7 @@ export class Cosmos {
 
   /** The nav's answers that live on the screen rather than on a passing world. */
   private drawOverlay() {
+    if (this.closing >= 0 && this.out() <= 0) return this.clear();
     const o = this.overlay!;
     const since = this.time - o.at;
     if (o.kind === "about" && this.stage === "voyage") this.drawLog(since);
@@ -834,7 +852,7 @@ export class Cosmos {
     const px = narrow ? 16 : this.w >= 1024 ? this.w * 0.14 : 24;
     // On phones the readout is at the bottom, so the log sits above it.
     const py = this.h - ph - (narrow ? 96 : 32);
-    const a = smoothstep(0, 0.4, since);
+    const a = smoothstep(0, 0.4, since) * this.out();
     ctx.globalAlpha = 0.86 * a;
     ctx.fillStyle = css(SPACE);
     ctx.fillRect(px, py, pw, ph);
@@ -851,9 +869,9 @@ export class Cosmos {
       const last = i === LOG_LINES.length - 1;
       const y = py + 20 + i * lh;
       this.put(shown, px + 14, y, i === 0 || last ? ACCENT : STAR, (i === 0 ? 0.6 : 0.85) * a);
-      if (last && shown.length === line.length) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, href: "/about" });
+      if (last && shown.length === line.length && this.closing < 0) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, href: "/about" });
       // The cursor sits at the end of whatever is being typed.
-      if (budget < 0 && Math.floor(this.time * 2) % 2) this.put("█", px + 14 + ctx.measureText(shown).width + 4, y, ACCENT, 0.7);
+      if (budget < 0 && Math.floor(this.time * 2) % 2) this.put("█", px + 14 + ctx.measureText(shown).width + 4, y, ACCENT, 0.7 * a);
     });
     ctx.textAlign = "center";
   }
@@ -861,25 +879,28 @@ export class Cosmos {
   /** The projects as constellations: stars appear one by one, joined by dotted lines, then the name beneath. */
   private drawFigures(since: number) {
     const sx = this.cam.x + this.lean.x * 24, sy = this.cam.y + this.lean.y * 24;
+    const out = this.out();
     this.figures.forEach((f, fi) => {
       const t = since - fi * 0.5;
       if (t <= 0) return;
-      const shown = Math.min(f.stars.length, Math.floor(t / 0.28) + 1);
+      // Putting itself away, each figure takes its stars back one by one, in the order it drew them.
+      const drawn = Math.min(f.stars.length, Math.floor(t / 0.28) + 1);
+      const shown = Math.ceil(drawn * out);
       const col = f.dim ? FAINT : ACCENT;
       this.ctx.font = `9px ${this.family}`;
       for (let k = 1; k < shown; k++) {
         const [ax, ay] = f.stars[k - 1], [bx, by] = f.stars[k];
         const n = Math.max(2, Math.floor(Math.hypot(bx - ax, by - ay) / 9));
-        for (let j = 1; j < n; j++) this.put("·", ax + ((bx - ax) * j) / n - sx, ay + ((by - ay) * j) / n - sy, col, 0.45);
+        for (let j = 1; j < n; j++) this.put("·", ax + ((bx - ax) * j) / n - sx, ay + ((by - ay) * j) / n - sy, col, 0.45 * out);
       }
       for (let k = 0; k < shown; k++) {
         this.ctx.font = `${k === 0 ? 16 : 12}px ${this.family}`;
-        this.put(k === 0 ? "✦" : "*", f.stars[k][0] - sx, f.stars[k][1] - sy, col, 0.9);
+        this.put(k === 0 ? "✦" : "*", f.stars[k][0] - sx, f.stars[k][1] - sy, col, 0.9 * out);
       }
-      if (shown === f.stars.length) {
+      if (drawn === f.stars.length) {
         const by = Math.max(...f.stars.map((st) => st[1])) - sy + 22;
         const cx = f.stars.reduce((m, st) => m + st[0], 0) / f.stars.length - sx;
-        this.label(f.label, cx, by, f.href, f.dim, smoothstep(0, 0.5, t - f.stars.length * 0.28));
+        this.label(f.label, cx, by, f.href, f.dim, smoothstep(0, 0.5, t - f.stars.length * 0.28) * out);
       }
     });
   }
@@ -890,14 +911,19 @@ export class Cosmos {
     if (!ns) return;
     const sx = this.cam.x + this.lean.x * 24, sy = this.cam.y + this.lean.y * 24;
     const sweep = ns.x - this.w / 2 + since * this.w * 0.6;
+    const out = this.out();
+    // Putting itself away, the name scatters: each star drifts off its letter and fades back into the sky.
+    const scatter = ease(1 - out);
     for (const [x, y] of ns.pts) {
       if (x > sweep) continue;
       const hh = hash(Math.round(x), Math.round(y), 74);
       const tw = 0.7 + 0.3 * Math.sin(this.time * 1.8 + hh * 50);
+      const a = hash(Math.round(x), Math.round(y), 75) * TAU;
+      const px = x + (x - ns.x) * 0.25 * scatter + Math.cos(a) * 70 * scatter, py = y + Math.sin(a) * 50 * scatter;
       this.ctx.font = `${hh < 0.08 ? 13 : 10}px ${this.family}`;
-      this.put(hh < 0.08 ? "✦" : hh < 0.4 ? "·" : ".", x - sx, y - sy, hh < 0.15 ? WARM : WHITE, (hh < 0.4 ? 0.95 : 0.7) * tw);
+      this.put(hh < 0.08 ? "✦" : hh < 0.4 ? "·" : ".", px - sx, py - sy, hh < 0.15 ? WARM : WHITE, (hh < 0.4 ? 0.95 : 0.7) * tw * out);
     }
-    const a = smoothstep(1.4, 2.2, since);
+    const a = smoothstep(1.4, 2.2, since) * out;
     if (a <= 0) return;
     this.ctx.font = `12px ${this.family}`;
     this.put("full-stack developer · open to internships", ns.x - sx, ns.y - sy, STAR, 0.7 * a);

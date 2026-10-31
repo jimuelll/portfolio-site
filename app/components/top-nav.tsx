@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
-import { GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
+import { DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
 import { found } from "../lib/secrets";
 import { Cosmos, type Stage } from "./sky/cosmos";
 
@@ -30,6 +30,8 @@ const ARRIVE_MS = 5000;
 const ONWARD_MS = ARRIVE_MS - LIFTOFF_MS;
 /** How long the cosmos takes to fade away when you land. Matches .cosmos-canvas in globals.css. */
 const LAND_MS = 1000;
+/** How long a page arriving from the sky takes to rise into place. Matches .arriving in globals.css. */
+const RISE_MS = 1300;
 /** The click that ends a hold is swallowed, so letting go doesn't also flip day and night. */
 const HOLD_SWALLOW = 400;
 /** Once the page has dropped away, the sky behind it stops drawing (it's covered). Matches globals.css. */
@@ -86,6 +88,12 @@ export function TopNav() {
   });
 
   useEffect(() => {
+    // Mounting after a page change the sky carried us through: the new page rises into place.
+    const root = document.documentElement;
+    if (root.classList.contains("departing")) {
+      root.classList.replace("departing", "arriving");
+      window.setTimeout(() => root.classList.remove("arriving"), RISE_MS);
+    }
     const frame = requestAnimationFrame(() => {
       setTheme(readTheme(document.documentElement.dataset.theme));
       setStage(cosmos?.stage ?? null);
@@ -315,7 +323,21 @@ export function TopNav() {
           onClick={(e) => {
             // Out in the galaxy or the cosmos the page is out of sight, so the links answer out there instead:
             // "sky" brings you home, and the sky itself shows the projects or the about.
-            if (!away) return;
+            if (!away) {
+              // Between the sky and an inner page the sky carries you (sky/engine.ts plays the move), then the
+              // route changes. Projects ↔ about stays a plain switch, and new tabs are left to the browser.
+              const root = document.documentElement;
+              if ((pathname === "/") === (href === "/") || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+              e.preventDefault();
+              if (root.classList.contains("departing")) return;
+              router.prefetch(href);
+              root.dataset.skyArrive = "1";
+              root.classList.add("departing");
+              window.dispatchEvent(new Event(DEPART_EVENT));
+              window.setTimeout(() => router.push(href), DEPART_SECONDS * 1000);
+              return;
+            }
             e.preventDefault();
             if (href === "/") toggle();
             else window.dispatchEvent(new CustomEvent<NavTarget>(NAV_EVENT, { detail: href === "/projects" ? "projects" : "about" }));

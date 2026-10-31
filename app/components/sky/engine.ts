@@ -23,6 +23,11 @@
  * through it; scroll or pinch to zoom. The toggle jumps back the same way. Out there the nav's "projects" lights
  * your projects as star systems on the arms, and "about" flies you to the sun with a pilot's card.
  *
+ * Moving between the sky and the inner pages, the sky carries you in its own way (top-nav.tsx starts it with
+ * DEPART_EVENT): by night the camera tilts up and the moon sets as the stars stream past, by day you look into the
+ * sun until its glare washes everything out, and at Earth the camera swings round it. The next page's sky picks
+ * up the motion and lets it settle; the way back plays it in reverse (moonrise, sunrise, Earth swinging back).
+ *
  * While the theme toggle is held the sky is a long exposure: the stars draw trails round the toggle as their
  * pole, until the hold lifts off into the cosmos (sky/cosmos.ts).
  *
@@ -84,6 +89,17 @@ export const HYPERDRIVE_EVENT = "sky-hyperdrive";
  * you home and then open that page, when something out there is tapped.
  */
 export const NAV_EVENT = "sky-nav";
+/** Fired on window as a page change between the sky and an inner page begins; the route changes DEPART_SECONDS later. */
+export const DEPART_EVENT = "sky-depart";
+export const DEPART_SECONDS = 0.8;
+/** How long the next page's sky takes to settle from the motion it arrives with. */
+const SETTLE_SECONDS = 0.9;
+/** The colour the day's glare washes everything to: the paper of the day pages, a touch brighter. */
+const GLARE: Rgb = [255, 248, 234];
+/** How long the galaxy's answers take to put themselves away, and how the star systems light up one by one. */
+const NAV_FADE = 0.6;
+const GLIMMER_GAP = 0.35;
+const GLIMMER = 0.8;
 export const GO_EVENT = "sky-go";
 export type NavTarget = "projects" | "about";
 /** How long the moon, sun or Earth has to be held. */
@@ -312,8 +328,22 @@ export class SkyEngine {
   /** The nav's answer showing in the galaxy (star systems, or the pilot's card), and where the camera is easing to. */
   private galaxyNav: NavTarget | null = null;
   private camAim: "whole" | "sun" | null = null;
+  /** When the galaxy's answer was asked for, and when it started putting itself away (-1: it isn't). */
+  private navAt = 0;
+  private navClosing = -1;
+  /**
+   * A page change: leaving this page ("out") or settling on arrival ("in"), and when it began, in wall-clock
+   * seconds, so the move keeps time with the route change even when frames are dropped.
+   */
+  private pass: { dir: "out" | "in"; start: number } | null = null;
+  /** How far the view moved over the last moment of a page change, for drawing the stars as streaks. */
+  private streak = { x: 0, y: 0 };
+  /** How far a page change has slid the sky; the stars wrap round it so the view never empties. */
+  private passShift = { x: 0, y: 0 };
   /** Whatever is tappable this frame (a star system, the dossier link), in canvas px. */
   private hits: { x: number; y: number; w: number; h: number; href: string }[] = [];
+  /** Labels placed this frame, so the next one can keep clear of them. */
+  private labelBoxes: { x: number; y: number; w: number; h: number }[] = [];
   private lastDrag = 0;
   /** The middle of what's on screen, in canvas px. */
   private view = { x: 0, y: 0 };
@@ -362,6 +392,13 @@ export class SkyEngine {
       window.addEventListener("wheel", this.onWheel, { passive: false });
       window.addEventListener("contextmenu", this.onMenu);
       window.addEventListener(NAV_EVENT, this.onNav);
+      window.addEventListener(DEPART_EVENT, this.onDepart);
+      // Arriving from a page change: carry on the motion the last page's sky left with, and let it settle.
+      const root = document.documentElement;
+      if (root.dataset.skyArrive) {
+        delete root.dataset.skyArrive;
+        if (!this.reduced.matches) this.pass = { dir: "in", start: performance.now() / 1000 };
+      }
     }
     this.resize();
     this.schedule();
@@ -387,6 +424,7 @@ export class SkyEngine {
     window.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("contextmenu", this.onMenu);
     window.removeEventListener(NAV_EVENT, this.onNav);
+    window.removeEventListener(DEPART_EVENT, this.onDepart);
     window.clearTimeout(this.charging.timer);
     if (this.overAstro && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
   }
@@ -418,6 +456,7 @@ export class SkyEngine {
     // Each visit to the galaxy starts from the same view.
     if (next === "deep") this.cam = { x: 0, y: 0, z: 1, vx: 0, vy: 0 };
     this.galaxyNav = null;
+    this.navClosing = -1;
     this.camAim = null;
     // Inner pages fade their colours over instead, so the sky switches at once.
     const sunrise = document.documentElement.classList.contains(SUNRISE_CLASS);
@@ -641,6 +680,13 @@ export class SkyEngine {
       cam.z += (z - cam.z) * k;
       cam.vx = cam.vy = 0;
     }
+    // An answer that has finished putting itself away is gone; the camera, back on the whole galaxy, is let go.
+    if (this.navClosing >= 0 && this.time - this.navClosing > NAV_FADE) {
+      this.galaxyNav = null;
+      this.navClosing = -1;
+    }
+    if (this.camAim === "whole" && !this.galaxyNav && Math.abs(cam.z - 1) < 0.01 && Math.hypot(cam.x, cam.y) < 1) this.camAim = null;
+    if (this.pass?.dir === "in" && performance.now() / 1000 - this.pass.start > SETTLE_SECONDS) this.pass = null;
     const reach = this.galaxyRadius() * 1.1 * Math.max(1, cam.z);
     cam.x = clamp(cam.x, -reach, reach);
     cam.y = clamp(cam.y, -reach, reach);
@@ -766,6 +812,7 @@ export class SkyEngine {
   render() {
     const { ctx, w, h } = this;
     this.hits = [];
+    this.labelBoxes = [];
     ctx.globalAlpha = 1;
     ctx.clearRect(0, 0, w, h);
     ctx.textAlign = "center";
@@ -773,6 +820,22 @@ export class SkyEngine {
     const hero = this.variant !== "quiet";
     const full = this.variant === "full";
     this.moonAt = { x: this.hero.x, y: this.hero.y };
+    // A page change moves the whole sky; how far it moved a moment ago gives the streaks.
+    const now = performance.now() / 1000;
+    const fx = this.passFx(now);
+    if (fx) {
+      const before = this.passFx(now - 1 / 30)!;
+      this.streak = { x: (fx.dx - before.dx) * 1.6, y: (fx.dy - before.dy) * 1.6 };
+      this.passShift = fx.scale === 1 ? { x: fx.dx, y: fx.dy } : { x: 0, y: 0 };
+      const ox = full ? this.hero.x : w / 2, oy = full ? this.hero.y : h / 2;
+      ctx.save();
+      ctx.translate(ox + fx.dx, oy + fx.dy);
+      ctx.scale(fx.scale, fx.scale);
+      ctx.translate(-ox, -oy);
+    } else {
+      this.streak = { x: 0, y: 0 };
+      this.passShift = { x: 0, y: 0 };
+    }
     if (this.turn) {
       const k = clamp((this.time - this.turn.start) / this.turn.dur, 0, 1);
       if (this.turn.from === "deep" || this.turn.to === "deep") this.drawHyperdrive(k);
@@ -814,8 +877,61 @@ export class SkyEngine {
     }
     if (full && !this.turn) this.drawDelivery();
     if (full && !this.turn && this.charge > 0) this.drawCharge();
+    if (fx) {
+      ctx.restore();
+      if (fx.glare > 0.01) {
+        ctx.globalAlpha = Math.min(1, fx.glare);
+        ctx.fillStyle = css(GLARE);
+        ctx.fillRect(0, 0, w, h);
+      }
+    }
     ctx.globalAlpha = 1;
     this.sceneAlpha = 1;
+  }
+
+  /** A page change is starting: the sky begins to carry you out, in its own way. */
+  private onDepart = () => {
+    if (this.variant === "emblem" || this.turn || this.reduced.matches || this.scene === "deep") return;
+    this.pass = { dir: "out", start: performance.now() / 1000 };
+  };
+
+  /**
+   * Where the sky is during a page change, at wall-clock time `at` (seconds): how far it has moved and zoomed, and how much glare covers
+   * it. Leaving, the move speeds up as it goes; arriving, it carries on from where the last page left off and slows
+   * to rest (r is how much of it is left).
+   */
+  private passFx(at: number) {
+    const p = this.pass;
+    if (!p) return null;
+    const k = clamp((at - p.start) / (p.dir === "out" ? DEPART_SECONDS : SETTLE_SECONDS), 0, 1);
+    const e = k * k, r = (1 - k) ** 3;
+    const w = this.w, h = window.innerHeight;
+    const home = this.variant === "full";
+    const fx = { dx: 0, dy: 0, scale: 1, glare: 0 };
+    const sc = this.scene;
+    if (p.dir === "out" && home) {
+      // Leaving the sky. Night: the camera tilts up and the moon sets. Day: you look into the sun until it
+      // whites out. Earth: the camera swings round it and it slides away to the side.
+      if (sc === "night") fx.dy = e * h * 0.9;
+      else if (sc === "day") { fx.scale = 1 + 2.4 * e; fx.glare = smoothstep(0.3, 1, k); }
+      else fx.dx = -e * w * 0.8;
+    } else if (p.dir === "in" && !home) {
+      // Arriving at a page: the stars are still streaming down, the glare still fading, or the sky still swinging.
+      if (sc === "night") fx.dy = -r * h * 0.35;
+      else if (sc === "day") { fx.glare = r; fx.scale = 1 + 0.15 * r; }
+      else fx.dx = r * w * 0.3;
+    } else if (p.dir === "out") {
+      // Leaving a page for the sky: everything runs the other way.
+      if (sc === "night") fx.dy = -e * h * 0.5;
+      else if (sc === "day") { fx.glare = smoothstep(0.3, 1, k); fx.scale = 1 + 0.3 * e; }
+      else fx.dx = e * w * 0.5;
+    } else {
+      // Home again: the moon rises, the sun comes up out of the glare, Earth swings back into view.
+      if (sc === "night") fx.dy = r * h * 0.7;
+      else if (sc === "day") { fx.glare = r; fx.scale = 1 + 0.8 * r; }
+      else fx.dx = -r * w * 0.7;
+    }
+    return fx;
   }
 
   /**
@@ -1015,6 +1131,15 @@ export class SkyEngine {
         x += sdx * strain * 14 * s.z;
         y += sdy * strain * 14 * s.z;
       }
+      if (this.passShift.x || this.passShift.y) {
+        // A page change slides the sky (the canvas is moved), but the stars stream on round the screen at their
+        // own depth, so the moon can set without leaving an empty sky behind it.
+        const k = 0.5 + 0.5 * s.z;
+        const wx = (((x + this.passShift.x * k) % this.w) + this.w) % this.w;
+        const wy = (((y + this.passShift.y * k) % this.h) + this.h) % this.h;
+        x = wx - this.passShift.x;
+        y = wy - this.passShift.y;
+      }
       let boost = 0;
       if (p.lens > 0.01 && !day && !this.turn && this.variant === "full") {
         const dx = x - p.x, dy = y - p.y;
@@ -1060,6 +1185,13 @@ export class SkyEngine {
         const len = strain * 26 * s.z;
         const lg = lineGlyph(sdx, sdy);
         for (let j = 1; j <= 3; j++) this.glyph(lg, x - sdx * len * (j / 3), y - sdy * len * (j / 3), color, base * strain * (1 - j / 4));
+      }
+      const sl = Math.hypot(this.streak.x, this.streak.y) * (0.4 + 0.6 * s.z);
+      if (sl > 3) {
+        // Mid page change: each star drawn back along the way the sky is moving, nearer ones longer.
+        const n = clamp(Math.floor(sl / 7), 1, 10), lg = lineGlyph(this.streak.x, this.streak.y);
+        const k = (0.4 + 0.6 * s.z) / n;
+        for (let j = 1; j <= n; j++) this.glyph(lg, x - this.streak.x * k * j, y - this.streak.y * k * j, color, base * (1 - j / (n + 1)) * 0.7);
       }
       this.glyph(g, x, y, glint ? pal.warm : color, base * twinkle + boost + (glint ? 0.4 : 0));
     }
@@ -1836,56 +1968,99 @@ export class SkyEngine {
     // Asked mid-jump, it's simply waiting when you arrive.
     if (this.scene !== "deep") return;
     const kind = (e as CustomEvent<NavTarget>).detail;
-    this.galaxyNav = this.galaxyNav === kind ? null : kind;
-    this.camAim = this.galaxyNav === "projects" ? "whole" : this.galaxyNav === "about" ? "sun" : null;
+    if (this.galaxyNav === kind && this.navClosing < 0) return this.closeNav();
+    this.galaxyNav = kind;
+    // Asked mid-jump, the answer starts once you've arrived, so the glimmer isn't spent during the hyperdrive.
+    this.navAt = this.turn ? this.turn.start + this.turn.dur : this.time;
+    this.navClosing = -1;
+    this.camAim = kind === "projects" ? "whole" : "sun";
     if (!this.raf) this.render();
   };
 
-  /** A label you can tap: drawn left of the point if there's no room to its right. */
-  private tapLabel(text: string, x: number, y: number, href: string, color: Rgb) {
+  /** Puts the galaxy's answer away gently, and glides the camera back out to the whole galaxy. */
+  private closeNav() {
+    if (!this.galaxyNav || this.navClosing >= 0) return;
+    this.camAim = "whole";
+    if (this.reduced.matches || !this.raf) {
+      this.galaxyNav = null;
+      this.render();
+      return;
+    }
+    this.navClosing = this.time;
+  }
+
+  /** How much of the galaxy's answer is left as it puts itself away, 1 → 0. */
+  private navOut() {
+    return this.navClosing < 0 ? 1 : 1 - smoothstep(0, NAV_FADE, this.time - this.navClosing);
+  }
+
+  /** A label you can tap: right of its point if there's room, else left, nudged down clear of labels already placed. */
+  private tapLabel(text: string, x: number, y: number, href: string, color: Rgb, alpha: number) {
     const { ctx } = this;
     ctx.font = `11px ${this.family}`;
     const tw = ctx.measureText(text).width;
     const right = x + 14 + tw < this.w - 12;
-    const lx = right ? x + 14 : x - 14 - tw;
+    const lx = clamp(right ? x + 14 : x - 14 - tw, 8, this.w - tw - 8);
+    const clash = (ly: number) => this.labelBoxes.some((b) => lx - 6 < b.x + b.w && lx + tw + 6 > b.x && ly - 9 < b.y + b.h && ly + 21 > b.y);
+    for (let tries = 0; tries < 4 && clash(y); tries++) y += 32;
+    this.labelBoxes.push({ x: lx - 6, y: y - 9, w: tw + 12, h: 30 });
     // A dark backing, so the name reads over the arms.
-    ctx.globalAlpha = 0.7 * this.sceneAlpha;
+    ctx.globalAlpha = 0.7 * this.sceneAlpha * alpha;
     ctx.fillStyle = css(DEEP_BG);
     ctx.fillRect(lx - 6, y - 9, tw + 12, 30);
     ctx.textAlign = "left";
-    this.glyph(text, lx, y, color, 0.95);
+    this.glyph(text, lx, y, color, 0.95 * alpha);
     ctx.font = `9px ${this.family}`;
-    this.glyph("open →", lx, y + 13, GALAXY_FAINT, 0.8);
+    this.glyph("open →", lx, y + 13, GALAXY_FAINT, 0.8 * alpha);
     ctx.textAlign = "center";
-    this.hits.push({ x: Math.min(x, lx) - 10, y: y - 14, w: tw + 34, h: 36, href });
+    // Only tappable once it's fully there, and not while it's going away.
+    if (alpha > 0.6 && this.navClosing < 0) this.hits.push({ x: Math.min(x, lx) - 10, y: y - 14, w: tw + 34, h: 36, href });
   }
 
   /**
-   * Your projects as star systems along the arms: each a star with a slow pulsing ring and its name, launched ones
-   * bright, unannounced ones dim. Tapping one goes home and opens it.
+   * Your projects as star systems along the arms. Each lights up in turn: a point of light swells and throws out
+   * twinkling cross rays, then settles into a star with a slow pulsing ring, and only then does its name appear.
+   * Launched ones are bright, unannounced ones dim. Tapping one goes home and opens it.
    */
   private drawSystems(cx: number, cy: number, R: number) {
+    const out = this.navOut();
     projects.forEach((pr, i) => {
+      const t = this.time - this.navAt - i * GLIMMER_GAP;
+      if (t <= 0) return;
       const o = this.armOffset(R, 0.3 + i * 0.2, (i + 1) % 2);
       const x = cx + o.x, y = cy + o.y;
       const lit = pr.status === "launched";
       const col = lit ? GALAXY_ACCENT : GALAXY_FAINT;
+      const ignite = smoothstep(0, 0.25, t), settle = smoothstep(GLIMMER * 0.6, GLIMMER, t);
+      // The glimmer: rises as it ignites, gone once it settles.
+      const burst = ignite * (1 - settle);
+      if (burst > 0.02) {
+        const L = 8 + 26 * burst;
+        this.ctx.font = `10px ${this.family}`;
+        for (const [dx, dy, g, len] of [[1, 0, "-", 1], [-1, 0, "-", 1], [0, 1, "|", 0.8], [0, -1, "|", 0.8], [0.7, 0.7, "·", 0.5], [-0.7, 0.7, "·", 0.5], [0.7, -0.7, "·", 0.5], [-0.7, -0.7, "·", 0.5]] as const) {
+          for (let j = 1; j <= 4; j++) {
+            const tw = 0.55 + 0.45 * Math.sin(this.time * 28 + j * 1.7 + i * 3);
+            this.glyph(g, x + dx * L * len * (j / 4), y + dy * L * len * (j / 4), mix(col, GLARE, 0.6), burst * (1 - j / 5) * tw * out);
+          }
+        }
+      }
       const ring = 9 + 3 * Math.sin(this.time * 2.2 + i);
       this.ctx.font = `9px ${this.family}`;
       for (let k = 0; k < 12; k++) {
         const a = (k / 12) * TAU + this.time * 0.4;
-        this.glyph("·", x + Math.cos(a) * ring, y + Math.sin(a) * ring * 0.7, col, 0.6);
+        this.glyph("·", x + Math.cos(a) * ring, y + Math.sin(a) * ring * 0.7, col, 0.6 * settle * out);
       }
-      this.ctx.font = `${lit ? 15 : 12}px ${this.family}`;
-      this.glyph("✦", x, y, col, 1);
-      this.tapLabel(lit ? pr.name.toLowerCase() : "░░░░ unannounced", x, y - 2, `/projects#${pr.slug}`, col);
+      this.ctx.font = `${Math.round((lit ? 15 : 12) + 10 * burst)}px ${this.family}`;
+      this.glyph("✦", x, y, mix(col, GLARE, burst), ignite * out);
+      const named = smoothstep(GLIMMER, GLIMMER + 0.35, t) * out;
+      if (named > 0.02) this.tapLabel(lit ? pr.name.toLowerCase() : "░░░░ unannounced", x, y - 2, `/projects#${pr.slug}`, col, named);
     });
   }
 
   /** The pilot's card beside the sun once the camera has flown there; on phones it sits low on the screen instead. */
   private drawPilot(sx: number, sy: number) {
     const { ctx } = this;
-    const arrived = 1 - smoothstep(0.15, 0.5, Math.abs(this.cam.z - SUN_ZOOM));
+    const arrived = (1 - smoothstep(0.15, 0.5, Math.abs(this.cam.z - SUN_ZOOM))) * this.navOut();
     if (arrived < 0.05) return;
     const narrow = this.w < 640;
     ctx.font = `${narrow ? 11 : 12}px ${this.family}`;
@@ -1904,7 +2079,7 @@ export class SkyEngine {
       const last = i === PILOT_CARD.length - 1;
       const y = py + 19 + i * 19;
       this.glyph(line, px + 16, y, i === 0 || last ? GALAXY_ACCENT : DARK.star, (i === 0 || last ? 1 : 0.8) * arrived);
-      if (last) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 16, h: 24, href: "/about" });
+      if (last && this.navClosing < 0) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 16, h: 24, href: "/about" });
     });
     ctx.textAlign = "center";
   }
@@ -2180,10 +2355,7 @@ export class SkyEngine {
     const g = this.grabs.get(e.pointerId);
     this.grabs.delete(e.pointerId);
     // A tap on empty sky in the galaxy puts away whatever the nav was showing.
-    if (g && this.galaxyNav && Math.hypot(g.x - g.sx, g.y - g.sy) < 8) {
-      this.galaxyNav = null;
-      this.camAim = null;
-    }
+    if (g && this.galaxyNav && Math.hypot(g.x - g.sx, g.y - g.sy) < 8) this.closeNav();
     if (e.pointerId !== this.charging.id) return;
     // A long press that gave up isn't a click on the sky either.
     if (performance.now() - this.charging.start > 500) this.swallowUntil = performance.now() + 400;
