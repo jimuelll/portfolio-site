@@ -213,13 +213,13 @@ button { font: inherit; color: inherit; }
 /* ── the cosmos (hold the toggle) ────────────────── */
 /* The voyage and the vista float over every page, under the nav (sky/cosmos.ts), fading in and out. */
 .cosmos-canvas {
-  position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 29;
+  position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 29;
   opacity: 0; transition: opacity 1s ease;
   touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none;
 }
 .cosmos-canvas.on { opacity: 1; }
 /* The solar system's picture, under the Cosmos canvas, which keeps the writing and the pointer. It fades in by itself. */
-.system-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 28; pointer-events: none; transition: opacity 1s ease; }
+.system-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 28; pointer-events: none; transition: opacity 1s ease; }
 .system-canvas.out { opacity: 0; }
 /* Liftoff: the page drops away below, slowly and then fast, as the ground does. Landing, it rises back. */
 .home-main, .page-main, .page-footer, .plate, .sky-stats { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }

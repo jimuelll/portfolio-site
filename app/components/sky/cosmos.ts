@@ -308,8 +308,9 @@ export class Cosmos {
 
   private resize = () => {
     this.ratio = Math.min(window.devicePixelRatio || 1, 2);
-    this.w = window.innerWidth;
-    this.h = window.innerHeight;
+    this.w = this.canvas.clientWidth || window.innerWidth;
+    // What the canvas really covers: on phones the window and the viewport units can disagree about the address bar.
+    this.h = this.canvas.clientHeight || window.innerHeight;
     this.canvas.width = Math.round(this.w * this.ratio);
     this.canvas.height = Math.round(this.h * this.ratio);
     this.system?.resize(this.w, this.h);
