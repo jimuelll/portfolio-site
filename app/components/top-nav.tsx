@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
 import { Cosmos, type Stage } from "./sky/cosmos";
+import { markSecret } from "./sky/secrets";
 import { loadSystem } from "./sky/system/load";
 
 const LINKS = [
@@ -116,6 +117,7 @@ export function TopNav() {
   const onHyperdrive = useEffectEvent(() => {
     const root = document.documentElement;
     if (cosmos || root.dataset.theme === "deep") return;
+    markSecret("milkyway");
     // Where to come back to (kept on the page, so it survives navigation).
     root.dataset.galaxyHome = readTheme(root.dataset.theme);
     apply("deep");
@@ -276,6 +278,7 @@ export function TopNav() {
       presses.current = [];
       lockUntil.current = now + UNLOCK_LOCK;
       apply("twilight");
+      markSecret("earth");
       showNote("✦ earth unlocked · press ⊕ to return");
       return;
     }
@@ -286,6 +289,7 @@ export function TopNav() {
   function liftoff() {
     const root = document.documentElement;
     cosmos = new Cosmos("voyage");
+    markSecret("voyage");
     fadeColours();
     root.classList.add("cosmos");
     // Once the page is out of sight, the sky behind the cosmos can rest.
@@ -298,7 +302,10 @@ export function TopNav() {
 
   /** Five seconds: out of warp, in front of the solar system. */
   function arrive() {
-    cosmos?.arrive((solarSystem) => showNote(solarSystem ? "✦ arrival · tap a world to land · ✧ to go home" : "✦ arrival · tap ✧ to land"));
+    cosmos?.arrive((solarSystem) => {
+      markSecret("vista");
+      showNote(solarSystem ? "✦ arrival · tap a world to land · ✧ to go home" : "✦ arrival · tap ✧ to land");
+    });
     setStage("vista");
     buzz([12, 60, 12]);
   }

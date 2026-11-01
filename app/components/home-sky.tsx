@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { coreStack } from "../lib/portfolio";
 import { SkyCanvas, type SkyStats } from "./sky/sky-canvas";
 import { CvReceiver } from "./cv-receiver";
+import { SecretCount } from "./secret-count";
 import { Socials } from "./socials";
 import { TopNav } from "./top-nav";
 
@@ -90,6 +91,8 @@ export function HomeSky() {
               )}
             </>
           )}
+          {/* Desktop: with the sky's other numbers. Phones keep it beside the name. */}
+          <SecretCount className="count-wide" />
         </div>
       )}
       {/* Phones only: corner marks framing the disc like a figure plate (placed from --hero-x/y/r). */}
@@ -102,6 +105,7 @@ export function HomeSky() {
             <br />
             <em>Untalan</em>
           </h1>
+          <SecretCount className="count-narrow" />
           <p className="hero-role">
             full-stack developer · seeking a software internship
           </p>

@@ -331,15 +331,22 @@ button { font: inherit; color: inherit; }
   .home-main > .actions { margin-top: -16px; }
 }
 @media (max-width: 1023px) {
-  /* Phones and tablets: an editorial cover. A folio rule (the sky stats) under the nav, the whole disc framed
-     as a figure plate with the quote running up its side, an oversized name overlapping the plate's foot,
-     a serif lede, a spec sheet, and the links and receiver on one closing row. Scrolls if it has to. */
+  /* Phones and tablets: an editorial cover, then the details. The first screen is a folio rule (the sky stats) under
+     the nav, the whole disc framed as a figure plate with the quote running up its side, an oversized name overlapping
+     the plate's foot, what you do, and the links and receiver closing the screen. The rule of the next section peeks
+     above the fold; past it come a serif lede and a spec sheet. */
   .home { height: auto; min-height: 100dvh; overflow: visible; }
   .home-main {
+    --cover-top: calc(var(--hero-y, 240px) + var(--hero-r, 125px) * 0.82);
+    --name-size: clamp(54px, 18vw, 104px);
+    --name-height: calc(var(--name-size) * 0.88 * 2);
     height: auto; justify-content: flex-start; gap: 0;
-    padding-top: calc(var(--hero-y, 240px) + var(--hero-r, 125px) * 0.82); padding-bottom: 40px;
+    padding-top: var(--cover-top); padding-bottom: 64px;
   }
   .home-main > * { width: auto; max-width: 34rem; }
+  .home-main > .hero { order: 1; }
+  .home-main > .actions { order: 2; }
+  .home-main > .intro { order: 3; }
 
   .home .sky-stats {
     top: 66px; left: var(--gutter); right: var(--gutter);
@@ -377,25 +384,29 @@ button { font: inherit; color: inherit; }
   /* A small plate leaves no room for the whole caption, and it would run up into the folio line. */
   @media (max-height: 660px), (max-width: 360px) { .quote::before { content: none; } }
 
-  .hero { display: block; }
-  .hero-name { font-family: var(--serif); font-weight: 400; font-size: clamp(54px, 18vw, 104px); line-height: 0.88; letter-spacing: -0.02em; }
+  .hero { display: block; position: relative; }
+  .hero-name { font-family: var(--serif); font-weight: 400; font-size: var(--name-size); line-height: 0.88; letter-spacing: -0.02em; }
   .hero-name em { font-style: italic; color: var(--accent); }
-  .hero-role { display: none; }
+  .hero-role { margin-top: 14px; font-size: 11px; line-height: 1.5; letter-spacing: 0.08em; text-transform: uppercase; text-wrap: balance; color: var(--muted); }
+  /* In the empty space after "Untalan", which is shorter than "Jimuel Jean" on every width. */
+  .hero .secret-count { display: block; position: absolute; right: 0; top: calc(var(--name-height) - 1.9em); }
 
-  .intro { margin-top: 26px; gap: 0; font-size: 14px; }
+  .intro { margin-top: 24px; padding-top: 40px; border-top: 1px solid var(--line); gap: 0; font-size: 14px; }
   .core-stack { display: none; }
   .home-info { display: block; font-family: var(--serif); font-size: clamp(22px, 6.2vw, 30px); line-height: 1.2; }
   .spec {
     display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0 18px;
-    margin-top: 26px; font-size: 12px; line-height: 1.5;
+    margin-top: 40px; font-size: 12px; line-height: 1.5;
   }
-  .spec dt, .spec dd { padding: 8px 0; border-top: 1px solid var(--line); }
-  .spec dt { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); padding-top: 10px; }
+  .spec dt, .spec dd { padding: 12px 0; border-top: 1px solid var(--line); }
+  .spec dt { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); padding-top: 14px; }
   .spec dd { color: var(--muted); }
 
   .actions {
     display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    margin-top: 0; padding-top: 18px; border-top: 1px solid var(--line);
+    /* Down to the foot of the first screen, leaving the peek. A short phone just stacks, and scrolls. */
+    margin-top: max(28px, calc(100svh - var(--cover-top) - var(--name-height) - 47px - 63px - 44px));
+    padding-top: 18px; border-top: 1px solid var(--line);
   }
   .actions .socials { font-size: 12px; }
   .actions .cv-receiver { position: static; translate: none; padding: 8px 12px; font-size: 11px; }
@@ -444,6 +455,11 @@ button { font: inherit; color: inherit; }
 }
 .sky-stats > div { opacity: 0.35; }
 .sky-stats .flash { animation: flash 0.7s ease-out both; }
+/* How many secrets you've found: in the readout on desktop, after the name on phones. */
+.count-narrow { display: none; }
+.hero .secret-count { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; color: var(--muted); animation: flash-ink 0.7s ease-out both; }
+.secret-count.all, .sky-stats > .secret-count.all { color: var(--accent); opacity: 0.9; animation: none; }
+@media (max-width: 1023px) { .count-wide { display: none; } }
 .sky-stats .hint { color: var(--accent); opacity: 0.8; animation: drift 3s ease-in-out infinite; }
 @keyframes flash { from { opacity: 1; } to { opacity: 0.35; } }
 @keyframes flash-ink { from { color: var(--fg); } }

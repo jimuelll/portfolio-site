@@ -558,9 +558,10 @@ export class SkyEngine {
       // the quote can run up its left side, with the name overlapping its foot. Sized from the window, not the
       // canvas: here the canvas grows with the page, which this size helps set.
       const vh = window.innerHeight;
-      p.r = Math.min(w * 0.34, vh * 0.19);
+      // Wide enough that its plate (r + 18px) ends on the right gutter, and low enough to clear the folio line.
+      p.r = Math.min(w * 0.31, vh * 0.19);
       p.x = w * 0.58;
-      p.y = 116 + p.r;
+      p.y = Math.max(128, vh * 0.2) + p.r;
     }
     // The home page places its CV receiver from these, so it sits just under the disc on any screen.
     if (this.variant === "full") {
