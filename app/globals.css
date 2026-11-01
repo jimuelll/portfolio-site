@@ -44,11 +44,11 @@
   color-scheme: light;
   --bg: #f3efe4;
   --fg: #1c2840;
-  /* The day's red, a shade deeper than the sun on the canvas so small accent labels hold 4.5:1 on the paper. */
-  --accent: #b84424;
+  /* The day's red, deeper than the sun on the canvas so small accent labels hold 4.5:1 where the paper tones at its edges. */
+  --accent: #a63a1b;
   /* Ink on paper loses contrast faster as it thins than light on dark does, so its secondary inks stay stronger. */
   --muted-k: 76%;
-  --faint-k: 66%;
+  --faint-k: 70%;
 }
 /* The galaxy: a hidden fourth theme, reached by holding the moon, sun or Earth for five seconds (sky/engine.ts).
    The page steps aside (only the nav and the sky's readout stay) and the sky takes drags, pinches and scrolls. */
@@ -340,15 +340,17 @@ button { font: inherit; color: inherit; }
   }
   /* The quote as the plate's caption, set vertically up its left edge. */
   .home-main > .quote {
-    position: absolute; left: var(--gutter); top: calc(var(--hero-y) - var(--hero-r) - 18px);
-    height: calc(var(--hero-r) * 2 + 36px);
+    position: absolute; left: var(--gutter); top: calc(var(--hero-y) - var(--hero-r) - 12px);
+    height: calc(var(--hero-r) * 2 + 30px);
     writing-mode: vertical-rl; rotate: 180deg; text-align: right; white-space: nowrap;
     font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
     /* Ends just above the name, which overlaps the plate's foot. */
-    height: calc(var(--hero-r) * 1.82 + 8px);
+    height: calc(var(--hero-r) * 1.82 + 2px);
   }
   .quote::before { content: "fig. 1 — "; color: var(--accent); }
   .quote br, .quote .caret { display: none; }
+  /* A small plate leaves no room for the whole caption, and it would run up into the folio line. */
+  @media (max-height: 660px), (max-width: 360px) { .quote::before { content: none; } }
 
   .hero { display: block; }
   .hero-name { font-family: var(--serif); font-weight: 400; font-size: clamp(54px, 18vw, 104px); line-height: 0.88; letter-spacing: -0.02em; }

@@ -6,8 +6,10 @@
  * like light around a gravitational lens. Clicking empty sky launches a comet that falls under the moon's
  * gravity, so it orbits, slingshots away, or crashes. Now and then a shooting star crosses the sky.
  *
- * Day (light theme): a sun of the same size in the same place, with a boiling surface, sunspots that turn with
- * it, and a flickering corona. Dust motes drift and glint. Clicking erupts a solar flare toward the cursor.
+ * Day (light theme): a sun of the same size in the same place, printed like an old almanac plate: an inked disc
+ * with a boiling surface and sunspots that turn with it, straight and wavy rays, and ruled rings round it. Dust
+ * motes drift and glint. Clicking erupts a flare that reaches the cursor, then bursts with a shockwave. The inner
+ * pages show a corner of the same plate.
  *
  * Switching theme is an eclipse. Going to night, the moon slides across the sun and the sky darkens as it
  * covers it; at totality the corona flares out and the stars come in. Going to day, the moon goes dark, the
@@ -66,13 +68,20 @@ export const DELIVER_SECONDS = 1.6;
 const DELIVER_AFTERGLOW = 0.8;
 /** How far round the cursor the day's heat shimmer reaches. */
 const SHIMMER_R = 150;
-const MAX_FLARES = 6;
+const MAX_FLARES = 4;
 const FLARE_GROW = 0.45;
-const FLARE_LIFE = 1.7;
+const FLARE_LIFE = 2.6;
+/** How long a flare holds before it fades, and how long the shockwave off its crown takes to spread and go. */
+const FLARE_HOLD = 1.5;
+const SHOCK_LIFE = 0.9;
+/** Flares are big events, so they get bigger glyphs than the fine surface of the sun. */
+const FLARE_FONT = 12;
+/** Enough to fill a screen with sparks when clicks are mashed, and no more. */
+const MAX_SPARKS = 180;
 /** The sun turns once in about two minutes, carrying its spots round. */
 const SUN_SPIN = TAU / 130;
 const PHASE_PERIOD = 150;
-const SPOTS = 3;
+const SPOTS = 5;
 /** The zoom between Earth and the moon or sun. */
 const ZOOM_SECONDS = 1.8;
 const TWILIGHT_BG: Rgb = [14, 22, 46];
@@ -179,6 +188,10 @@ const MOON_DUSK: Rgb = [92, 122, 186];
 const SUN_LIMB: Rgb = [150, 44, 34];
 const SUN_MID: Rgb = [206, 92, 40];
 const SUN_CORE: Rgb = [222, 150, 40];
+/** The same sun as printing ink, for the day sky at rest. Ink only reads on paper when it's dark. */
+const INK_LIMB: Rgb = [108, 26, 20];
+const INK_MID: Rgb = [176, 54, 22];
+const INK_CORE: Rgb = [196, 104, 16];
 const EARTH_SEA: Rgb = [84, 156, 228];
 const EARTH_DEEP: Rgb = [36, 78, 160];
 const EARTH_GREEN: Rgb = [96, 170, 98];
@@ -198,7 +211,7 @@ const LIGHT: Palette = {
   cool: [38, 86, 140],
   bright: [214, 120, 52],
   deep: [74, 36, 30],
-  orbit: [150, 128, 104],
+  orbit: [108, 84, 62],
   comet: [176, 58, 30],
   ink: true,
   alpha: 0.92,
@@ -251,8 +264,15 @@ interface Flash { x: number; y: number; age: number }
 interface Delivery { scene: Scene; start: number; x: number; y: number; bend: number }
 interface Meteor { x: number; y: number; vx: number; vy: number; age: number; life: number }
 /** A looping prominence from two feet on the sun's surface out toward where the click landed. */
-interface Flare { foot: number; reach: number; age: number; struck: boolean; seed: number }
+/** A curl of plasma peeling off a flare: where along the loop it leaves, which way it bends, and how far it gets. */
+interface Tendril { at: number; side: number; curl: number; len: number; ray?: number }
+/**
+ * No two flares alike: how far apart its feet are (a jet's nearly touch), how lopsided its arch is, how much its path
+ * wanders and churns, how torn it is, how thick, and what peels off it.
+ */
+interface Flare { foot: number; reach: number; age: number; struck: boolean; seed: number; spreadA: number; spreadB: number; lean: number; bulge: number; wander: number; freq: number; churn: number; torn: number; thick: number; tendrils: Tendril[] }
 interface Spark { x: number; y: number; vx: number; vy: number; age: number; life: number; glyph: string }
+interface Shock { x: number; y: number; age: number; reach: number; seed: number }
 /** A crater on the moon: centre as a unit vector on the sphere, and angular radius. */
 interface Crater { c: Vec; r: number }
 /** A sunspot: where it sits on the turning surface, how big, and when it formed and fades. */
@@ -286,6 +306,9 @@ export class SkyEngine {
   private fade = 1;
   private flares: Flare[] = [];
   private sparks: Spark[] = [];
+  private shocks: Shock[] = [];
+  /** How far the day sky has settled into its printed look (1) from the eclipse's softer one (0). */
+  private inked = 1;
   private sunFlash = 0;
   private flared = 0;
   private started = false;
@@ -698,6 +721,9 @@ export class SkyEngine {
     if (this.spots.length < SPOTS && Math.random() < dt / 6) this.spots.push(this.makeSpot(this.time));
 
     this.sunFlash = Math.max(0, this.sunFlash - dt * 1.4);
+    // Eases rather than switches, so the disc doesn't jump in weight as an eclipse begins or ends.
+    this.inked += ((this.turn ? 0 : 1) - this.inked) * Math.min(1, dt * 4);
+    for (let i = this.shocks.length - 1; i >= 0; i--) if ((this.shocks[i].age += dt) > SHOCK_LIFE) this.shocks.splice(i, 1);
     for (let i = this.flares.length - 1; i >= 0; i--) {
       const f = this.flares[i];
       f.age += dt;
@@ -869,7 +895,9 @@ export class SkyEngine {
     } else {
       if (full) this.drawDaySky(1);
       this.use(LIGHT, 1);
+      if (!hero) this.drawPlateCorner();
       this.drawStars("day");
+      if (full) this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked);
       if (full) this.drawSolarWind();
       if (hero) {
         this.drawSun(null, 1);
@@ -1184,7 +1212,7 @@ export class SkyEngine {
       const f = `${size}px ${this.family}`;
       if (f !== font) { ctx.font = f; font = f; }
       const color = day ? (s.tint === 2 ? pal.cool : pal.orbit) : s.tint === 1 ? pal.warm : s.tint === 2 ? pal.cool : pal.star;
-      const base = (0.18 + s.z * 0.62) * (quiet ? 0.55 : 1) * (day ? 0.6 : 1);
+      const base = (0.18 + s.z * 0.62) * (quiet ? 0.55 : 1) * (day ? 0.85 : 1);
       if (this.trail > 0.01 && this.variant !== "emblem") {
         // A long exposure: each star has wheeled a little way round the pole (the toggle being held), and the
         // arc it swept stays on the plate, longer the further out it is.
@@ -1382,16 +1410,17 @@ export class SkyEngine {
     const spin = this.sunSpin();
     const cs = Math.cos(spin), sn = Math.sin(spin);
     const spots = this.spots.map((s) => ({ c: this.spotCentre(s), size: s.size, k: this.spotStrength(s) })).filter((s) => s.k > 0.02 && s.c[2] > -0.2);
-    // By day the sun is drawn bolder: a soft warm body under the glyphs (gold core, vermilion limb), stronger
-    // glyphs, longer rays. Kept light so the glyphs stay the texture. The eclipse keeps its original look.
-    const bold = !this.turn;
-    if (bold) {
+    // By day the sun is printed: a solid warm body (gold core, vermilion limb) with dark ink over it, so it holds its
+    // own against the paper. The body stays light enough for the name to read where it overlaps on phones. The
+    // eclipse keeps its original, softer look.
+    const ink = this.inked;
+    if (ink > 0.01) {
       const ctx = this.ctx;
       const body = ctx.createRadialGradient(pl.x - r * 0.25, pl.y - r * 0.25, r * 0.1, pl.x, pl.y, r);
-      body.addColorStop(0, "rgba(252, 204, 96, 0.34)");
-      body.addColorStop(0.6, "rgba(240, 146, 58, 0.24)");
-      body.addColorStop(1, "rgba(206, 78, 40, 0.18)");
-      ctx.globalAlpha = this.sceneAlpha * this.fade;
+      body.addColorStop(0, "rgba(255, 214, 110, 0.96)");
+      body.addColorStop(0.6, "rgba(244, 150, 58, 0.94)");
+      body.addColorStop(1, "rgba(206, 74, 36, 0.92)");
+      ctx.globalAlpha = this.sceneAlpha * this.fade * ink;
       ctx.fillStyle = body;
       ctx.beginPath();
       ctx.arc(pl.x, pl.y, r, 0, TAU);
@@ -1421,13 +1450,16 @@ export class SkyEngine {
         const bt = this.boil;
         const gran = noise(sx * 8 + bt * 0.35, ny * 8 + sz * 3 - bt * 0.25, 5) * 0.6 + noise(sx * 18 - bt * 0.5, ny * 18 + sz * 5, 6) * 0.4;
         const toward = Math.max(0, Math.cos(Math.atan2(ny, nx) - foot)) * Math.sqrt(d2);
-        const b = clamp(0.12 + 0.62 * Math.sqrt(nz) + (gran - 0.5) * 0.45 + flash * (0.12 + toward * 0.45), 0, 1);
+        // In ink the limb is drawn heavier, the way an engraver darkens the edge of a sphere; a flare lights the side it left from.
+        const depth = Math.sqrt(nz);
+        const b = clamp(0.12 + 0.62 * depth + (gran - 0.5) * 0.45 + (1 - depth) * 0.42 * ink + flash * (0.12 + ink * 0.1 + toward * (0.45 + ink * 0.3)), 0, 1);
         const g = RAMP[clamp(Math.round(b * (RAMP.length - 1)), 1, RAMP.length - 1)];
         // Gold at the core, orange through the disc, deep red at the limb; bright granules lean gold.
-        const depth = Math.sqrt(nz);
-        let col = mix(SUN_LIMB, SUN_MID, smoothstep(0, 0.55, depth));
-        col = mix(col, SUN_CORE, smoothstep(0.55, 1, depth) * 0.5 + clamp(gran - 0.6, 0, 1) * 0.5);
-        this.glyph(g, gx, gy, col, bold ? 0.55 + 0.45 * b : 0.35 + 0.55 * b);
+        const edge = smoothstep(0, 0.55, depth);
+        const hot = smoothstep(0.55, 1, depth) * 0.5 + clamp(gran - 0.6, 0, 1) * 0.5;
+        const soft = mix(mix(SUN_LIMB, SUN_MID, edge), SUN_CORE, hot);
+        const col = ink > 0.01 ? mix(soft, mix(mix(INK_LIMB, INK_MID, edge), INK_CORE, hot), ink) : soft;
+        this.glyph(g, gx, gy, col, 0.35 + 0.55 * b + ink * (0.3 - 0.1 * b));
       }
     }
     if (rays < 0.02) return;
@@ -1437,23 +1469,118 @@ export class SkyEngine {
     for (let i = 0; i < rimN; i++) {
       const a = (i / rimN) * TAU;
       const x = pl.x + Math.cos(a) * r * 1.08, y = pl.y + Math.sin(a) * r * 1.08;
-      if (!hidden(x, y)) this.glyph("·", x, y, pal.warm, 0.5 * rays);
+      if (!hidden(x, y)) this.glyph("·", x, y, ink > 0.5 ? INK_MID : pal.warm, (0.5 + 0.4 * ink) * rays);
     }
+    // The printed rays fade in as the eclipse's plain ones fade out.
+    if (ink > 0.01) this.drawSplendour(ink * rays);
+    if (ink > 0.99) return;
     const n = 28;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * TAU + t * 0.03;
       const long = i % 2 === 0;
       // Rays stretch toward a nearby cursor.
       const reachOut = 1 + this.hov * 0.9 * Math.max(0, Math.cos(a - this.hovAngle)) ** 4;
-      const len = r * (long ? (bold ? 0.55 : 0.42) : bold ? 0.28 : 0.22) * (0.6 + 0.4 * noise(i * 1.7, this.boil * 0.9, 8)) * (1 + flash * 0.7) * reachOut;
+      const len = r * (long ? 0.42 : 0.22) * (0.6 + 0.4 * noise(i * 1.7, this.boil * 0.9, 8)) * (1 + flash * 0.7) * reachOut;
       const g = lineGlyph(Math.cos(a), Math.sin(a));
       for (let q = r * 1.18; q < r * 1.18 + len; q += cw * 1.25) {
         const k = (q - r * 1.18) / len;
         const x = pl.x + Math.cos(a) * q, y = pl.y + Math.sin(a) * q;
-        // Rays run gold near the sun into the warm red of the ink further out.
-        if (!hidden(x, y)) this.glyph(g, x, y, bold ? mix(SUN_CORE, pal.warm, k) : pal.warm, (1 - k) * (bold ? 0.95 : 0.75) * rays);
+        if (!hidden(x, y)) this.glyph(g, x, y, pal.warm, (1 - k) * 0.75 * rays * (1 - ink));
       }
     }
+  }
+
+  /**
+   * The sun in splendour, as old engravings draw it: tapered straight rays turn and turn about with wavy ones. They
+   * still flicker in length, stretch toward a nearby cursor, and leap when the sun flares.
+   */
+  private drawSplendour(alpha: number) {
+    const pl = this.hero;
+    const { cw, r } = pl;
+    const n = 12;
+    const start = r * 1.16;
+    const step = cw * 1.8;
+    for (let i = 0; i < n * 2; i++) {
+      const a = (i / (n * 2)) * TAU + this.time * 0.03;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      const wavy = i % 2 === 1;
+      const reachOut = 1 + this.hov * 0.9 * Math.max(0, Math.cos(a - this.hovAngle)) ** 4;
+      const len = r * (wavy ? 0.38 : 0.68) * (0.72 + 0.28 * noise(i * 1.7, this.boil * 0.9, 8)) * (1 + this.sunFlash * 1.1) * reachOut;
+      const g = lineGlyph(dx, dy);
+      for (let q = 0; q < len; q += step) {
+        const k = q / len;
+        const x = pl.x + dx * (start + q), y = pl.y + dy * (start + q);
+        const col = mix(INK_CORE, INK_LIMB, k);
+        if (wavy) {
+          const sway = Math.sin(q * 0.16 + this.boil * 1.2 + i) * cw * 1.1;
+          this.glyph("~", x - dy * sway, y + dx * sway, col, (1 - k * 0.8) * 0.85 * alpha);
+          continue;
+        }
+        this.glyph(g, x, y, col, (1 - k * 0.7) * alpha);
+        // Two flanking strands make the root of the ray thick, and run out to leave it a point.
+        if (k < 0.34) {
+          const side = cw * 1.1 * (1 - k / 0.34);
+          this.glyph(g, x - dy * side, y + dx * side, col, 0.8 * alpha);
+          this.glyph(g, x + dy * side, y - dx * side, col, 0.8 * alpha);
+        }
+      }
+    }
+  }
+
+  /** Ruled rings round the sun, with ticks every 30°, like the scales on an almanac's plate. */
+  private drawAlmanacRings(cx: number, cy: number, r: number, alpha: number) {
+    if (alpha < 0.02) return;
+    const { w, h } = this;
+    const turn = this.time * -0.006;
+    this.ctx.font = `9px ${this.family}`;
+    const seen = (x: number, y: number) => x > -10 && y > -10 && x < w + 10 && y < h + 10;
+    for (const [ring, gap] of [[1.98, 24], [2.86, 32]]) {
+      const rad = r * ring;
+      const dots = Math.round((TAU * rad) / gap);
+      for (let i = 0; i < dots; i++) {
+        const a = (i / dots) * TAU + turn;
+        const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+        if (seen(x, y)) this.glyph("·", x, y, this.palette.orbit, 0.62 * alpha);
+      }
+    }
+    const rad = r * 1.98;
+    for (let d = 0; d < 360; d += 30) {
+      const a = (d / 360) * TAU + turn;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      if (!seen(cx + dx * rad, cy + dy * rad)) continue;
+      this.glyph(lineGlyph(dx, dy), cx + dx * (rad + 6), cy + dy * (rad + 6), INK_MID, 0.8 * alpha);
+    }
+  }
+
+  /** Inner pages: a corner of the same plate looks in from the top right, faint enough to read a page over. */
+  private drawPlateCorner() {
+    const { ctx, w, h } = this;
+    const r = Math.min(w, h) * 0.3;
+    const cx = w - r * 0.28, cy = -r * 0.28;
+    const glow = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 2.8);
+    glow.addColorStop(0, "rgba(244, 164, 78, 0.3)");
+    glow.addColorStop(1, "rgba(244, 164, 78, 0)");
+    ctx.globalAlpha = this.sceneAlpha * this.fade;
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = `10px ${this.family}`;
+    for (let i = 0; i < 40; i++) {
+      const a = (i / 40) * TAU + this.time * 0.012;
+      const dx = Math.cos(a), dy = Math.sin(a);
+      if (cx + dx * r * 1.1 < -10 || cy + dy * r * 1.1 > h + 10 || cy + dy * r * 1.8 < 0) continue;
+      const wavy = i % 2 === 1;
+      const len = r * (wavy ? 0.34 : 0.62);
+      const g = wavy ? "~" : lineGlyph(dx, dy);
+      for (let q = 0; q < len; q += 15) {
+        this.glyph(g, cx + dx * (r * 1.12 + q), cy + dy * (r * 1.12 + q), INK_MID, (1 - q / len) * 0.42);
+      }
+    }
+    // Only the quarter that's on the page.
+    for (let i = 0; i <= 12; i++) {
+      const a = Math.PI / 2 + (i / 12) * (Math.PI / 2);
+      this.glyph("·", cx + Math.cos(a) * r, cy + Math.sin(a) * r, INK_MID, 0.5);
+    }
+    this.drawAlmanacRings(cx, cy, r, 0.5);
   }
 
   /** The corona at totality: pale streamers all round the hidden sun. */
@@ -1500,21 +1627,23 @@ export class SkyEngine {
     const { ctx, w, h } = this;
     const pl = this.hero;
     ctx.globalAlpha = alpha;
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, "rgba(206, 222, 232, 0.55)");
-    sky.addColorStop(0.55, "rgba(206, 222, 232, 0)");
-    ctx.fillStyle = sky;
+    // The paper tones toward its edges, as an old page does. Text sits on this too, so it stays slight (globals.css
+    // sets the day's inks to hold their contrast at this depth).
+    const edges = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.hypot(w, h) * 0.56);
+    edges.addColorStop(0, "rgba(150, 104, 58, 0)");
+    edges.addColorStop(1, "rgba(150, 104, 58, 0.08)");
+    ctx.fillStyle = edges;
     ctx.fillRect(0, 0, w, h);
     const glow = ctx.createRadialGradient(pl.x, pl.y, pl.r * 0.6, pl.x, pl.y, pl.r * 3.4);
-    glow.addColorStop(0, "rgba(248, 196, 104, 0.42)");
-    glow.addColorStop(0.35, "rgba(246, 186, 96, 0.16)");
+    glow.addColorStop(0, "rgba(244, 164, 78, 0.55)");
+    glow.addColorStop(0.35, "rgba(244, 170, 88, 0.2)");
     glow.addColorStop(1, "rgba(246, 186, 96, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
   }
 
-  /** The sun's glow: scattered warm dots that thin with distance and shimmer like heat haze. */
+  /** The sun's glow: scattered warm marks that thin with distance and shimmer like heat haze; in ink, radial hatching. */
   private drawSunGlow(occ: { x: number; y: number } | null, rays: number) {
     const pl = this.hero;
     const { cw, ch, r } = pl;
@@ -1529,9 +1658,11 @@ export class SkyEngine {
         if (d < 1.03 || d > reach / r) continue;
         if (occ && Math.hypot(gx - occ.x, gy - occ.y) < r) continue;
         const fall = Math.exp(-(d - 1) * 3.4);
-        if (hash(ix, iy, 12) > 0.2 + fall * 0.55) continue;
-        const g = fall > 0.6 ? ":" : fall > 0.3 ? "·" : ".";
-        this.glyph(g, gx, gy, mix(SUN_MID, SUN_CORE, fall), (this.turn ? 0.34 : 0.5) * fall * rays * (1 + this.hov * 0.5));
+        if (hash(ix, iy, 12) > 0.14 + fall * 0.5) continue;
+        const hatched = this.inked > 0.5;
+        const g = hatched ? (fall > 0.16 ? lineGlyph(gx - pl.x, gy - pl.y) : "·") : fall > 0.6 ? ":" : fall > 0.3 ? "·" : ".";
+        const col = hatched ? mix(INK_LIMB, INK_MID, fall) : mix(SUN_MID, SUN_CORE, fall);
+        this.glyph(g, gx, gy, col, (0.34 + 0.56 * this.inked) * fall * rays * (1 + this.hov * 0.5));
       }
     }
   }
@@ -1594,7 +1725,7 @@ export class SkyEngine {
       const ang = a0 + ph * 0.75;
       const x = pl.x + Math.cos(ang) * rad, y = pl.y + Math.sin(ang) * rad;
       const g = i % 3 === 0 ? lineGlyph(Math.cos(ang + 0.3), Math.sin(ang + 0.3)) : i % 3 === 1 ? "·" : ".";
-      this.glyph(g, x, y, mix(SUN_MID, this.palette.orbit, ph), 0.42 * Math.sin(Math.PI * ph) ** 1.2);
+      this.glyph(g, x, y, mix(INK_MID, this.palette.orbit, ph), 0.68 * Math.sin(Math.PI * ph) ** 1.2);
     }
   }
 
@@ -2280,75 +2411,175 @@ export class SkyEngine {
   private flarePoint(f: Flare, t: number, lift: number) {
     const pl = this.hero;
     const rs = pl.r;
-    const spread = 0.26;
-    const a1 = f.foot - spread, a2 = f.foot + spread;
+    const a1 = f.foot - f.spreadA, a2 = f.foot + f.spreadB;
     const x1 = pl.x + Math.cos(a1) * rs, y1 = pl.y + Math.sin(a1) * rs;
     const x2 = pl.x + Math.cos(a2) * rs, y2 = pl.y + Math.sin(a2) * rs;
     const dx = Math.cos(f.foot), dy = Math.sin(f.foot);
     const nx = -dy, ny = dx;
     const L = (f.reach - rs) * lift;
-    // The loop bulges wider toward its top, like a real prominence.
-    const bw = L * 0.42;
-    const c1x = x1 + dx * L * 1.3 - nx * bw, c1y = y1 + dy * L * 1.3 - ny * bw;
-    const c2x = x2 + dx * L * 1.3 + nx * bw, c2y = y2 + dy * L * 1.3 + ny * bw;
+    // The loop bulges wider toward its top, like a real prominence; a long reach stays a tight arch, not a balloon.
+    const bw = Math.min(L * f.bulge, rs * f.bulge * 1.3);
+    // One leg climbs higher than the other, by as much as the other gives up, so the crown still lands on the click.
+    const c1x = x1 + dx * L * (1.3 + f.lean) - nx * bw, c1y = y1 + dy * L * (1.3 + f.lean) - ny * bw;
+    const c2x = x2 + dx * L * (1.3 - f.lean) + nx * bw, c2y = y2 + dy * L * (1.3 - f.lean) + ny * bw;
     const u = 1 - t;
     const x = u * u * u * x1 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x2;
     const y = u * u * u * y1 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y2;
     return { x, y };
   }
 
-  /** The moment a flare reaches full height: it throws sparks off its crown, and nearby dust scatters. */
+  /** A point on the flare as it's drawn: its path wanders and churns, pinned only at the feet and the crown. */
+  private flareAt(f: Flare, t: number, lift: number) {
+    const p = this.flarePoint(f, t, lift);
+    const q = this.flarePoint(f, Math.min(1, t + 0.01), lift);
+    const px = -(q.y - p.y), py = q.x - p.x;
+    const pl = Math.hypot(px, py) || 1;
+    const size = Math.min(f.reach - this.hero.r, this.hero.r * 1.6);
+    const big = noise(t * f.freq + f.seed % 97, this.time * f.churn, 71) - 0.5;
+    const fine = noise(t * f.freq * 3.7, this.time * f.churn * 2.3 + f.seed % 89, 72) - 0.5;
+    const off = (big + fine * 0.35) * 2 * f.wander * size * Math.abs(Math.sin(TAU * t));
+    return { x: p.x + (px / pl) * off, y: p.y + (py / pl) * off };
+  }
+
+  /**
+   * The moment a flare reaches full height it bursts: a shockwave runs out from its crown, sparks scatter, and heavy
+   * clumps of the sun carry on past the click, slowing as they go.
+   */
   private strike(f: Flare) {
     f.struck = true;
     const crown = this.flarePoint(f, 0.5, 1);
-    for (let i = 0; i < 18; i++) {
-      const a = f.foot + rand(-0.9, 0.9);
-      const v = rand(60, 280);
-      this.sparks.push({ x: crown.x, y: crown.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, life: rand(0.6, 1.4), glyph: "*+.'"[i % 4] });
+    this.shocks.push({ x: crown.x, y: crown.y, age: 0, reach: this.hero.r * rand(0.9, 1.9), seed: f.seed % 101 });
+    if (this.shocks.length > MAX_FLARES) this.shocks.shift();
+    this.sunFlash = Math.max(this.sunFlash, 0.8);
+    // Every burst has its own lean and its own mix: a wide scatter one time, a tight spray thrown off to one side the next.
+    const fan = rand(0.7, 2.2);
+    const lean = rand(-0.7, 0.7);
+    const sparks = Math.round(rand(20, 44));
+    for (let i = 0; i < sparks; i++) {
+      const a = f.foot + lean + rand(-fan, fan);
+      const v = rand(40, 200) * rand(1, 2.2);
+      this.sparks.push({ x: crown.x, y: crown.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, life: rand(0.5, 1.9), glyph: "*+.'"[i % 4] });
     }
+    const clumps = Math.round(rand(2, 10));
+    for (let i = 0; i < clumps; i++) {
+      const a = f.foot + lean * rand(0.4, 1.2) + rand(-0.5, 0.5);
+      const v = rand(180, 560);
+      this.sparks.push({ x: crown.x, y: crown.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, life: rand(1.1, 2.3), glyph: "@%*"[i % 3] });
+    }
+    if (this.sparks.length > MAX_SPARKS) this.sparks.splice(0, this.sparks.length - MAX_SPARKS);
   }
 
   private drawFlares() {
     const pal = this.palette;
     const pl = this.hero;
     const tick = Math.floor(this.time * 14);
-    this.ctx.font = `${pl.font}px ${this.family}`;
+    this.ctx.font = `${FLARE_FONT}px ${this.family}`;
     for (const f of this.flares) {
       const grow = ease(clamp(f.age / FLARE_GROW, 0, 1));
       // After it peaks the loop keeps lifting a little as it fades, as if breaking away from the sun.
       const lift = 1 + Math.max(0, f.age - FLARE_GROW) * 0.14;
-      const fade = f.age < 1 ? 1 : 1 - (f.age - 1) / (FLARE_LIFE - 1);
+      const fade = f.age < FLARE_HOLD ? 1 : 1 - (f.age - FLARE_HOLD) / (FLARE_LIFE - FLARE_HOLD);
       const crown = this.flarePoint(f, 0.5, lift);
       const len = Math.hypot(crown.x - pl.x, crown.y - pl.y) * 2.6;
-      const n = Math.max(12, Math.round(len / pl.cw));
+      // Solid even at full stretch, with a limit so mashed clicks can't draw thousands of glyphs.
+      const n = clamp(Math.round(len / (FLARE_FONT * 0.62)), 18, 120);
       for (let i = 0; i <= n; i++) {
         const t = i / n;
         // Both legs rise from the surface together and meet at the crown.
         if (t > grow / 2 && t < 1 - grow / 2) continue;
-        const a = this.flarePoint(f, t, lift);
-        const b = this.flarePoint(f, Math.min(1, t + 0.01), lift);
+        // A torn flare has gaps in it that open and close as it churns.
+        if (f.torn > 0 && noise(t * 11 + f.seed % 83, this.time * 0.7, 73) < f.torn) continue;
+        const a = this.flareAt(f, t, lift);
+        const b = this.flareAt(f, Math.min(1, t + 0.01), lift);
         const heat = 1 - Math.abs(t - 0.5) * 2;
         const roll = hash(i, tick, f.seed);
-        const g = roll < 0.25 ? "~" : roll < 0.4 ? "*" : lineGlyph(b.x - a.x, b.y - a.y);
+        // The crown is the thick of it: heavier marks as the loop climbs.
+        const g = roll < 0.3 * heat ? "#" : roll < 0.5 ? "*" : roll < 0.62 ? "~" : lineGlyph(b.x - a.x, b.y - a.y);
         const nx = -(b.y - a.y), ny = b.x - a.x;
         const nl = Math.hypot(nx, ny) || 1;
-        this.glyph(g, a.x, a.y, mix(pal.warm, pal.bright, heat * 0.6), (0.95 - heat * 0.2) * fade);
-        // A thinner inner strand gives the loop some body.
-        if (i % 2 === 0) this.glyph(roll > 0.5 ? "." : "'", a.x + (nx / nl) * 5, a.y + (ny / nl) * 5, pal.warm, 0.55 * fade);
+        const ox = nx / nl, oy = ny / nl;
+        this.glyph(g, a.x, a.y, mix(INK_LIMB, pal.warm, 0.35 + heat * 0.65), fade);
+        // Strands either side give the loop its body: one hot and gold, one dark. They swell toward the crown.
+        const wide = (5 + heat * 5) * f.thick * (0.7 + 0.6 * noise(t * 7, f.seed % 79, 74));
+        this.glyph(roll > 0.5 ? "*" : "~", a.x + ox * wide, a.y + oy * wide, mix(pal.warm, INK_CORE, heat), 0.9 * fade);
+        if (i % 2 === 0) this.glyph(roll > 0.5 ? "~" : "'", a.x - ox * wide, a.y - oy * wide, INK_LIMB, 0.85 * fade);
+      }
+      // Tendrils peel away once the loop has grown past where they leave it, bending as they go.
+      for (const td of f.tendrils) {
+        if (Math.abs(td.at - 0.5) * 2 < 1 - grow) continue;
+        // A spray's streamers leave the sun itself; other tendrils leave the loop.
+        let x: number, y: number, dir: number;
+        if (td.ray !== undefined) {
+          x = pl.x + Math.cos(f.foot + td.ray) * pl.r;
+          y = pl.y + Math.sin(f.foot + td.ray) * pl.r;
+          dir = f.foot + td.ray * 0.6;
+        } else {
+          ({ x, y } = this.flareAt(f, td.at, lift));
+          const next = this.flareAt(f, Math.min(1, td.at + 0.01), lift);
+          dir = Math.atan2(next.y - y, next.x - x) + (td.side * Math.PI) / 2;
+        }
+        const out = Math.min(1, f.age / (td.ray !== undefined ? FLARE_GROW : 0.9));
+        const stride = Math.max(9, td.len / 45);
+        const steps = Math.ceil((td.len * out) / stride);
+        for (let j = 0; j < steps; j++) {
+          dir += td.curl + (noise(j * 0.5 + td.len, this.time * f.churn + f.seed % 71, 75) - 0.5) * (td.ray !== undefined ? 0.34 : 0.7);
+          x += Math.cos(dir) * stride;
+          y += Math.sin(dir) * stride;
+          this.glyph(j % 3 === 2 ? "*" : lineGlyph(Math.cos(dir), Math.sin(dir)), x, y, mix(pal.warm, INK_LIMB, j / (steps + 1)), (1 - j / (steps + 1)) * 0.9 * fade);
+        }
+      }
+    }
+    for (const s of this.shocks) {
+      const k = s.age / SHOCK_LIFE;
+      const rad = s.reach * (1 - (1 - k) ** 3);
+      const dots = clamp(Math.round((TAU * rad) / 12), 10, 70);
+      const a0 = (1 - k) ** 1.1;
+      for (let i = 0; i < dots; i++) {
+        const a = (i / dots) * TAU;
+        const dx = Math.cos(a), dy = Math.sin(a);
+        // The wave front is ragged and has holes in it: no two the same, and never a neat circle.
+        const rag = noise(dx * 1.6 + s.seed, dy * 1.6, 76);
+        if (rag < 0.3) continue;
+        const front = rad * (0.62 + rag * 0.75);
+        // Marks point outward, the way the wave is going, with a thinner echo trailing inside it.
+        this.glyph(i % 4 === 0 ? "*" : lineGlyph(-dy, dx), s.x + dx * front, s.y + dy * front, mix(INK_LIMB, INK_MID, k), a0);
+        if (i % 2 === 0) this.glyph("·", s.x + dx * front * 0.82, s.y + dy * front * 0.82, INK_MID, a0 * 0.75);
       }
     }
     for (const sp of this.sparks) {
       const k = sp.age / sp.life;
-      this.glyph(sp.glyph, sp.x, sp.y, mix(pal.warm, pal.bright, k), (1 - k) * 0.9);
+      this.glyph(sp.glyph, sp.x, sp.y, mix(INK_MID, pal.warm, k), (1 - k) * 0.95);
     }
   }
 
   private launchFlare(x: number, y: number) {
     const pl = this.hero;
     const foot = Math.atan2(y - pl.y, x - pl.x);
-    // Reach out to the click: never shorter than a stub, never too far from the sun.
-    const reach = clamp(Math.hypot(x - pl.x, y - pl.y), pl.r * 1.6, pl.r * 3.2);
-    this.flares.push({ foot, reach, age: 0, struck: false, seed: Math.floor(Math.random() * 1e6) });
+    // The crown lands on the click, wherever it is; only a click right by the sun gets a minimum stub.
+    const reach = Math.max(Math.hypot(x - pl.x, y - pl.y), pl.r * 1.6);
+    // Four broad kinds, each rolled fresh: a lopsided arch, a narrow jet with its feet almost together, a torn loop,
+    // or a spray of separate streamers with no loop at all.
+    const roll = Math.random();
+    const jet = roll < 0.25, torn = !jet && roll < 0.5, spray = roll >= 0.72;
+    const spread = jet ? rand(0.03, 0.08) : rand(0.14, 0.42);
+    const tendrils: Tendril[] = [];
+    if (spray) {
+      const fan = rand(0.18, 0.75);
+      const dist = reach - pl.r;
+      for (let i = Math.round(rand(3, 7)); i > 0; i--) {
+        tendrils.push({ at: 0, side: 1, curl: rand(-0.035, 0.035), len: dist * rand(0.45, 1.1), ray: rand(-fan, fan) });
+      }
+    }
+    for (let i = spray ? 0 : Math.round(rand(jet ? 2 : 1, 5)); i > 0; i--) {
+      tendrils.push({ at: rand(0.12, 0.88), side: Math.random() < 0.5 ? -1 : 1, curl: rand(-0.28, 0.28), len: pl.r * rand(0.25, 0.9) });
+    }
+    this.flares.push({
+      foot, reach, age: 0, struck: false, seed: Math.floor(Math.random() * 1e6),
+      spreadA: spread * rand(0.6, 1.4), spreadB: spread * rand(0.6, 1.4),
+      lean: rand(-0.55, 0.55), bulge: jet ? rand(0.04, 0.12) : rand(0.18, 0.5),
+      wander: jet ? rand(0.16, 0.34) : rand(0.08, 0.26), freq: rand(1.6, 4.5), churn: rand(0.5, 1.6),
+      torn: spray ? 2 : torn ? rand(0.32, 0.46) : 0, thick: rand(0.6, 1.5), tendrils,
+    });
     if (this.flares.length > MAX_FLARES) this.flares.shift();
     this.sunFlash = 1;
     this.flared++;
