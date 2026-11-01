@@ -1,7 +1,7 @@
 /* What every place on the map needs: what a place is, and its sky and sun. */
 
 import { AdditiveBlending, BackSide, BufferGeometry, DirectionalLight, Float32BufferAttribute, Mesh, Points, ShaderMaterial, SphereGeometry, Vector3, type Scene, type WebGLRenderer } from "three";
-import type { Rgb } from "../../engine";
+import { hash, type Rgb } from "../../engine";
 import type { Lens } from "../ascii";
 
 export interface Diorama {
@@ -50,6 +50,38 @@ export function sloped(c: Rgb, height: (x: number, z: number) => number, x: numb
   const facing = height(x + 1, z) - height(x - 1, z) + (height(x, z - 1) - height(x, z + 1)) * 0.4;
   const k = 1 + Math.max(-0.55, Math.min(0.55, facing * strength));
   return [c[0] * k, c[1] * k, c[2] * k];
+}
+
+/** Which cell of a random mosaic a point falls in: its grid index, its centre, and how near the edge with the next (0 on it). */
+export function cells(x: number, z: number, size: number, seed: number) {
+  const gx = x / size, gz = z / size, ix = Math.floor(gx), iz = Math.floor(gz);
+  let first = Infinity, second = Infinity, i = 0, j = 0, cx = 0, cz = 0;
+  for (let a = ix - 1; a <= ix + 1; a++) {
+    for (let b = iz - 1; b <= iz + 1; b++) {
+      const px = a + hash(a, b, seed), pz = b + hash(a, b, seed + 1), d = Math.hypot(px - gx, pz - gz);
+      if (d < first) { second = first; first = d; i = a; j = b; cx = px; cz = pz; }
+      else if (d < second) second = d;
+    }
+  }
+  return { i, j, x: cx * size, z: cz * size, edge: second - first, near: first };
+}
+
+/** Craters filed by area, so a point on the ground only ever looks at the few that can reach it. Each is [x, z, radius]. */
+export function craterFile(craters: number[][]) {
+  const AREA = 16;
+  const key = (ix: number, iz: number) => (ix + 2048) * 4096 + iz + 2048;
+  const areas = new Map<number, number[][]>();
+  for (const crater of craters) {
+    const [cx, cz, r] = crater, reach = r * 1.5;
+    for (let ix = Math.floor((cx - reach) / AREA); ix <= Math.floor((cx + reach) / AREA); ix++) {
+      for (let iz = Math.floor((cz - reach) / AREA); iz <= Math.floor((cz + reach) / AREA); iz++) {
+        const list = areas.get(key(ix, iz));
+        if (list) list.push(crater);
+        else areas.set(key(ix, iz), [crater]);
+      }
+    }
+  }
+  return (x: number, z: number) => areas.get(key(Math.floor(x / AREA), Math.floor(z / AREA)));
 }
 
 /** A sky: three colours from the zenith down to the horizon, and a glow round the sun. */

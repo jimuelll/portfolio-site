@@ -237,7 +237,7 @@ function astronaut() {
 }
 
 /** The sky behind everything: thousands of stars, with the Milky Way a thicker band across it. */
-function stars(n: number) {
+export function stars(n: number) {
   const list: Flow[] = [];
   for (let i = 0; i < n; i++) {
     const inBand = i % 3 === 0;

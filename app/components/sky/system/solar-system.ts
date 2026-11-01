@@ -15,13 +15,18 @@ import type { Diorama, Place } from "./scenes/kit";
 import { fushimi } from "./scenes/earth";
 import { moonBase } from "./scenes/moon";
 import { galeCrater } from "./scenes/mars";
+import { prokofiev } from "./scenes/mercury";
+import { iapetus } from "./scenes/iapetus";
+import { cloudTops } from "./scenes/saturn";
+import { corona } from "./scenes/sun";
+import { navka } from "./scenes/venus";
 import { release } from "./voxels";
 
 export interface Note { text: string; at: number }
 /** Something the Cosmos canvas should write on the picture. A world's name; or the one in focus, which can be tapped. */
 export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
 
-const PLACES: Record<string, Place> = { earth: fushimi, moon: moonBase, mars: galeCrater };
+const PLACES: Record<string, Place> = { sun: corona, mercury: prokofiev, venus: navka, earth: fushimi, moon: moonBase, mars: galeCrater, saturn: cloudTops, iapetus };
 /** The dive between the map and a place. The view cuts halfway, at its coarsest. */
 const DIVE_SECONDS = 1.7;
 const COARSEST = 7;
@@ -306,11 +311,11 @@ export class SolarSystem {
       const y = f.y + f.r + 12;
       if (world === this.focus) {
         const run = () => this.choose(world);
-        tags.push({ text: world.name, x: f.x, y, sub: world.lands ? "land →" : "no landing", run });
+        tags.push({ text: world.name, x: f.x, y, sub: world.lands ? world.approach ?? "land →" : "no landing", run });
         continue;
       }
-      // The moon's name would sit on Earth's until you've come in closer.
-      if (world.id === "moon" && f.r < 7) continue;
+      // A moon's name would sit on its planet's until you've come in closer.
+      if (world.around && f.r < 7) continue;
       tags.push({ text: world.name, x: f.x, y, dim: true });
     }
     return tags;
@@ -331,7 +336,7 @@ export class SolarSystem {
       return { lines: [`${place.name} · ${place.world}`, place.coords], hint: this.w < 640 ? "drag to look ↯" : "drag to look around ↯" };
     }
     const years = this.map.years();
-    return { lines: ["sol · 8 planets · 3 places to land", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
+    return { lines: ["sol · 8 planets · 8 places to go", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
   }
 
   /** Whether "back to orbit" belongs on screen. */
