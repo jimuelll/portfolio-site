@@ -431,61 +431,43 @@ button { font: inherit; color: inherit; }
 
 .page-main.wide, .page-footer.wide { max-width: calc(60rem + var(--gutter) * 2); }
 
-/* ── about: a CV on a star chart ─────────────────── */
-/* Hierarchy: serif name and section titles carry the page; mono stays for body and small labels. */
-/* A dossier: identity, contacts and the CV pinned on the left; the record scrolls past on the right. */
-.dossier { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 64px; align-items: start; }
-.dossier-id h1 { margin-top: 26px; font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 3vw, 48px); line-height: 1.04; letter-spacing: -0.015em; }
-.dossier-id h1 em { font-style: normal; color: var(--accent); }
-.dossier-id .about-pitch { font-size: 14px; }
-/* Pinned only where it fits: wide enough for two columns and tall enough to show the whole column (~750px). */
-@media (min-width: 861px) and (min-height: 860px) {
+/* ── about: a dossier ────────────────────────────── */
+/* Centred as one block: who you are and how to reach them stay beside you, while the record reads down one column. */
+.page-main.wide.centered, .page-footer.wide.centered { max-width: calc(58rem + 48px); margin-inline: auto; padding-inline: 24px; }
+.dossier { display: grid; grid-template-columns: 13.5rem minmax(0, 1fr); gap: clamp(48px, 6vw, 88px); align-items: start; }
+/* Pinned only where the whole column fits. */
+@media (min-width: 861px) and (min-height: 720px) {
   .dossier-id { position: sticky; top: 96px; }
 }
-.dossier-body > .about-row:first-child { padding-top: 0; border-top: 0; }
-.dossier-body .about-row { grid-template-columns: 150px minmax(0, 1fr); }
-/* Too narrow for heading, body and the pinned column side by side: each heading sits over its body instead. */
-@media (max-width: 1279px) {
-  .dossier-body .about-row { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-}
-.awards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.awards li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
-.awards .redacted { font-size: 13px; }
-.kicker { display: flex; align-items: center; margin-top: 18px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; text-wrap: balance; }
-.about-pitch { margin-top: 22px; max-width: 34rem; font-size: 15px; line-height: 1.7; color: color-mix(in srgb, var(--fg) 85%, transparent); }
-.contact-line { list-style: none; padding: 0; margin: 22px 0 0; display: flex; flex-wrap: wrap; gap: 6px 0; font-size: 13px; color: var(--muted); }
-.contact-line li:not(:last-child)::after { content: "·"; margin: 0 12px; color: var(--faint); }
-.status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 50%; background: var(--accent); vertical-align: 1px; animation: beacon 2.4s ease-out infinite; }
+.dossier-id h1 { margin-top: 18px; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.08; letter-spacing: -0.015em; }
+.role-line { margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 8px; border-radius: 50%; background: var(--accent); vertical-align: 1px; animation: beacon 2.4s ease-out infinite; }
 @keyframes beacon {
   from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
   to { box-shadow: 0 0 0 8px transparent; }
 }
+/* The marker hangs in the gutter, so the labels stay in line, as in the top nav. */
+.section-nav { display: grid; justify-items: start; gap: 8px; margin-top: 28px; padding-left: 16px; font-size: 13px; }
+.section-nav a { position: relative; color: var(--muted); transition: color 0.15s; }
+.section-nav a:hover, .section-nav a[aria-current] { color: var(--fg); }
+.section-nav a[aria-current]::before { content: "✦"; position: absolute; left: -16px; color: var(--accent); }
+.contact-line { list-style: none; display: grid; gap: 4px; margin: 28px 0 0; padding: 20px 0 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 
-/* The portrait: a chart frame with corner ticks. A photo is shown as a duotone in the page's own colours. */
-.about-photo { margin: 0; width: 200px; }
-.photo-frame {
-  position: relative; aspect-ratio: 4 / 5; overflow: hidden;
-  background:
-    linear-gradient(var(--accent), var(--accent)) top left / 9px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) top left / 1px 9px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) bottom right / 9px 1px no-repeat,
-    linear-gradient(var(--accent), var(--accent)) bottom right / 1px 9px no-repeat;
-  border: 1px solid var(--line);
-}
+/* The portrait: a small round duotone in the page's own colours, or the bust drawn in glyphs until there's a photo. */
+.about-photo { margin: 0; width: 84px; }
+.photo-frame { position: relative; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; }
 /* Duotone: the photo in grey multiplies onto the highlight colour, then the shadow colour lifts the blacks.
    Night and Earth: moonlit (light on the page's dark). Day: ink on paper. */
 .duotone { --duo-hi: var(--fg); --duo-lo: var(--bg); position: absolute; inset: 1px; isolation: isolate; background: var(--duo-hi); }
 :root[data-theme="light"] .duotone { --duo-hi: var(--bg); --duo-lo: var(--fg); }
 .duotone img { object-fit: cover; filter: grayscale(1) contrast(1.1); mix-blend-mode: multiply; }
 .duotone::after { content: ""; position: absolute; inset: 0; background: var(--duo-lo); mix-blend-mode: lighten; pointer-events: none; }
-.photo-placeholder { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 12px; }
-.photo-placeholder pre { margin: 0; font-family: var(--mono); font-size: 5px; line-height: 4.6px; color: var(--muted); }
-.photo-placeholder span { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.photo-placeholder { position: absolute; inset: 0; display: grid; place-items: center; }
+.photo-placeholder pre { margin: 0; font-family: var(--mono); font-size: 3px; line-height: 2.8px; color: var(--muted); }
 
-/* Under the contact links in the dossier. */
 .cv-btn {
-  display: inline-block; margin-top: 26px;
-  padding: 9px 16px; font-size: 12px; white-space: nowrap; cursor: pointer;
+  display: inline-block; margin-top: 20px;
+  padding: 8px 14px; font-size: 12px; white-space: nowrap; cursor: pointer;
   color: var(--accent); background: color-mix(in srgb, var(--bg) 85%, transparent);
   border: 1px solid var(--accent);
   transition: background-color 0.2s, color 0.2s;
@@ -493,28 +475,50 @@ button { font: inherit; color: inherit; }
 .cv-btn:hover { background: var(--accent); color: var(--bg); }
 .cv-btn.sent { border-style: dashed; }
 
-.about-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; padding: 32px 0; border-top: 1px solid var(--line); }
-.about-row h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.15; display: flex; align-items: baseline; gap: 12px; }
-.about-row h2 span { font-family: var(--mono); font-size: 11px; color: var(--accent); }
-.about-body { display: grid; gap: 22px; font-size: 14px; line-height: 1.65; min-width: 0; }
-.about-body .muted { color: var(--muted); }
-.about-body .faint { color: var(--faint); font-size: 12px; }
+.dossier-body { display: grid; gap: 72px; min-width: 0; }
+.about-section { display: grid; gap: 24px; font-size: 14px; line-height: 1.65; scroll-margin-top: 96px; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
+.section-head h2 { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.1; letter-spacing: -0.015em; }
+.section-head p { font-size: 12px; color: var(--faint); }
+.about-section .muted { color: var(--muted); }
+.about-section .faint { color: var(--faint); font-size: 12px; }
 .label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
-.degree-title { font-family: var(--serif); font-size: 22px; line-height: 1.2; margin-bottom: 4px; }
-.capstone { padding-left: 16px; border-left: 2px solid var(--accent); }
-.capstone-title { font-size: 15px; }
+
+/* Education: stops on a rail, the way a course is plotted. */
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 28px; }
+.timeline li { position: relative; padding-left: 26px; }
+.timeline li::before { content: ""; position: absolute; left: 0; top: 6px; width: 9px; height: 9px; border: 1px solid var(--accent); border-radius: 50%; }
+.timeline li:not(:last-child)::after { content: ""; position: absolute; left: 4px; top: 20px; bottom: -24px; width: 1px; background: var(--line); }
+.timeline-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 16px; }
+.timeline-title { font-family: var(--serif); font-size: 18px; line-height: 1.25; }
+
 .tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.tags li { padding: 6px 12px; font-size: 13px; border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); border-radius: 999px; transition: border-color 0.2s, color 0.2s; }
+.tags li { padding: 5px 12px; font-size: 13px; border: 1px solid color-mix(in srgb, var(--fg) 22%, transparent); border-radius: 999px; transition: border-color 0.2s, color 0.2s; }
 .tags li:hover { border-color: var(--accent); color: var(--accent); }
 /* Everything beyond the core, one line per group: label on the left, items after it. */
-.toolkit-groups { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 6px 16px; margin: 0; font-size: 13px; color: var(--muted); }
+.toolkit-groups { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 8px 20px; margin: 0; font-size: 13px; color: var(--muted); }
 .toolkit-groups dt { margin: 0; line-height: 1.65; }
 .toolkit-groups dd { margin: 0; }
-.project-lines { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
-.project-lines li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
-.project-lines .muted { font-size: 13px; }
-.more { font-size: 12px; justify-self: start; }
-.off-hours { padding-top: 24px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
+
+.project-lines { list-style: none; padding: 0; margin: 0; border-bottom: 1px solid var(--line); }
+.project-lines a { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 16px; padding: 14px 0; border-top: 1px solid var(--line); transition: color 0.15s; }
+.project-lines a:hover, .project-lines a:focus-visible { color: var(--accent); }
+.project-lines .arrow { color: var(--faint); transition: translate 0.2s, color 0.15s; }
+.project-lines a:hover .arrow, .project-lines a:focus-visible .arrow { color: var(--accent); translate: 3px 0; }
+.project-lines .muted { grid-column: 1 / -1; font-size: 13px; }
+.project-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px; }
+.more { font-size: 12px; }
+
+.awards { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.awards li { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.awards .redacted { font-size: 13px; }
+
+.about-pitch { max-width: 36rem; font-size: 15px; line-height: 1.7; }
+.off-hours { color: var(--muted); }
+/* Room after the last section, so every link in the side column can bring its section up to the reading line. */
+@media (min-width: 861px) {
+  #about-me { align-content: start; min-height: calc(100dvh - 400px); }
+}
 
 .constellation { display: grid; gap: 14px; }
 .constellation-grid { display: flex; gap: 2px; font-size: 12px; line-height: 1.2; overflow: hidden; }
@@ -539,8 +543,15 @@ button { font: inherit; color: inherit; }
 }
 
 @media (max-width: 860px) {
-  .dossier { grid-template-columns: 1fr; gap: 48px; }
-  .about-row, .dossier-body .about-row { grid-template-columns: 1fr; gap: 18px; }
+  .dossier { grid-template-columns: 1fr; gap: 56px; }
+  /* The whole page is one column here, so a list of its sections would only push the record down. */
+  .section-nav { display: none; }
+  .dossier-body { gap: 56px; }
+  .constellation-grid { justify-content: flex-end; }
+}
+@media (max-width: 480px) {
+  .toolkit-groups { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .toolkit-groups dd { margin-bottom: 10px; }
 }
 
 @media (max-width: 640px) {

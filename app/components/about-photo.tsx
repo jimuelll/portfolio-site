@@ -37,7 +37,6 @@ export function AboutPhoto() {
         ) : (
           <div className="photo-placeholder" role="img" aria-label="Photo coming soon">
             <pre aria-hidden="true">{BUST}</pre>
-            <span>photo landing soon</span>
           </div>
         )}
       </div>
