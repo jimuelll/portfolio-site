@@ -19,7 +19,7 @@
  * from the moon or sun to a turning ASCII Earth drawn from a real coastline map, with clouds, city lights on the
  * night side and the moon going round it. Clicking puts a satellite into orbit where you click.
  *
- * The galaxy (a hidden fourth theme, "deep"): press and hold the moon, sun or Earth for five seconds. A ring charges
+ * The galaxy (a hidden fourth theme, "deep"): press and hold the moon, sun or Earth for three seconds. A ring charges
  * round it while the stars strain toward it, then hyperdrive: the disc collapses to a point, the stars stream past
  * in streaks, and you drop out in front of an ASCII spiral galaxy with the sun marked on one arm. Drag to drift
  * through it; scroll or pinch to zoom. The toggle jumps back the same way. Out there the nav's "projects" lights
@@ -32,6 +32,9 @@
  *
  * While the theme toggle is held the sky is a long exposure: the stars draw trails round the toggle as their
  * pole, until the hold lifts off into the cosmos (sky/cosmos.ts).
+ *
+ * Every so often something drifts across the sky page, different in each sky, telling how to trigger a secret you
+ * haven't found yet (sky/drifters.ts).
  *
  * Anything on the page marked [data-sky-avoid] dims the sky underneath it so text always stays readable.
  */
@@ -46,6 +49,7 @@ type Box = { left: number; top: number; right: number; bottom: number };
 type Vec = [number, number, number];
 
 import { projects } from "../../lib/portfolio";
+import { DRIFTERS, paintDrifter, type Saying, type SecretId, type Sprite } from "./drifters";
 
 const TAU = Math.PI * 2;
 const STEP = 1 / 120;
@@ -114,7 +118,11 @@ const GLIMMER = 0.8;
 export const GO_EVENT = "sky-go";
 export type NavTarget = "projects" | "about";
 /** How long the moon, sun or Earth has to be held. */
-const CHARGE_MS = 5000;
+const CHARGE_MS = 3000;
+/** How long a drifter stops when clicked, long enough to read what it's saying. */
+const WAVE_SECONDS = 7;
+/** How fast the instruction types itself out. */
+const SAY_RATE = 42;
 /** The jump through hyperdrive, either way. */
 export const HYPER_SECONDS = 2.6;
 const DEEP_BG: Rgb = [5, 6, 13];
@@ -282,8 +290,11 @@ interface Sat { rho: number; theta: number; k: number; tilt: number; w: number; 
 interface Ping { x: number; y: number; age: number }
 /** A comet passing the sun by day, along a curve: p0 → p2 bent through p1. */
 interface DayComet { start: number; dur: number; p0: [number, number]; p1: [number, number]; p2: [number, number] }
-/** An astronaut drifting through the sky, tumbling slowly. waveAt is when it was clicked (-1: not yet). */
-interface Astro { x: number; y: number; vx: number; vy: number; rot: number; spin: number; waveAt: number; fled: boolean }
+/**
+ * Something drifting through the sky (sky/drifters.ts). waveAt is when it was clicked (-1: not yet). It says its line until
+ * sayUntil (-1: not asked). pace is how fast it's going against its usual speed; it eases, so nothing snaps.
+ */
+interface Drifter { x: number; y: number; vx: number; vy: number; rot: number; spin: number; waveAt: number; fled: boolean; sprite: Sprite; line: Saying; phase: number; sayUntil: number; pace: number }
 /** Where everything sits during the eclipse at a given moment. s is how much daylight there is, 0 to 1. */
 interface EclipseState { mx: number; my: number; lit: number; corona: number; bead: number; beadDir: number; s: number }
 
@@ -339,9 +350,16 @@ export class SkyEngine {
   private pings: Ping[] = [];
   private dayComet: DayComet | null = null;
   private nextDayComet = rand(4, 9);
-  private astro: Astro | null = null;
-  private nextAstro = rand(8, 16);
-  private overAstro = false;
+  private drifter: Drifter | null = null;
+  private nextDrifter = rand(3, 7);
+  /** Which secret went by last, so the next one is a different one. */
+  private lastDrifter: SecretId | null = null;
+  private overDrifter = false;
+  /** The card with what the drifter is saying, what it's showing, and how far that has typed. */
+  private saying: HTMLElement | null = null;
+  private said: Saying | null = null;
+  private saidAt = 0;
+  private saidTyped = -1;
   /** The long exposure (eased toward exposure.k), its pole in canvas px, and where the canvas sits in the viewport. */
   private trail = 0;
   private pole = { x: 0, y: 0 };
@@ -450,7 +468,8 @@ export class SkyEngine {
     window.removeEventListener(DEPART_EVENT, this.onDepart);
     window.removeEventListener(DEPART_CANCEL_EVENT, this.onDepartCancel);
     window.clearTimeout(this.charging.timer);
-    if (this.overAstro && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
+    if (this.overDrifter && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
+    this.saying?.remove();
   }
 
   /** The same craters every visit (seeded), and a few sunspots already on the sun. */
@@ -482,6 +501,9 @@ export class SkyEngine {
     this.galaxyNav = null;
     this.navClosing = -1;
     this.camAim = null;
+    // What was drifting belongs to the old sky, and so do its words.
+    this.drifter = null;
+    this.nextDrifter = rand(3, 7);
     // A settle still running belongs to the old scene; the new one has its own way of turning up.
     this.pass = null;
     // Inner pages fade their colours over instead, so the sky switches at once.
@@ -760,7 +782,7 @@ export class SkyEngine {
       this.dayComet = null;
       this.nextDayComet = rand(12, 24);
     }
-    this.stepAstro(dt);
+    this.stepDrifter(dt);
     if (this.delivery && this.time - this.delivery.start > DELIVER_SECONDS + DELIVER_AFTERGLOW) this.delivery = null;
 
     const pl = this.hero;
@@ -879,6 +901,7 @@ export class SkyEngine {
       this.use(DARK, 0.75);
       this.drawStars("earth");
       if (hero) this.drawEarthScene();
+      if (full) this.drawDrifter();
     } else if (this.scene === "night") {
       this.use(DARK, 1);
       this.drawStars("night");
@@ -889,7 +912,7 @@ export class SkyEngine {
         this.drawImpacts();
       }
       if (full) this.drawWisps();
-      if (full) this.drawAstro();
+      if (full) this.drawDrifter();
       this.drawMeteors();
       this.drawComets();
     } else {
@@ -904,7 +927,7 @@ export class SkyEngine {
         this.drawFlares();
       }
       if (full) this.drawDayComet();
-      if (full) this.drawAstro();
+      if (full) this.drawDrifter();
     }
     if (full && !this.turn) this.drawDelivery();
     if (full && !this.turn && this.charge > 0) this.drawCharge();
@@ -1775,86 +1798,193 @@ export class SkyEngine {
   }
 
   /**
-   * Now and then an astronaut drifts across the open sky below the moon, on wide screens only (phones have no
-   * open sky to spare). It never crosses the moon or sun, and it waves when clicked, then spins off.
+   * Every so often something drifts across the sky (sky/drifters.ts), through the widest band of it the page leaves
+   * clear, in front of the disc if that's where the band runs. Clicked, it comes to a stop and says how to trigger its
+   * secret, whether you've found it or not, then powers away.
    */
-  private spawnAstro() {
-    const { w, h } = this;
-    const pl = this.hero;
-    for (let tries = 0; tries < 6; tries++) {
-      let a: [number, number] = [-60, rand(0.42, 0.5) * h];
-      let b: [number, number] = [w + 60, rand(0.74, 0.84) * h];
-      if (Math.random() < 0.5) [a, b] = [b, a];
-      // Closest approach of the path to the hero's centre.
-      const dx = b[0] - a[0], dy = b[1] - a[1];
-      const u = clamp(((pl.x - a[0]) * dx + (pl.y - a[1]) * dy) / (dx * dx + dy * dy), 0, 1);
-      if (Math.hypot(a[0] + dx * u - pl.x, a[1] + dy * u - pl.y) < pl.r * 1.25) continue;
-      const dur = rand(30, 38);
-      const turn = Math.random() < 0.5 ? -1 : 1;
-      this.astro = { x: a[0], y: a[1], vx: dx / dur, vy: dy / dur, rot: rand(-0.3, 0.3), spin: rand(0.06, 0.14) * turn, waveAt: -1, fled: false };
-      return;
-    }
-    this.nextAstro = rand(10, 20);
+  private spawnDrifter() {
+    if (this.scene === "deep") return;
+    const { w } = this;
+    const cast = DRIFTERS[this.scene];
+    const pool = (Object.keys(cast) as SecretId[]).filter((id) => id !== this.lastDrifter);
+    const id = pool[Math.floor(Math.random() * pool.length)];
+    const sprite = cast[id]!;
+    this.lastDrifter = id;
+    const { scale } = this.drifterSize();
+    const off = Math.hypot(sprite.reach, sprite.tall) * scale + 20;
+    const [top, bottom] = this.openBand();
+    const room = Math.max(0, (bottom - top) / 2 - sprite.tall * scale);
+    const mid = (top + bottom) / 2;
+    let a: [number, number] = [-off, mid + rand(-room, room)];
+    let b: [number, number] = [w + off, mid + rand(-room, room)];
+    if (Math.random() < 0.5) [a, b] = [b, a];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    // Things under power are in a hurry; things on momentum aren't.
+    const dur = { coast: rand(26, 34), cruise: rand(13, 19), glide: rand(22, 28), hover: rand(18, 24) }[sprite.gait];
+    this.drifter = {
+      x: a[0], y: a[1], vx: dx / dur, vy: dy / dur, rot: sprite.face === "spin" ? rand(-0.3, 0.3) : 0,
+      spin: sprite.face === "spin" ? rand(0.05, 0.12) * (Math.random() < 0.5 ? -1 : 1) : 0,
+      waveAt: -1, fled: false, sprite, line: sprite.says, phase: rand(0, TAU), sayUntil: -1, pace: 1,
+    };
   }
 
-  private stepAstro(dt: number) {
+  /** Moves the drifter on, the way its kind moves. */
+  private flyDrifter(a: Drifter, dt: number) {
+    const { gait, face } = a.sprite;
+    const t = this.time + a.phase * 9;
+    const stopped = a.waveAt >= 0 && !a.fled;
+    let aim = 1, ease = 1.6;
+    if (a.fled) { aim = 7; ease = 1.5; }
+    else if (stopped) { aim = 0.03; ease = 2.6; }
+    else if (gait === "hover") { aim = Math.sin(t * 0.8) > -0.1 ? 1.9 : 0.1; ease = 3.2; }
+    else if (gait === "glide") aim = 1 + 0.35 * Math.sin(t * 0.35);
+    else if (gait === "cruise") aim = 1 + 0.12 * Math.sin(t * 0.5);
+    a.pace += (aim - a.pace) * (1 - Math.exp(-dt * ease));
+    // Off the straight line: a long curve under power, a slow wander otherwise. Enough to feel, not enough to leave the band.
+    const curve = { coast: Math.cos(t * 0.21) * 3, cruise: Math.cos(t * 0.33) * 15, glide: Math.cos(t * 0.27) * 10, hover: Math.cos(t * 1.1) * 14 }[gait];
+    const climb = a.vy * a.pace + curve * Math.min(1, a.pace + 0.15);
+    a.x += a.vx * a.pace * dt;
+    a.y += climb * dt;
+    const turn = 1 - Math.exp(-dt * 2.2);
+    if (face === "spin") a.rot += a.spin * dt;
+    else if (face === "path") a.rot += ((Math.atan2(climb, Math.abs(a.vx * a.pace) + 20) * Math.sign(a.vx)) - a.rot) * turn;
+    else if (face === "bank") a.rot += (Math.sign(a.vx) * (a.pace - 0.7) * 0.2 - a.rot) * turn;
+    else if (face === "rock") a.rot = Math.sin(t * 0.42) * 0.14;
+    else if (face === "sun") {
+      const [lx, ly] = this.drifterLight();
+      a.rot += (Math.atan2(ly - a.y, lx - a.x) - a.rot) * turn;
+    }
+  }
+
+  /** Where the light on a drifter comes from: the disc, or at Earth, a sun off beyond the top left. */
+  private drifterLight(): [number, number] {
+    return this.scene === "earth" ? [-this.w, -this.h] : [this.hero.x, this.hero.y];
+  }
+
+  /** How big a drifter is drawn here, and the grid it's drawn on. */
+  private drifterSize() {
+    return this.w >= 1024 ? { scale: 112, font: 7, cw: 4.2, ch: 7.4 } : this.w >= 640 ? { scale: 96, font: 6.5, cw: 3.9, ch: 6.9 } : { scale: 76, font: 6, cw: 3.6, ch: 6.4 };
+  }
+
+  /** The tallest band of sky no wide block of the page's content runs through. Narrow things, like a side quote, don't count. */
+  private openBand(): [number, number] {
+    const blocks = this.boxes.filter((b) => b.right - b.left > this.w * 0.25).sort((p, q) => p.top - q.top);
+    let best: [number, number] = [0, 0];
+    let from = 0;
+    for (const b of blocks) {
+      if (b.top - from > best[1] - best[0]) best = [from, b.top];
+      from = Math.max(from, b.bottom);
+    }
+    if (this.h - from > best[1] - best[0]) best = [from, this.h];
+    return best;
+  }
+
+  private stepDrifter(dt: number) {
     if (this.variant !== "full") return;
-    if (!this.astro && !this.turn && !zooms(this.scene) && this.w >= 1024 && (this.nextAstro -= dt) <= 0) this.spawnAstro();
-    const a = this.astro;
+    if (!this.drifter && !this.turn && this.scene !== "deep" && (this.nextDrifter -= dt) <= 0) this.spawnDrifter();
+    const a = this.drifter;
     if (a) {
-      a.x += a.vx * dt;
-      a.y += a.vy * dt;
-      a.rot += a.spin * dt;
-      // After waving it kicks off, tumbling, the way it was going.
-      if (a.waveAt >= 0 && !a.fled && this.time - a.waveAt > 1.6) {
+      this.flyDrifter(a, dt);
+      // After stopping for you it powers away the way it was going; whatever was turning turns harder.
+      if (a.waveAt >= 0 && !a.fled && this.time - a.waveAt > WAVE_SECONDS) {
         a.fled = true;
-        a.vx *= 20;
-        a.vy *= 20;
-        a.spin = Math.sign(a.spin || 1) * 2.4;
+        if (a.spin) a.spin = Math.sign(a.spin) * 1.6;
       }
-      const gone = (a.x < -80 && a.vx < 0) || (a.x > this.w + 80 && a.vx > 0) || (a.y < -80 && a.vy < 0) || (a.y > this.h + 80 && a.vy > 0);
+      const margin = Math.hypot(a.sprite.reach, a.sprite.tall) * this.drifterSize().scale + 30;
+      const gone = (a.x < -margin && a.vx < 0) || (a.x > this.w + margin && a.vx > 0);
       if (gone) {
-        this.astro = null;
-        this.nextAstro = rand(25, 45);
+        this.drifter = null;
+        this.nextDrifter = rand(6, 14);
       }
     }
-    // The pointer becomes a hand over the astronaut, even when it drifts under a still cursor.
-    const over = this.pointer.active && this.astroHit(this.pointer.x, this.pointer.y);
-    if (over !== this.overAstro) {
-      this.overAstro = over;
+    this.placeSaying();
+    // The pointer becomes a hand over it, even when it drifts under a still cursor.
+    const over = this.pointer.active && this.drifterHit(this.pointer.x, this.pointer.y);
+    if (over !== this.overDrifter) {
+      this.overDrifter = over;
       if (this.canvas.parentElement) this.canvas.parentElement.style.cursor = over ? "pointer" : "";
     }
   }
 
-  private astroHit(x: number, y: number) {
-    const a = this.astro;
-    return !!a && !a.fled && !this.turn && !zooms(this.scene) && Math.abs(x - a.x) < 24 && Math.abs(y - a.y) < 30;
+  private drifterHit(x: number, y: number) {
+    const a = this.drifter;
+    if (!a || a.fled || this.turn || this.scene === "deep") return false;
+    const { scale } = this.drifterSize();
+    return Math.abs(x - a.x) < Math.max(30, a.sprite.reach * scale + 12) && Math.abs(y - a.y) < Math.max(30, a.sprite.tall * scale + 12);
   }
 
-  private drawAstro() {
-    const a = this.astro;
+  /** The drifter stops for a click, and says its piece for as long as it's stopped. */
+  private stopDrifter(a: Drifter) {
+    if (a.waveAt >= 0) return;
+    a.waveAt = this.time;
+    a.sayUntil = this.time + WAVE_SECONDS;
+    this.said = null;
+  }
+
+  private drawDrifter() {
+    const a = this.drifter;
     if (!a) return;
     const { ctx } = this;
     const pal = this.palette;
-    const k = this.dim(a.x, a.y) * pal.alpha * this.sceneAlpha * this.fade;
-    if (k < 0.02) return;
-    const waving = a.waveAt >= 0 && this.time - a.waveAt < 1.6;
-    const arm = waving && Math.floor((this.time - a.waveAt) * 6) % 2 ? "-" : "/";
-    const rows = ["  _  ", ` (o)${arm}`, " /|  ", " / \\ "];
-    ctx.save();
-    ctx.translate(a.x, a.y);
-    ctx.rotate(a.rot);
-    ctx.font = `12px ${this.family}`;
-    ctx.globalAlpha = Math.min(1, 0.85 * k);
-    rows.forEach((row, r) => {
-      [...row].forEach((ch, c) => {
-        if (ch === " ") return;
-        ctx.fillStyle = css(ch === "o" ? pal.warm : pal.star);
-        ctx.fillText(ch, (c - 2) * 7, (r - 1.5) * 12);
-      });
+    const size = this.drifterSize();
+    const backing = css(bgOf(this.scene));
+    const fade = pal.alpha * this.sceneAlpha * this.fade;
+    const [lightX, lightY] = this.drifterLight();
+    const { gait, face } = a.sprite;
+    ctx.font = `${size.font}px ${this.family}`;
+    paintDrifter(a.sprite, {
+      x: a.x, y: a.y + (gait === "hover" ? Math.sin(this.time * 2.1 + a.phase) * 4 : gait === "glide" ? Math.sin(this.time * 0.8 + a.phase) * 6 : 0), scale: size.scale, cw: size.cw, ch: size.ch,
+      rot: a.rot, left: a.vx < 0 && face === "path", lightX, lightY, t: this.time + a.phase, wave: a.waveAt >= 0 && !a.fled ? 1 : 0, power: clamp(a.pace, 0, 1.3), inks: pal,
+    }, (x, y, glyph, color, alpha, solid) => {
+      // A cut-out behind anything solid, so it holds its shape in front of the disc. Fire and glow stay see-through.
+      if (solid && this.dim(x, y) === 1) {
+        ctx.globalAlpha = 0.86 * fade;
+        ctx.fillStyle = backing;
+        ctx.fillRect(x - size.cw / 2, y - size.ch / 2, size.cw, size.ch);
+      }
+      this.glyph(glyph, x, y, color, alpha);
     });
-    ctx.restore();
-    if (waving) this.glyph("hi!", a.x, a.y - 40, pal.warm, 0.9);
+  }
+
+  /** The card with what it's saying: on the page, above everything but the nav, so it can always be read. */
+  private placeSaying() {
+    const a = this.drifter;
+    const showing = !!a && !a.fled && !this.turn && this.scene !== "deep" && a.sayUntil >= 0 && this.time < a.sayUntil;
+    if (!showing || !a) {
+      this.saying?.classList.remove("on");
+      return;
+    }
+    let el = this.saying;
+    if (!el) {
+      el = this.saying = document.createElement("p");
+      el.className = "drifter-say";
+      el.setAttribute("aria-hidden", "true");
+      el.innerHTML = '<span class="voice"></span> <span class="how"><span class="typed"></span><span class="rest"></span></span>';
+      this.canvas.parentElement?.append(el);
+    }
+    if (this.said !== a.line) {
+      this.said = a.line;
+      this.saidAt = this.time;
+      el.querySelector(".voice")!.textContent = a.line.voice;
+      this.saidTyped = -1;
+    }
+    // The instruction types itself out; the rest of it already holds its space, so the card never changes size.
+    const typed = Math.min(a.line.how.length, Math.floor(Math.max(0, this.time - this.saidAt - 0.35) * SAY_RATE));
+    if (typed !== this.saidTyped) {
+      this.saidTyped = typed;
+      el.querySelector(".typed")!.textContent = a.line.how.slice(0, typed);
+      el.querySelector(".rest")!.textContent = a.line.how.slice(typed);
+    }
+    const bw = el.offsetWidth, bh = el.offsetHeight;
+    const { scale } = this.drifterSize();
+    const x = clamp(a.x - bw / 2, 12, Math.max(12, this.w - bw - 12));
+    const above = a.y - a.sprite.tall * scale - bh - 12;
+    const under = above < 60;
+    const y = under ? a.y + a.sprite.tall * scale + 12 : above;
+    el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0)`;
+    el.style.setProperty("--tail", `${clamp(a.x - x, 18, bw - 18)}px`);
+    el.classList.toggle("under", under);
+    el.classList.add("on");
   }
 
   /** Earth with everything round it: the moon on its orbit, satellites, and the pings where they were placed. */
@@ -2604,7 +2734,7 @@ export class SkyEngine {
     if (this.variant !== "full" || this.charging.start) return;
     const rect = this.canvas.getBoundingClientRect();
     if (Math.hypot(e.clientX - rect.left - this.hero.x, e.clientY - rect.top - this.hero.y) > this.hero.r) return;
-    // Timed, so the jump lands at five seconds even if frames are dropped.
+    // Timed, so the jump lands at three seconds even if frames are dropped.
     this.charging = { id: e.pointerId, start: performance.now(), timer: window.setTimeout(this.fire, CHARGE_MS) };
     this.canvas.parentElement?.setAttribute("data-charging", "");
   };
@@ -2705,12 +2835,8 @@ export class SkyEngine {
     const x = e.clientX - rect.left, y = e.clientY - rect.top;
     if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
     if (this.turn || this.scene === "deep" || performance.now() < this.swallowUntil) return;
-    if (this.astroHit(x, y)) {
-      // It stops to wave before kicking off.
-      const a = this.astro!;
-      a.waveAt = this.time;
-      a.vx *= 0.3;
-      a.vy *= 0.3;
+    if (this.drifterHit(x, y)) {
+      this.stopDrifter(this.drifter!);
       return;
     }
     if (this.scene === "day") this.launchFlare(x, y);

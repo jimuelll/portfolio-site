@@ -5,7 +5,6 @@ import { AboutPhoto } from "../components/about-photo";
 import { Constellation } from "../components/constellation";
 import { CvButton } from "../components/cv-button";
 import { PageShell } from "../components/page-shell";
-import { StarLog } from "../components/star-log";
 import { awards, coreStack, education, projects, toolkit } from "../lib/portfolio";
 
 export const metadata: Metadata = {
@@ -126,8 +125,6 @@ export default function AboutPage() {
           </section>
 
           <p className="off-hours">Off-hours: games, anime, and Pokémon Showdown (hmu :p)</p>
-          {/* Earned by reading this far: a log of the sky's secrets. */}
-          <StarLog />
         </div>
       </div>
     </PageShell>

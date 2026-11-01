@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
-import { found } from "../lib/secrets";
 import { Cosmos, type Stage } from "./sky/cosmos";
 
 const LINKS = [
@@ -107,7 +106,7 @@ export function TopNav() {
     if (e.key === "Escape" && (cosmos || document.documentElement.dataset.theme === "deep")) toggle();
   });
 
-  /** The moon, sun or Earth was held for five seconds (sky/engine.ts): hyperdrive to the galaxy. */
+  /** The moon, sun or Earth was held for three seconds (sky/engine.ts): hyperdrive to the galaxy. */
   const onHyperdrive = useEffectEvent(() => {
     const root = document.documentElement;
     if (cosmos || root.dataset.theme === "deep") return;
@@ -115,7 +114,6 @@ export function TopNav() {
     root.dataset.galaxyHome = readTheme(root.dataset.theme);
     apply("deep");
     buzz([12, 60, 12]);
-    found("milkyway");
     showNote("✦ hyperdrive · tap ✧ to jump home");
   });
 
@@ -272,7 +270,6 @@ export function TopNav() {
       presses.current = [];
       lockUntil.current = now + UNLOCK_LOCK;
       apply("twilight");
-      found("earth");
       showNote("✦ earth unlocked · press ⊕ to return");
       return;
     }
@@ -290,7 +287,6 @@ export function TopNav() {
     root.dataset.dropTimer = String(window.setTimeout(() => root.classList.add("cosmos-still"), DROP_MS));
     setStage("voyage");
     buzz(12);
-    found("voyage");
     showNote("✦ liftoff · keep holding to arrive", ONWARD_MS + 600);
   }
 
@@ -299,7 +295,6 @@ export function TopNav() {
     cosmos?.arrive();
     setStage("vista");
     buzz([12, 60, 12]);
-    found("vista");
     showNote("✦ arrival · tap ✧ to land");
   }
 
