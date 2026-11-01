@@ -429,7 +429,8 @@ export const fushimi: Place = {
     const land = new VoxelSet(), lit = new VoxelSet(), glow = new VoxelSet();
     ground(land, coarse);
     stairs(lit);
-    for (let z = 14; z < STAIR_FOOT; z += 8) {
+    // None beside the viewer, who'd only end up looking through one.
+    for (let z = 14; z < STAIR_FOOT - 10; z += 8) {
       const y = stairHeight(z) - 0.2;
       lantern(lit, glow, -6.2, y, z);
       lantern(lit, glow, 6.2, y, z);
@@ -514,6 +515,7 @@ export const fushimi: Place = {
       lens: { center: 0.36, band: 0.2, blur: 12 },
       cell: 0.72,
       pullback: 0.72,
+      ground: height,
       sun,
       movingShadows: true,
       actor,

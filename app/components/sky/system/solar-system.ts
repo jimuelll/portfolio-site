@@ -31,6 +31,9 @@ const PITCH_LIMIT = 0.13;
 /** A fingertip's reach, in px, so the smallest worlds and creatures can still be hit. */
 const TOUCH = 28;
 const NOTE_SECONDS = 5;
+/** How high over the ground a place's camera has to stay, and how far around it that's checked. */
+const CAMERA_HEIGHT = 4.5;
+const CLEARANCE = [[0, 0], [2, 0], [-2, 0], [0, 2], [0, -2]];
 
 type Dive = { t: number; to: Place | null; world: World | null; cut: boolean };
 
@@ -218,7 +221,7 @@ export class SolarSystem {
       if (this.pass.level === 3 && this.here) this.here.view.sun.castShadow = false;
     }
     this.lastFrame = now;
-    if (this.here?.view.movingShadows && ++this.frames % 5 === 0) this.pass.renderer.shadowMap.needsUpdate = true;
+    if (this.here?.view.movingShadows && ++this.frames % (this.here.view.shadowEvery ?? 5) === 0) this.pass.renderer.shadowMap.needsUpdate = true;
   }
 
   private stepDive(dt: number) {
@@ -260,6 +263,11 @@ export class SolarSystem {
     const right = new Vector3(offset.z, 0, -offset.x).normalize();
     offset.applyAxisAngle(right, pitch + this.look.y * 0.016 + Math.sin(t * 0.043) * 0.006);
     this.camera.position.copy(view.at).add(offset);
+    // However it's swung, it stays above the ground: the highest point just around it, since the ground is in steps.
+    const { x, z } = this.camera.position;
+    let floor = -Infinity;
+    for (const [dx, dz] of CLEARANCE) floor = Math.max(floor, view.ground(x + dx, z + dz));
+    this.camera.position.y = Math.max(this.camera.position.y, floor + CAMERA_HEIGHT);
     this.camera.lookAt(view.at);
     this.camera.updateMatrixWorld();
   }

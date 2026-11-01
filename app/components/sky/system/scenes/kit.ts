@@ -1,6 +1,6 @@
 /* What every place on the map needs: what a place is, and its sky and sun. */
 
-import { BackSide, DirectionalLight, Mesh, ShaderMaterial, SphereGeometry, Vector3, type Scene } from "three";
+import { AdditiveBlending, BackSide, BufferGeometry, DirectionalLight, Float32BufferAttribute, Mesh, Points, ShaderMaterial, SphereGeometry, Vector3, type Scene, type WebGLRenderer } from "three";
 import type { Rgb } from "../../engine";
 import type { Lens } from "../ascii";
 
@@ -15,10 +15,14 @@ export interface Diorama {
   cell?: number;
   /** How far back a narrow screen stands (1: enough to fit the width), for a scene that suits a tall crop. */
   pullback?: number;
+  /** The height of the ground anywhere, so looking around never takes the camera through it. */
+  ground(x: number, z: number): number;
   /** The scene's sun, whose shadows do so much of the look. */
   sun: DirectionalLight;
   /** True if something big moves, so its shadow has to keep up. */
   movingShadows?: boolean;
+  /** How many frames apart those shadows are redrawn, for something big that moves slowly. */
+  shadowEvery?: number;
   update(t: number, dt: number): void;
   /** The small living thing, and how far from its centre a tap still counts. */
   actor: Vector3;
@@ -73,6 +77,83 @@ export function skyDome(top: Rgb, middle: Rgb, horizon: Rgb, glowAt: Vector3, gl
   const dome = new Mesh(new SphereGeometry(900, 24, 16), material);
   dome.frustumCulled = false;
   return dome;
+}
+
+/**
+ * One glowing particle. Over each cycle it travels from `start` by `drift`, bending by `curve`, fading as it goes: a tail,
+ * a stream of sand. With a rate of 0 it stays put and glows. `window` is the share of the cycle it's alive for.
+ */
+export interface Flow {
+  start: [number, number, number];
+  drift: [number, number, number];
+  curve?: [number, number, number];
+  /** World units, so it keeps its size against the scene on any screen. */
+  size: number;
+  colour: Rgb;
+  alpha?: number;
+  fade?: number;
+  rate: number;
+  phase: number;
+  wobble?: number;
+  twinkle?: number;
+  window?: number;
+}
+
+/** Thousands of flows drawn in one call, worked out entirely in the vertex shader, so they cost one number a frame. */
+export function flows(list: Flow[]) {
+  const position: number[] = [], drift: number[] = [], curve: number[] = [], colour: number[] = [], motion: number[] = [], look: number[] = [];
+  for (const f of list) {
+    position.push(...f.start);
+    drift.push(...f.drift);
+    curve.push(...(f.curve ?? [0, 0, 0]));
+    colour.push(f.colour[0] / 255, f.colour[1] / 255, f.colour[2] / 255);
+    motion.push(f.size, f.rate, f.phase, f.wobble ?? 0);
+    look.push(f.alpha ?? 1, f.fade ?? 0, f.twinkle ?? 0, f.window ?? 1);
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(position, 3));
+  geometry.setAttribute("aDrift", new Float32BufferAttribute(drift, 3));
+  geometry.setAttribute("aCurve", new Float32BufferAttribute(curve, 3));
+  geometry.setAttribute("aColour", new Float32BufferAttribute(colour, 3));
+  geometry.setAttribute("aMotion", new Float32BufferAttribute(motion, 4));
+  geometry.setAttribute("aLook", new Float32BufferAttribute(look, 4));
+  const material = new ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uHeight: { value: 240 } },
+    vertexShader: `
+      attribute vec3 aDrift, aCurve, aColour;
+      attribute vec4 aMotion, aLook;
+      uniform float uTime, uHeight;
+      varying vec3 vColour;
+      void main() {
+        float k = fract(uTime * aMotion.y + aMotion.z) / aLook.w;
+        float alive = k > 1.0 ? 0.0 : (aMotion.y > 0.0 ? smoothstep(0.0, 0.05, k) : 1.0) * pow(max(0.0, 1.0 - k), aLook.y);
+        float seed = aMotion.z * 6.2832;
+        vec3 p = position + aDrift * min(k, 1.0) + aCurve * min(k, 1.0) * min(k, 1.0);
+        p += aMotion.w * min(k, 1.0) * vec3(sin(uTime * 1.1 + seed * 7.0), sin(uTime * 0.9 + seed * 11.0), cos(uTime * 0.7 + seed * 5.0));
+        alive *= 1.0 + aLook.z * 0.3 * sin(uTime * (1.0 + fract(seed)) + position.x * 13.0);
+        vColour = aColour * alive * aLook.x;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = alive <= 0.0 ? 0.0 : max(1.2, aMotion.x * projectionMatrix[1][1] * uHeight * 0.5 / -mv.z);
+      }`,
+    fragmentShader: `
+      varying vec3 vColour;
+      void main() {
+        float d = length(gl_PointCoord - 0.5) * 2.0;
+        if (d > 1.0) discard;
+        gl_FragColor = vec4(vColour * (1.0 - d * d), 1.0);
+      }`,
+  });
+  const mesh = new Points(geometry, material);
+  mesh.frustumCulled = false;
+  // Sizes are in world units, so they need to know how tall the buffer being drawn to is.
+  mesh.onBeforeRender = (renderer: WebGLRenderer) => {
+    material.uniforms.uHeight.value = renderer.getRenderTarget()?.height ?? 240;
+  };
+  return { mesh, tick: (t: number) => { material.uniforms.uTime.value = t; } };
 }
 
 /** The scene's sun, its shadow box fitted round the diorama. */
