@@ -77,6 +77,8 @@ const LOG_LINES = [
   `stack    ${coreStack.join(" · ")}`,
   "open the dossier →",
 ];
+/** A folded log line carries on under its value, past the label column. */
+const LOG_INDENT = " ".repeat(9);
 
 interface Mote { x: number; y: number; z: number; tint: Rgb }
 /** Something big passing on the voyage: where it is in flight space, how big, and what it looks like. */
@@ -867,12 +869,33 @@ export class Cosmos {
     else if (o.kind === "projects" && this.stage === "voyage" && !this.wonders.some((wd) => wd.href)) this.overlay = null;
   }
 
+  /** The log's lines, any too wide for the panel folded at their separators, under the value column. Measures in the current font. */
+  private foldLog(room: number) {
+    const { ctx } = this;
+    return LOG_LINES.flatMap((line) => {
+      if (ctx.measureText(line).width <= room) return [line];
+      const rows: string[] = [];
+      let row = "";
+      for (const part of line.split(" · ")) {
+        const longer = row ? `${row} · ${part}` : part;
+        if (row && ctx.measureText(longer).width > room) {
+          rows.push(row);
+          row = LOG_INDENT + part;
+        } else row = longer;
+      }
+      return [...rows, row];
+    });
+  }
+
   /** The ship's log: the about typed out line by line in a panel low on the screen, ending in the way to the dossier. */
   private drawLog(since: number) {
     const { ctx } = this;
     const narrow = this.w < 640;
     const lh = 19;
-    const pw = Math.min(this.w - 32, 440), ph = LOG_LINES.length * lh + 22;
+    ctx.font = `${narrow ? 11 : 12}px ${this.family}`;
+    const pw = Math.min(this.w - 32, 440);
+    const rows = this.foldLog(pw - 28);
+    const ph = rows.length * lh + 22;
     const px = narrow ? 16 : this.w >= 1024 ? this.w * 0.14 : 24;
     // On phones the readout is at the bottom, so the log sits above it.
     const py = this.h - ph - (narrow ? 96 : 32);
@@ -884,13 +907,12 @@ export class Cosmos {
     ctx.strokeStyle = css(ACCENT);
     ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
     ctx.textAlign = "left";
-    ctx.font = `${narrow ? 11 : 12}px ${this.family}`;
     let budget = Math.floor((since - 0.3) * TYPE_RATE);
-    LOG_LINES.forEach((line, i) => {
+    rows.forEach((line, i) => {
       if (budget <= 0) return;
       const shown = line.slice(0, budget);
       budget -= line.length;
-      const last = i === LOG_LINES.length - 1;
+      const last = i === rows.length - 1;
       const y = py + 20 + i * lh;
       this.put(shown, px + 14, y, i === 0 || last ? ACCENT : STAR, (i === 0 ? 0.6 : 0.85) * a);
       if (last && shown.length === line.length && this.closing < 0) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, href: "/about" });

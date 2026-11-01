@@ -620,7 +620,7 @@ button { font: inherit; color: inherit; }
 
 @media (max-width: 640px) {
   body { font-size: 14px; }
-  .top-nav { gap: 20px; top: 12px; padding: 8px 16px; }
+  .top-nav { gap: 20px; top: 12px; padding: 8px 20px; }
   .sky-stats { top: 64px; }
   .home-main { padding-bottom: 40px; }
   .page-main { padding-top: 104px; }
@@ -630,6 +630,8 @@ button { font: inherit; color: inherit; }
    layout, a matching negative margin holds everything where it was. */
 @media (pointer: coarse) {
   .top-nav a { padding: 14px 8px; margin: -14px -8px; }
+  /* The padding above would carry the marker into the next link over; it stays 5px from the text. */
+  .top-nav a[aria-current="page"]::before { right: calc(100% - 3px); }
   /* The toggle is the way into the secrets, so it gets a full fingertip; its charge ring stays the same size. */
   .toggle-pad { margin: -1px; padding: 1px; }
   .toggle-pad button { padding: 15px; margin: -15px; }
