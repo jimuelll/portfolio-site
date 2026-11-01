@@ -1,22 +1,18 @@
 import type { Metadata } from "next";
 import { PageShell } from "../components/page-shell";
-import { ProjectIndex } from "../components/projects/project-index";
-import { projects } from "../lib/portfolio";
+import { ProjectDossier } from "../components/project-dossier";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Projects | Jimuel Jean Untalan",
-  description: "Projects by Jimuel Jean Untalan, including the Enverga-Candelaria Library System.",
-};
+  description: "Projects by software engineer Jimuel Jean Untalan, including the Enverga-Candelaria Library System, with AI recommendations, analytics, and library operations.",
+  path: "/projects",
+});
 
 export default function ProjectsPage() {
-  const launched = projects.filter((p) => p.status === "launched").length;
   return (
-    <PageShell wide>
-      <header className="page-head compact">
-        <p className="eyebrow">projects · {launched} launched · {projects.length - launched} in orbit</p>
-        <h1>Things I&apos;ve launched into orbit.</h1>
-      </header>
-      <ProjectIndex projects={projects} />
+    <PageShell wide centered>
+      <ProjectDossier />
     </PageShell>
   );
 }

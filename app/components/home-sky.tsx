@@ -90,6 +90,7 @@ export function HomeSky() {
         <section className="wall-label fade-in" data-sky-avoid>
           <h1>Jimuel Jean Untalan</h1>
           <p className="role">aspiring software engineer, open to internships</p>
+          <p className="label-note">Computer Science student in Quezon, Philippines, building full web apps with React, Node.js, and SQL.</p>
           <blockquote className="quote">
             through the rough, to the stars
             <span className="caret" aria-hidden="true" />

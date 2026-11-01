@@ -10,7 +10,10 @@ export type Project = {
   short: string;
   stack: string[];
   links: { label: string; href: string }[];
-  image?: { src: string; width: number; height: number };
+  /** Screenshots for the project's gallery, the lead one first. */
+  gallery?: { src: string; width: number; height: number; alt: string; caption: string }[];
+  /** What it does, most interesting first. */
+  highlights?: { title: string; text: string }[];
 };
 
 export const projects: Project[] = [
@@ -20,12 +23,25 @@ export const projects: Project[] = [
     name: "Enverga-Candelaria Library System",
     kind: "ai-enabled library platform · capstone",
     year: "2026",
-    short: "AI library platform: semantic recommendations, analytics, real-time notifications.",
+    short: "Library management system: public catalogue, patron self-service, desk operations, and AI-assisted recommendations and analytics.",
     summary:
-      "A full-stack library services platform with semantic book recommendations, AI-assisted analytics, real-time notifications, and role-based workflows for students, staff, and administrators.",
-    stack: ["React", "TypeScript", "Vite", "Tailwind", "Node.js", "Express", "MySQL", "WebSockets", "Gemini embeddings", "JWT", "Cloudinary"],
+      "A web-based library management system for Manuel S. Enverga University Foundation — Candelaria Inc. It combines a public library website and catalogue, patron self-service, and a role-based workspace for library operations.",
+    stack: ["React", "TypeScript", "Vite", "Tailwind", "Node.js", "Express", "MySQL", "WebSockets", "Gemini embeddings", "Groq", "JWT", "Cloudinary"],
     links: [{ label: "live site", href: "https://euc-lib.vercel.app" }],
-    image: { src: "/euc-library.webp", width: 1280, height: 590 },
+    gallery: [
+      { src: "/euc-home.webp", width: 1906, height: 922, alt: "EUC Library home page with catalogue search", caption: "Public home page, with catalogue search" },
+      { src: "/euc-catalogue.jpg", width: 1536, height: 702, alt: "Library catalogue with filters, availability, and similar book links", caption: "Catalogue search, with live availability and similar-book suggestions on each title" },
+      { src: "/euc-dashboard.jpg", width: 1536, height: 702, alt: "Admin dashboard showing overdue loans, unpaid fines, and today's totals", caption: "Admin dashboard: outstanding items and today's desk activity" },
+      { src: "/euc-analytics.jpg", width: 1536, height: 702, alt: "Operations analytics with circulation figures and an AI Report tab", caption: "Operations analytics, home of the AI Report tab" },
+    ],
+    highlights: [
+      { title: "AI recommendations", text: "Semantic book suggestions from Gemini embeddings, alongside rule-based matches. Patrons can dismiss them, and super admins can run and monitor embedding backfills." },
+      { title: "AI analytics", text: "Performance briefs and questions about aggregate library data, using Gemini or Groq, with supporting figures and links back to records." },
+      { title: "Catalogue and self-service", text: "Public search across books and theses, plus personal loans, reservations, fines, and a library barcode." },
+      { title: "Desk operations", text: "Checkout, returns, renewals, reservations, fine payments with receipts, and attendance scanning." },
+      { title: "Collection records", text: "Copy-level holdings and accessions, barcode labels, ISBN lookup, and CSV import with a validation preview." },
+      { title: "Administration", text: "Reports and exports, audit history, website publishing, real-time notifications, and backups with a guarded restore." },
+    ],
   },
   // Placeholders: shown as "in orbit" until a real project replaces them. Swap one out by filling in its
   // fields and setting status to "launched".

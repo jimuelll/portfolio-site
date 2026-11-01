@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Young_Serif } from "next/font/google";
 import localFont from "next/font/local";
+import { SITE_NAME, siteOrigin, socialImage } from "./lib/seo";
 import "./globals.css";
 
 const geistMono = localFont({
@@ -20,14 +21,8 @@ const youngSerif = Young_Serif({
 const siteTitle = "Jimuel Jean Untalan | Software Engineer";
 const siteDescription =
   "Portfolio of Jimuel Jean Untalan, a software engineer from Quezon, Philippines building reliable web applications with React, Node.js, databases, and cloud tooling.";
-const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
-const socialImage = {
-  url: "/og-image.png",
-  width: 2400,
-  height: 1260,
-  alt: "Jimuel Jean Untalan, software engineer, beside a moon drawn in text characters",
-};
 
+// The defaults for anything without its own, such as the 404 page. Canonicals belong to each page (lib/seo.ts).
 export const metadata: Metadata = {
   ...(siteOrigin ? { metadataBase: new URL(siteOrigin) } : {}),
   title: siteTitle,
@@ -35,15 +30,13 @@ export const metadata: Metadata = {
   verification: {
     google: "kR15d-A0JYppNf_o4vLwKiAp9OuE8gY6wg7uUL_q71c",
   },
-  alternates: siteOrigin ? { canonical: "/" } : undefined,
   openGraph: {
     title: siteTitle,
     description: siteDescription,
     type: "website",
     locale: "en_PH",
-    siteName: siteTitle,
+    siteName: SITE_NAME,
     images: [socialImage],
-    ...(siteOrigin ? { url: siteOrigin } : {}),
   },
   twitter: {
     card: "summary_large_image",
@@ -66,7 +59,7 @@ const structuredData = {
         addressLocality: "Quezon",
         addressCountry: "PH",
       },
-      sameAs: ["https://github.com/jimuelll"],
+      sameAs: ["https://github.com/jimuelll", "https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"],
       knowsAbout: [
         "TypeScript",
         "React",
@@ -82,7 +75,7 @@ const structuredData = {
     },
     {
       "@type": "WebSite",
-      name: siteTitle,
+      name: SITE_NAME,
       description: siteDescription,
       ...(siteOrigin ? { url: siteOrigin } : {}),
     },
