@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { coreStack } from "../lib/portfolio";
 import { SkyCanvas, type SkyStats } from "./sky/sky-canvas";
 import { CvReceiver } from "./cv-receiver";
 import { SecretCount } from "./secret-count";
@@ -19,23 +18,16 @@ export function HomeSky() {
     flared: 0,
   });
 
-  // On desktop the home page is a single screen: no scrolling and no overscroll bounce. Phones stack the sky
-  // above the text, so a short phone may need to scroll a little. Restored when leaving.
+  // The home page is a single screen at every size: no scrolling and no overscroll bounce. Restored when leaving.
   useEffect(() => {
     const root = document.documentElement;
     const previous = {
       overflow: root.style.overflow,
       overscroll: root.style.overscrollBehavior,
     };
-    const wide = window.matchMedia("(min-width: 1024px)");
-    const lock = () => {
-      root.style.overflow = wide.matches ? "hidden" : previous.overflow;
-      root.style.overscrollBehavior = wide.matches ? "none" : previous.overscroll;
-    };
-    lock();
-    wide.addEventListener("change", lock);
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
     return () => {
-      wide.removeEventListener("change", lock);
       root.style.overflow = previous.overflow;
       root.style.overscrollBehavior = previous.overscroll;
     };
@@ -91,58 +83,22 @@ export function HomeSky() {
               )}
             </>
           )}
-          {/* Desktop: with the sky's other numbers. Phones keep it beside the name. */}
-          <SecretCount className="count-wide" />
+          <SecretCount />
         </div>
       )}
-      {/* Phones only: corner marks framing the disc like a figure plate (placed from --hero-x/y/r). */}
-      <div className="plate" aria-hidden="true" />
-      <main className="home-main gutter">
-        {/* Desktop only: the name fills the empty sky across from the moon. Phones keep the short greeting below. */}
-        <header className="hero fade-in" data-sky-avoid>
-          <h1 className="hero-name">
-            Jimuel Jean
-            <br />
-            <em>Untalan</em>
-          </h1>
-          <SecretCount className="count-narrow" />
-          <p className="hero-role">
-            full-stack developer · seeking a software internship
-          </p>
-        </header>
-        <blockquote className="quote fade-in" data-sky-avoid>
-          through the rough, <br />
-          to the stars
-          <span className="caret" aria-hidden="true" />
-        </blockquote>
-        <div className="intro fade-in delay" data-sky-avoid>
-          {/* Desktop only: what a recruiter scans for, under the name. */}
-          <p className="home-info">
-            CS student at MSEUF-CI in Quezon. I like building things people
-            actually use, from the database to the last pixel.
-          </p>
-          <p className="core-stack">
-            <span className="label">core stack</span>
-            {coreStack.join(" · ")}
-          </p>
-          {/* Phones only: the facts as a spec sheet under the lede. */}
-          <dl className="spec">
-            <dt>role</dt>
-            <dd>full-stack developer</dd>
-            <dt>status</dt>
-            <dd><span className="status-dot" aria-hidden="true" />open to internships</dd>
-            <dt>based</dt>
-            <dd>Quezon, PH · UTC+8</dd>
-            <dt>stack</dt>
-            <dd>{coreStack.join(" · ")}</dd>
-          </dl>
-        </div>
-        {/* Kept out of .intro: its fade animates transform, which would trap the receiver's absolute position. */}
-        <div className="actions" data-sky-avoid>
-          <Socials />
-          {/* Under the moon on desktop; beside the links on phones. */}
-          <CvReceiver />
-        </div>
+      <main className="home-main">
+        <section className="wall-label fade-in" data-sky-avoid>
+          <h1>Jimuel Jean Untalan</h1>
+          <p className="role">aspiring software engineer, open to internships</p>
+          <blockquote className="quote">
+            through the rough, to the stars
+            <span className="caret" aria-hidden="true" />
+          </blockquote>
+          <div className="actions">
+            <Socials />
+            <CvReceiver />
+          </div>
+        </section>
       </main>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Young_Serif } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 
@@ -18,15 +19,23 @@ const instrumentSerif = localFont({
   display: "swap",
 });
 
-const siteTitle = "Jimuel Jean Untalan | Full-Stack Developer";
+// Young Serif for the name alone: wider and sturdier than Instrument Serif, so it reads first beside the disc.
+const youngSerif = Young_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-young-serif",
+  display: "swap",
+});
+
+const siteTitle = "Jimuel Jean Untalan | Software Engineer";
 const siteDescription =
-  "Portfolio of Jimuel Jean Untalan, a full-stack developer from Quezon, Philippines building reliable web applications with React, Node.js, databases, and cloud tooling.";
+  "Portfolio of Jimuel Jean Untalan, a software engineer from Quezon, Philippines building reliable web applications with React, Node.js, databases, and cloud tooling.";
 const siteOrigin = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
 const socialImage = {
   url: "/og-image.png",
-  width: 1733,
-  height: 908,
-  alt: "Jimuel Jean Untalan — Full-Stack Developer",
+  width: 2400,
+  height: 1260,
+  alt: "Jimuel Jean Untalan, software engineer, beside a moon drawn in text characters",
 };
 
 export const metadata: Metadata = {
@@ -60,7 +69,7 @@ const structuredData = {
     {
       "@type": "Person",
       name: "Jimuel Jean Untalan",
-      jobTitle: "Full-Stack Developer",
+      jobTitle: "Software Engineer",
       description: siteDescription,
       address: {
         "@type": "PostalAddress",
@@ -103,7 +112,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html suppressHydrationWarning
       lang="en"
-      className={`${geistMono.variable} ${instrumentSerif.variable}`}
+      className={`${geistMono.variable} ${instrumentSerif.variable} ${youngSerif.variable}`}
     >
       <head>
         {/* Set the theme before first paint so the sky never flashes the wrong colour. Night is the default. */}

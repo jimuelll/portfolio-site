@@ -7,9 +7,9 @@ import { DELIVER_EVENT, DELIVER_SECONDS } from "./sky/sky-canvas";
 type Stage = "ready" | "incoming" | "caught";
 
 /**
- * The CV receiver under the moon, sun or Earth on the home page. Pressing it asks the sky to deliver: a
- * shooting star, a sunbeam or a satellite's pod comes down onto it, and on arrival the download starts
- * (or, until there's a PDF, it says the CV is landing soon). The engine places it via --hero-x/y/r.
+ * The CV receiver on the home page's label. Pressing it asks the sky to deliver: a shooting star, a
+ * sunbeam or a satellite's pod comes down onto it, and on arrival the download starts (or, until
+ * there's a PDF, it says the CV is landing soon).
  */
 export function CvReceiver() {
   const [stage, setStage] = useState<Stage>("ready");
@@ -50,7 +50,7 @@ export function CvReceiver() {
         ? cv.href
           ? "✦ cv received ↓"
           : "✦ cv landing soon"
-        : "✦ Download CV ↓";
+        : "cv ↓";
   return (
     <>
       <button

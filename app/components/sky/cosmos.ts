@@ -82,7 +82,7 @@ const FAINT: Rgb = [146, 154, 184];
 const LOG_LINES = [
   "incoming transmission ···",
   "pilot    jimuel jean untalan",
-  "role     full-stack developer",
+  "role     software engineer",
   "status   open to internships",
   "base     quezon, ph · utc+8",
   `stack    ${coreStack.join(" · ")}`,
@@ -1169,7 +1169,7 @@ export class Cosmos {
     const a = smoothstep(1.4, 2.2, since) * out;
     if (a <= 0) return;
     this.ctx.font = `12px ${this.family}`;
-    this.put("full-stack developer · open to internships", ns.x - sx, ns.y - sy, STAR, 0.7 * a);
+    this.put("software engineer · open to internships", ns.x - sx, ns.y - sy, STAR, 0.7 * a);
     this.label("open the dossier", ns.x - sx, ns.y - sy + 26, "/about", false, a);
   }
 }

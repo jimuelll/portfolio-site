@@ -81,6 +81,7 @@
   --gutter: 24px;
   --mono: var(--font-geist-mono), ui-monospace, monospace;
   --serif: var(--font-instrument-serif), Georgia, serif;
+  --display: var(--font-young-serif), Georgia, serif;
 }
 @media (min-width: 1024px) {
   :root { --gutter: 14vw; }
@@ -133,7 +134,7 @@ button { font: inherit; color: inherit; }
   /* One solid pill on every page, sky included, so the header never changes between them and nothing
      scrolling behind it shows through. */
   border-radius: 999px;
-  background: var(--bg);
+  background: var(--surface, var(--bg));
   border: 1px solid var(--line);
 }
 .top-nav a { color: var(--muted); transition: color 0.15s; }
@@ -193,9 +194,9 @@ button { font: inherit; color: inherit; }
 }
 .egg-note:empty { display: none; }
 .egg-note.on { opacity: 1; translate: -50% 0; }
-/* Phones and tablets: the home page's folio row sits just under the pill, so notes hang below it instead. */
+/* Phones and tablets: the home page's readout sits just under the pill, so notes hang below it instead. */
 @media (max-width: 1023px) {
-  .egg-note { top: calc(100% + 64px); }
+  .egg-note { top: calc(100% + 96px); }
 }
 /* Hints name the gesture the visitor actually has: a click with a mouse, a tap on a touchscreen. */
 .say-tap { display: none; }
@@ -222,16 +223,16 @@ button { font: inherit; color: inherit; }
 .system-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 28; pointer-events: none; transition: opacity 1s ease; }
 .system-canvas.out { opacity: 0; }
 /* Liftoff: the page drops away below, slowly and then fast, as the ground does. Landing, it rises back. */
-.home-main, .page-main, .page-footer, .plate, .sky-stats { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }
-:root.cosmos :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { opacity: 0; translate: 0 40vh; pointer-events: none; }
+.home-main, .page-main, .page-footer, .sky-stats { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }
+:root.cosmos :is(.home-main, .page-main, .page-footer, .sky-stats) { opacity: 0; translate: 0 40vh; pointer-events: none; }
 :root.cosmos .drifter-say, :root.departing .drifter-say { opacity: 0; }
 :root.cosmos :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
 /* ── page changes between the sky and the pages ──── */
 /* Leaving (top-nav.tsx adds .departing while the sky plays its move), the page steps back quickly so the sky
    carries the moment; arriving (.arriving), the new page rises into place as the sky settles. */
-:root.departing :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { opacity: 0; transition: opacity 0.45s ease, translate 0.45s ease; }
+:root.departing :is(.home-main, .page-main, .page-footer, .sky-stats) { opacity: 0; transition: opacity 0.45s ease, translate 0.45s ease; }
 :root.departing :is(.home-main, .page-main, .page-footer), :root.departing :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
-:root.arriving :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { animation: arrive-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.25s both; }
+:root.arriving :is(.home-main, .page-main, .page-footer, .sky-stats) { animation: arrive-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.25s both; }
 @keyframes arrive-rise { from { opacity: 0; translate: 0 26px; } }
 /* Leaving mid-eclipse the sky can't play its move (engine.ts adds .sky-fade), so it just fades with the page. */
 :root.departing.sky-fade .sky-canvas { opacity: 0; transition: opacity 0.45s ease; }
@@ -243,8 +244,8 @@ button { font: inherit; color: inherit; }
 /* While the disc is held, a long press is ours: no text selection or phone menus. */
 .home[data-charging] { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; cursor: progress; }
 /* In the galaxy the page fades out of the way and stops taking clicks; the sky is dragged instead. */
-:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer, .plate) { opacity: 0; }
-:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer, .plate) * { pointer-events: none; }
+:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer) { opacity: 0; }
+:root[data-theme="deep"] :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
 :root[data-theme="deep"] body { touch-action: none; }
 :root[data-theme="deep"] :is(.home, .page) { cursor: grab; }
 :root[data-theme="deep"] :is(.home, .page):active { cursor: grabbing; }
@@ -276,23 +277,38 @@ button { font: inherit; color: inherit; }
 .drifter-say .rest { visibility: hidden; }
 
 /* ── home ────────────────────────────────────────── */
+/* One screen at every size: the disc is the exhibit, and everything else is on a small label hung beside it. */
 .home { position: relative; height: 100dvh; width: 100%; overflow: hidden; cursor: crosshair; }
 /* The home page is played with (taps, holds, drags on the sky), so its text never gets selected by accident. */
 .home { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+/* The label grows with the window, so on a big monitor the name still holds its own beside the disc, level with it. */
 .home-main {
   position: relative;
   z-index: 20;
   height: 100%;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 36px;
-  padding-top: 120px;
-  padding-bottom: clamp(48px, 14vh, 128px);
+  align-items: center;
+  padding-inline: clamp(32px, 7vw - 40px, 120px);
   pointer-events: none;
 }
-.home-main > * { pointer-events: auto; cursor: auto; width: fit-content; max-width: 46rem; }
-.quote { font-size: 14px; line-height: 1.7; opacity: 0.6; }
+.wall-label {
+  width: clamp(20rem, 24vw, 36rem);
+  padding: clamp(16px, 1.3vw, 28px);
+  background: var(--surface, var(--bg));
+  border: 1px solid var(--line);
+  font-size: clamp(13px, 0.92vw, 18px);
+  pointer-events: auto;
+  cursor: auto;
+}
+.wall-label h1 { font-family: var(--display); font-weight: 400; font-size: clamp(36px, 3.2vw, 80px); line-height: 1.04; letter-spacing: -0.015em; }
+.wall-label .role { margin: 0.9em 0 0.6em; line-height: 1.5; color: var(--accent); }
+.quote { line-height: 1.5; color: var(--muted); }
+/* Phones and tablets: pinned to the foot, under the disc. */
+@media (max-width: 1023px) {
+  .home-main { align-items: flex-end; padding: 16px; }
+  .wall-label { width: min(24rem, 100%); padding: 16px; font-size: 13px; }
+  .wall-label h1 { font-size: 36px; }
+}
 .caret {
   display: inline-block;
   width: 0.55em;
@@ -303,135 +319,19 @@ button { font: inherit; color: inherit; }
   animation: blink 1.1s steps(1) infinite;
 }
 @keyframes blink { 50% { opacity: 0; } }
-.intro { display: flex; flex-direction: column; gap: 10px; line-height: 1.7; }
-.hero, .core-stack, .home-info { display: none; }
-@media (min-width: 1024px) {
-  /* Desktop: the name takes the top-left, across from the moon; the quote hangs under it and the intro stays low. */
-  /* Never wider than the gap before the moon's left edge (it sits at 0.71w with r = 0.25 × min(w, h)). */
-  .hero { display: block; max-width: calc(71vw - 25vmin - var(--gutter) - 32px); }
-  .hero-name { font-family: var(--serif); font-weight: 400; font-size: clamp(56px, 6.4vw, 100px); line-height: 0.95; letter-spacing: -0.01em; }
-  .hero-role { margin-top: 20px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
-  .home-main > .quote { margin-top: -14px; margin-bottom: auto; }
-  .quote br { display: none; }
-  /* Stops short of the receiver under the moon (centred on --hero-x, ~144px wide), which a short window
-     drops to the intro's height. */
-  .intro { font-size: 16px; max-width: min(40rem, calc(var(--hero-x, 71vw) - 96px - var(--gutter))); }
-  .home-info { display: block; max-width: 36rem; }
-  .core-stack { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
-  .core-stack .label { display: inline; margin: 0 12px 0 0; }
+/* A wrap, not a squeeze: the receiver's longer messages can drop to their own line on the narrowest phones. */
+.actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px 12px; flex-wrap: wrap;
+  margin-top: 0.9em; padding-top: 0.9em; border-top: 1px solid var(--line);
 }
-/* The receiver and the links: one row on phones; on desktop the links sit under the intro and the receiver
-   floats under the moon. Fades on opacity only, so the receiver still positions against .home-main. */
-.actions { animation: fade-op 0.5s 0.2s ease-out both; }
-@keyframes fade-op { from { opacity: 0; } }
 .actions .socials { margin-top: 0; }
-.hero-name em { font-style: normal; }
-.plate, .spec { display: none; }
-@media (min-width: 1024px) {
-  .home-main > .actions { margin-top: -16px; }
-}
-@media (max-width: 1023px) {
-  /* Phones and tablets: an editorial cover, then the details. The first screen is a folio rule (the sky stats) under
-     the nav, the whole disc framed as a figure plate with the quote running up its side, an oversized name overlapping
-     the plate's foot, what you do, and the links and receiver closing the screen. The rule of the next section peeks
-     above the fold; past it come a serif lede and a spec sheet. */
-  .home { height: auto; min-height: 100dvh; overflow: visible; }
-  .home-main {
-    --cover-top: calc(var(--hero-y, 240px) + var(--hero-r, 125px) * 0.82);
-    --name-size: clamp(54px, 18vw, 104px);
-    --name-height: calc(var(--name-size) * 0.88 * 2);
-    height: auto; justify-content: flex-start; gap: 0;
-    padding-top: var(--cover-top); padding-bottom: 64px;
-  }
-  .home-main > * { width: auto; max-width: 34rem; }
-  .home-main > .hero { order: 1; }
-  .home-main > .actions { order: 2; }
-  .home-main > .intro { order: 3; }
 
-  .home .sky-stats {
-    top: 66px; left: var(--gutter); right: var(--gutter);
-    display: flex; justify-content: space-between; gap: 12px;
-    padding: 7px 0; border-block: 1px solid var(--line);
-    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; text-align: left;
-  }
-  /* Read on the token, not by fading the text, so the folio keeps its contrast in every sky. */
-  .home .sky-stats > div { opacity: 1; color: var(--muted); white-space: nowrap; }
-  .home .sky-stats .flash { animation-name: flash-ink; }
-  .home .sky-stats .hint { opacity: 1; color: var(--accent); }
-
-  .plate {
-    display: block; position: absolute; z-index: 15; pointer-events: none;
-    --s: 16px; --c: color-mix(in srgb, var(--accent) 70%, transparent);
-    left: calc(var(--hero-x) - var(--hero-r) - 18px); top: calc(var(--hero-y) - var(--hero-r) - 18px);
-    width: calc(var(--hero-r) * 2 + 36px); height: calc(var(--hero-r) * 2 + 36px);
-    background:
-      linear-gradient(var(--c), var(--c)) top left / var(--s) 1px no-repeat,
-      linear-gradient(var(--c), var(--c)) top left / 1px var(--s) no-repeat,
-      linear-gradient(var(--c), var(--c)) bottom right / var(--s) 1px no-repeat,
-      linear-gradient(var(--c), var(--c)) bottom right / 1px var(--s) no-repeat;
-  }
-  /* The quote as the plate's caption, set vertically up its left edge. */
-  .home-main > .quote {
-    position: absolute; left: var(--gutter); top: calc(var(--hero-y) - var(--hero-r) - 12px);
-    height: calc(var(--hero-r) * 2 + 30px);
-    writing-mode: vertical-rl; rotate: 180deg; text-align: right; white-space: nowrap;
-    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
-    /* Ends just above the name, which overlaps the plate's foot. */
-    height: calc(var(--hero-r) * 1.82 + 2px);
-  }
-  .quote::before { content: "fig. 1 — "; color: var(--accent); }
-  .quote br, .quote .caret { display: none; }
-  /* A small plate leaves no room for the whole caption, and it would run up into the folio line. */
-  @media (max-height: 660px), (max-width: 360px) { .quote::before { content: none; } }
-
-  .hero { display: block; position: relative; }
-  .hero-name { font-family: var(--serif); font-weight: 400; font-size: var(--name-size); line-height: 0.88; letter-spacing: -0.02em; }
-  .hero-name em { font-style: italic; color: var(--accent); }
-  .hero-role { margin-top: 14px; font-size: 11px; line-height: 1.5; letter-spacing: 0.08em; text-transform: uppercase; text-wrap: balance; color: var(--muted); }
-  /* In the empty space after "Untalan", which is shorter than "Jimuel Jean" on every width. */
-  .hero .secret-count { display: block; position: absolute; right: 0; top: calc(var(--name-height) - 1.9em); }
-
-  .intro { margin-top: 24px; padding-top: 40px; border-top: 1px solid var(--line); gap: 0; font-size: 14px; }
-  .core-stack { display: none; }
-  .home-info { display: block; font-family: var(--serif); font-size: clamp(22px, 6.2vw, 30px); line-height: 1.2; }
-  .spec {
-    display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0 18px;
-    margin-top: 40px; font-size: 12px; line-height: 1.5;
-  }
-  .spec dt, .spec dd { padding: 12px 0; border-top: 1px solid var(--line); }
-  .spec dt { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); padding-top: 14px; }
-  .spec dd { color: var(--muted); }
-
-  .actions {
-    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-    /* Down to the foot of the first screen, leaving the peek. A short phone just stacks, and scrolls. */
-    margin-top: max(28px, calc(100svh - var(--cover-top) - var(--name-height) - 47px - 63px - 44px));
-    padding-top: 18px; border-top: 1px solid var(--line);
-  }
-  .actions .socials { font-size: 12px; }
-  .actions .cv-receiver { position: static; translate: none; padding: 8px 12px; font-size: 11px; }
-}
-/* Narrow phones: the folio row shows the first-visit hint instead of the running count beside it until the hint
-   has been used, and the plate's caption tightens (and below 360px drops its "fig. 1" prefix) to clear the name. */
-@media (max-width: 389px) {
-  .home .sky-stats:has(.hint) > div:nth-child(2):not(.hint) { display: none; }
-  .home-main > .quote { letter-spacing: 0.02em; }
-}
-@media (max-width: 359px) {
-  .quote::before { content: none; }
-}
-
-/* The CV receiver, just under the moon, sun or Earth (the sky engine sets --hero-x/y/r on .home). */
+/* The CV receiver, on the label: a shooting star, a sunbeam or a satellite's pod comes down onto it. */
 .cv-receiver {
-  position: absolute; z-index: 25;
-  left: var(--hero-x, 71%); top: calc(var(--hero-y, 37%) + var(--hero-r, 25vmin) + 30px); translate: -50% 0;
-  padding: 8px 16px; font-size: 12px; white-space: nowrap; cursor: pointer;
-  color: var(--accent); background: color-mix(in srgb, var(--bg) 85%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
-  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  margin-right: -6px; padding: 2px 6px; white-space: nowrap; cursor: pointer;
+  color: var(--accent); background: none; border: 0;
 }
-.cv-receiver:hover, .cv-receiver:focus-visible { background: var(--accent); color: var(--bg); border-color: var(--accent); }
-.cv-receiver.incoming { border-style: dashed; }
+.cv-receiver:hover, .cv-receiver:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 /* Caught: a quick pulse as the delivery lands. */
 .cv-receiver.caught { animation: cv-caught 0.6s ease-out; }
 @keyframes cv-caught {
@@ -443,33 +343,34 @@ button { font: inherit; color: inherit; }
 .socials a { opacity: 0.7; }
 .socials a:hover { opacity: 1; }
 
+/* What the sky is doing right now: across the disc from the label on desktop, in the empty sky above it on phones. */
 .sky-stats {
   position: absolute;
   z-index: 20;
-  top: 30px;
-  right: var(--gutter);
-  font-size: 11px;
-  line-height: 1.7;
+  right: 32px;
+  bottom: 32px;
+  font-size: 12px;
+  line-height: 1.6;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.sky-stats > div { opacity: 0.35; }
-.sky-stats .flash { animation: flash 0.7s ease-out both; }
-/* How many secrets you've found: in the readout on desktop, after the name on phones. */
-.count-narrow { display: none; }
-.hero .secret-count { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; white-space: nowrap; color: var(--muted); animation: flash-ink 0.7s ease-out both; }
-.secret-count.all, .sky-stats > .secret-count.all { color: var(--accent); opacity: 0.9; animation: none; }
-@media (max-width: 1023px) { .count-wide { display: none; } }
-.sky-stats .hint { color: var(--accent); opacity: 0.8; animation: drift 3s ease-in-out infinite; }
-@keyframes flash { from { opacity: 1; } to { opacity: 0.35; } }
+.sky-stats > div { color: var(--muted); }
+.sky-stats .flash { animation: flash-ink 0.7s ease-out both; }
+.sky-stats > .secret-count.all { color: var(--accent); animation: none; }
+.sky-stats .hint { color: var(--accent); animation: drift 3s ease-in-out infinite; }
 @keyframes flash-ink { from { color: var(--fg); } }
 @keyframes drift { 50% { transform: translateY(2px); } }
+@media (max-width: 1023px) {
+  .sky-stats { top: 64px; right: auto; bottom: auto; left: 16px; text-align: left; }
+}
+/* A phone on its side has no room above the label, and the label matters more. */
+@media (max-height: 360px) {
+  .sky-stats { display: none; }
+}
 
 .fade-in { animation: fade 0.5s ease-out both; }
 .fade-in.delay { animation-delay: 0.2s; }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
-.quote.fade-in { animation-name: fade-quote; }
-@keyframes fade-quote { from { opacity: 0; transform: translateY(6px); } to { opacity: 0.6; } }
 
 /* ── interior pages ──────────────────────────────── */
 .page { position: relative; min-height: 100vh; }
@@ -535,7 +436,7 @@ button { font: inherit; color: inherit; }
 /* Hierarchy: serif name and section titles carry the page; mono stays for body and small labels. */
 /* A dossier: identity, contacts and the CV pinned on the left; the record scrolls past on the right. */
 .dossier { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 64px; align-items: start; }
-.dossier-id h1 { margin-top: 26px; font-family: var(--serif); font-weight: 400; font-size: clamp(40px, 3.6vw, 56px); line-height: 1; letter-spacing: -0.01em; }
+.dossier-id h1 { margin-top: 26px; font-family: var(--display); font-weight: 400; font-size: clamp(34px, 3vw, 48px); line-height: 1.04; letter-spacing: -0.015em; }
 .dossier-id h1 em { color: var(--accent); }
 .dossier-id .about-pitch { font-size: 14px; }
 /* Pinned only where it fits: wide enough for two columns and tall enough to show the whole column (~750px). */
@@ -647,8 +548,6 @@ button { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   body { font-size: 14px; }
   .top-nav { gap: 20px; top: 12px; padding: 8px 20px; }
-  .sky-stats { top: 64px; }
-  .home-main { padding-bottom: 40px; }
   .page-main { padding-top: 104px; }
 }
 
@@ -665,7 +564,7 @@ button { font: inherit; color: inherit; }
   .toggle-pad button::before { inset: 4px; }
   .socials a, .contact-line a, .project-lines a, .pi-links a { padding-block: 15px; }
   .more { padding-block: 12px; margin-block: -12px; }
-  .cv-btn, .cv-receiver, .actions .cv-receiver { min-height: 44px; }
+  .cv-btn, .cv-receiver { min-height: 44px; }
   .cv-btn { display: inline-flex; align-items: center; }
 }
 

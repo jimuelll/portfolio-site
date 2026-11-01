@@ -141,7 +141,7 @@ const GALAXY_ACCENT: Rgb = [195, 166, 255];
 const GALAXY_FAINT: Rgb = [154, 150, 184];
 /** How close the camera comes to the sun for the pilot's card. */
 const SUN_ZOOM = 2.4;
-const PILOT_CARD = ["pilot · jimuel jean untalan", "full-stack developer", "seeking a software internship", "read the dossier →"];
+const PILOT_CARD = ["pilot · jimuel jean untalan", "software engineer", "seeking a software internship", "read the dossier →"];
 const MAX_SATS = 30;
 /** One satellite at 1.3 Earth radii goes round in 8 s; further out is slower, by Kepler's third law. */
 const SAT_W0 = (TAU / 8) * 1.3 ** 1.5;
@@ -320,6 +320,8 @@ export class SkyEngine {
   private shocks: Shock[] = [];
   /** How far the day sky has settled into its printed look (1) from the eclipse's softer one (0). */
   private inked = 1;
+  /** The sky's colour that the nav and the label are wearing through a theme change (see matchSurfaces). */
+  private surface: string | null = null;
   private sunFlash = 0;
   private flared = 0;
   private started = false;
@@ -521,6 +523,7 @@ export class SkyEngine {
     }
     this.scene = next;
     this.turn = null;
+    this.matchSurfaces(null);
     // Painted right away, so the stars change with the page.
     if (sunrise || this.reduced.matches || !this.raf) this.render();
   }
@@ -550,25 +553,17 @@ export class SkyEngine {
       p.x = w * 0.5;
       p.y = Math.min(h * 0.42, w * 0.42);
     } else if (w >= 1024) {
-      p.r = Math.min(w, h) * 0.25;
-      p.x = w * 0.71;
-      p.y = h * 0.37;
+      // The exhibit: right of centre, with the label level with it across the gap on the left.
+      p.r = Math.min(w, h) * 0.33;
+      p.x = w * 0.66;
+      p.y = h * 0.5;
     } else {
-      // Phones and tablets: the whole disc as a figure plate under the folio line, a little right of centre so
-      // the quote can run up its left side, with the name overlapping its foot. Sized from the window, not the
-      // canvas: here the canvas grows with the page, which this size helps set.
-      const vh = window.innerHeight;
-      // Wide enough that its plate (r + 18px) ends on the right gutter, and low enough to clear the folio line.
-      p.r = Math.min(w * 0.31, vh * 0.19);
-      p.x = w * 0.58;
-      p.y = Math.max(128, vh * 0.2) + p.r;
-    }
-    // The home page places its CV receiver from these, so it sits just under the disc on any screen.
-    if (this.variant === "full") {
-      const home = this.canvas.parentElement;
-      home?.style.setProperty("--hero-x", `${p.x.toFixed(1)}px`);
-      home?.style.setProperty("--hero-y", `${p.y.toFixed(1)}px`);
-      home?.style.setProperty("--hero-r", `${p.r.toFixed(1)}px`);
+      // Phones and tablets: bigger than the screen can hold, running off the right edge above the label. Capped
+      // by the height, so a short phone's disc still ends about where the label begins. Far enough right and low
+      // enough that its curve leaves the top-left corner clear for the readout.
+      p.r = Math.min(w * 0.62, h * 0.29);
+      p.x = w * 0.76;
+      p.y = h * 0.4;
     }
     // Small glyphs, so craters, coastlines and sunspots read as detail rather than noise.
     p.font = clamp(p.r / 20, 6, 11);
@@ -699,7 +694,10 @@ export class SkyEngine {
 
   private step(dt: number) {
     this.time += dt;
-    if (this.turn && this.time - this.turn.start > this.turn.dur) this.turn = null;
+    if (this.turn && this.time - this.turn.start > this.turn.dur) {
+      this.turn = null;
+      this.matchSurfaces(null);
+    }
     this.boil += dt * (1 + this.hov * 2.5);
     // The shutter opens slowly and closes quickly.
     this.trail += (exposure.k - this.trail) * dt * (exposure.k > this.trail ? 4 : 7);
@@ -1123,8 +1121,10 @@ export class SkyEngine {
     // The canvas paints the page background itself while the light changes.
     if (this.variant !== "emblem") {
       ctx.globalAlpha = 1;
-      ctx.fillStyle = css(mix(DARK_BG, LIGHT_BG, st.s));
+      const sky = css(mix(DARK_BG, LIGHT_BG, st.s));
+      ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
+      this.matchSurfaces(sky);
     }
     this.use(LIGHT, st.s);
     this.drawStars("day");
@@ -1145,6 +1145,18 @@ export class SkyEngine {
     this.drawBead(st.bead, st.beadDir);
     this.use(DARK, 1 - st.s);
     this.drawComets();
+  }
+
+  /**
+   * The nav and the label are solid, so through a theme change they take the colour the sky has this frame, and read
+   * as part of it rather than as dark or pale boxes. Set on the home page, so it goes when the page does.
+   */
+  private matchSurfaces(sky: string | null) {
+    if (this.variant !== "full" || sky === this.surface) return;
+    this.surface = sky;
+    const home = this.canvas.parentElement;
+    if (sky) home?.style.setProperty("--surface", sky);
+    else home?.style.removeProperty("--surface");
   }
 
   /**
@@ -2200,8 +2212,10 @@ export class SkyEngine {
     const other: Scene = turn.to === "earth" ? turn.from : turn.to;
     if (this.variant !== "emblem") {
       ctx.globalAlpha = 1;
-      ctx.fillStyle = css(mix(bgOf(turn.from), bgOf(turn.to), e));
+      const sky = css(mix(bgOf(turn.from), bgOf(turn.to), e));
+      ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
+      this.matchSurfaces(sky);
     }
     if (other === "day") {
       this.use(LIGHT, 1 - p);
@@ -2389,8 +2403,10 @@ export class SkyEngine {
     const home: Scene = going ? turn.from : turn.to;
     if (this.variant !== "emblem") {
       ctx.globalAlpha = 1;
-      ctx.fillStyle = css(mix(bgOf(turn.from), bgOf(turn.to), smoothstep(0.3, 0.6, k)));
+      const sky = css(mix(bgOf(turn.from), bgOf(turn.to), smoothstep(0.3, 0.6, k)));
+      ctx.fillStyle = sky;
       ctx.fillRect(0, 0, w, h);
+      this.matchSurfaces(sky);
     }
     const c = this.variant === "quiet" ? { x: this.view.x, y: this.view.y } : { x: this.hero.x, y: this.hero.y };
     const R = this.galaxyRadius();

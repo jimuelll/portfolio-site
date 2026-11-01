@@ -9,7 +9,7 @@ import { awards, coreStack, education, projects, toolkit } from "../lib/portfoli
 
 export const metadata: Metadata = {
   title: "About | Jimuel Jean Untalan",
-  description: "About Jimuel Jean Untalan, a full-stack developer and Computer Science student from Quezon, Philippines.",
+  description: "About Jimuel Jean Untalan, a software engineer and Computer Science student from Quezon, Philippines.",
 };
 
 const [degree, capstone] = education;
@@ -32,7 +32,7 @@ export default function AboutPage() {
         <aside className="dossier-id">
           <AboutPhoto />
           <h1>Jimuel Jean <em>Untalan</em></h1>
-          <p className="kicker"><span className="status-dot" aria-hidden="true" />Full-stack developer · seeking an internship</p>
+          <p className="kicker"><span className="status-dot" aria-hidden="true" />Software engineer · seeking an internship</p>
           <p className="about-pitch">
             I like making things work. I build with the user in mind, care a lot about interfaces, and think about how
             long the thing will last.
