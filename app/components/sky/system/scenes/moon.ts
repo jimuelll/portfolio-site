@@ -170,10 +170,10 @@ export const moonBase: Place = {
     }
     scene.add(land.mesh("lit", { cast: true, receive: true }), props.mesh("lit", { cast: true, receive: true }));
 
-    // Earth, with the real coastlines, half lit as it would be from here.
+    // Earth, with the real coastlines, lit by its own colours so it always shows up against the black.
     const earthSet = new VoxelSet();
     earthSet.ball(0, 0, 0, 13, 1.25, paintEarth, 0.03);
-    const earth = earthSet.mesh("lit");
+    const earth = earthSet.mesh("glow");
     earth.position.set(-112, 46, -150);
     earth.rotation.z = 0.41;
     scene.add(earth);

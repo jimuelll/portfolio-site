@@ -76,7 +76,7 @@ void main() {
   float gx = tr + 2.0 * rr + br - tl - 2.0 * ll - bl;
   float gy = tl + 2.0 * tt + tr - bl - 2.0 * bb - br;
   float idx;
-  if (length(vec2(gx, gy)) > 0.95 && L > 0.05) {
+  if (length(vec2(gx, gy)) > 1.5 && L > 0.05) {
     float ax = abs(gx), ay = abs(gy);
     idx = ay > ax * 2.4 ? 13.0 : ax > ay * 2.4 ? 12.0 : gx * gy < 0.0 ? 10.0 : 11.0;
   } else {
@@ -88,7 +88,7 @@ void main() {
   // Hue kept, saturation up, and lifted a little since the glyph only covers part of its cell.
   vec3 tint = clamp(mix(vec3(L), col, 1.3), 0.0, 1.0);
   tint *= 1.0 + (1.0 - L) * 0.35;
-  vec3 out3 = uBg + tint * (0.34 + ink * 1.0);
+  vec3 out3 = uBg + tint * (0.46 + ink * 0.84);
   out3 += texture2D(tBloom, vUv).rgb * 0.5;
   out3 *= mod(gl_FragCoord.y, 3.0) < 1.0 ? 0.84 : 1.0;
   vec2 v = vUv - 0.5;
@@ -110,6 +110,8 @@ export class AsciiPass {
   /** Sustained slow frames raise this: 1 coarser glyphs, 2 fewer motes, 3 no shadows. */
   level = 0;
 
+  /** The current view's glyph size against the usual. */
+  private cellScale = 1;
   private w = 1;
   private h = 1;
   private family: string;
@@ -161,7 +163,7 @@ export class AsciiPass {
     const bw = Math.max(2, Math.round(w * ratio)), bh = Math.max(2, Math.round(h * ratio));
     this.renderer.setSize(bw, bh, false);
     // Device px decide the cell, so a sharp phone gets as fine a weave as a monitor; the buffer's capped ratio scales it.
-    const scale = (ratio / Math.min(dpr, 3)) * (this.level >= 1 ? 1.34 : 1);
+    const scale = (ratio / Math.min(dpr, 3)) * (this.level >= 1 ? 1.34 : 1) * this.cellScale;
     this.cell.set(Math.max(3, Math.round(CELL_W * scale)), Math.max(5, Math.round(CELL_H * scale)));
     (this.print.uniforms.uRes.value as Vector2).set(bw, bh);
     this.drawAtlas();
@@ -177,6 +179,13 @@ export class AsciiPass {
     this.blurB = target(gw * 2, gh * 2);
     this.glowA = target(gw / 2, gh / 2);
     this.glowB = target(gw / 2, gh / 2);
+  }
+
+  /** Changes the glyph size, which remakes the buffers: for the cut between views, when nobody can see it. */
+  setCell(scale: number) {
+    if (scale === this.cellScale) return;
+    this.cellScale = scale;
+    this.resize(this.w, this.h);
   }
 
   /** The glyphs in one row, each exactly one cell of buffer pixels, so they land crisply on the screen's. */

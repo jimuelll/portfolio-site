@@ -105,9 +105,10 @@ export class Motes {
     this.matrices = this.mesh.instanceMatrix.array as Float32Array;
   }
 
-  place(i: number, x: number, y: number, z: number, size: number) {
+  place(i: number, x: number, y: number, z: number, size: number, tall = size) {
     const m = i * 16;
-    this.matrices[m] = this.matrices[m + 5] = this.matrices[m + 10] = size;
+    this.matrices[m] = this.matrices[m + 10] = size;
+    this.matrices[m + 5] = tall;
     this.matrices[m + 12] = x;
     this.matrices[m + 13] = y;
     this.matrices[m + 14] = z;

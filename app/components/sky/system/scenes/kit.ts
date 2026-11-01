@@ -11,6 +11,10 @@ export interface Diorama {
   at: Vector3;
   fov: number;
   lens: Lens;
+  /** How big the glyphs are against the usual, for a scene with fine detail to hold. */
+  cell?: number;
+  /** How far back a narrow screen stands (1: enough to fit the width), for a scene that suits a tall crop. */
+  pullback?: number;
   /** The scene's sun, whose shadows do so much of the look. */
   sun: DirectionalLight;
   /** True if something big moves, so its shadow has to keep up. */

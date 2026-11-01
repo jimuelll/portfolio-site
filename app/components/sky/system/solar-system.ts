@@ -12,7 +12,7 @@ import { clamp, ease, smoothstep } from "../engine";
 import { AsciiPass } from "./ascii";
 import { MAP_LENS, Orrery, type World } from "./orrery";
 import type { Diorama, Place } from "./scenes/kit";
-import { fuji } from "./scenes/earth";
+import { fushimi } from "./scenes/earth";
 import { moonBase } from "./scenes/moon";
 import { galeCrater } from "./scenes/mars";
 import { release } from "./voxels";
@@ -21,7 +21,7 @@ export interface Note { text: string; at: number }
 /** Something the Cosmos canvas should write on the picture. A world's name; or the one in focus, which can be tapped. */
 export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
 
-const PLACES: Record<string, Place> = { earth: fuji, moon: moonBase, mars: galeCrater };
+const PLACES: Record<string, Place> = { earth: fushimi, moon: moonBase, mars: galeCrater };
 /** The dive between the map and a place. The view cuts halfway, at its coarsest. */
 const DIVE_SECONDS = 1.7;
 const COARSEST = 7;
@@ -180,9 +180,13 @@ export class SolarSystem {
     this.lookAround.yaw = this.lookAround.pitch = 0;
     this.rest = 0;
     this.diveWorld = world;
-    if (!place) return;
+    if (!place) {
+      this.pass.setCell(1);
+      return;
+    }
     const view = place.build(this.coarse);
     this.here = { place, view };
+    this.pass.setCell(view.cell ?? 1);
     if (this.pass.level >= 2) view.thin(0.5);
     if (this.pass.level >= 3) view.sun.castShadow = false;
     this.pass.renderer.shadowMap.needsUpdate = true;
@@ -248,7 +252,7 @@ export class SolarSystem {
     const t = this.reduced ? 0 : this.time;
     const offset = new Vector3().subVectors(view.eye, view.at);
     // A narrow screen stands further back, so the whole of the landmark still fits across it.
-    const narrow = this.camera.aspect < 1 ? 1 + (1 - this.camera.aspect) * 1.05 : 1;
+    const narrow = this.camera.aspect < 1 ? 1 + (1 - this.camera.aspect) * 1.05 * (view.pullback ?? 1) : 1;
     // Settling in: a touch too close, drawing back as the grid sharpens.
     const settle = this.reduced ? 1 : 1.16 - 0.16 * ease(clamp(this.rest / 2.4, 0, 1));
     offset.multiplyScalar(narrow / settle);

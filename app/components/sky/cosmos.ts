@@ -663,6 +663,8 @@ export class Cosmos {
     }
     if (this.overlay) this.drawOverlay();
     this.drawHud();
+    // After the readout, whose dark band on phones would otherwise dim it.
+    if (this.system?.landed()) this.drawBackToOrbit();
     ctx.globalAlpha = 1;
   }
 
@@ -784,7 +786,6 @@ export class Cosmos {
       this.put(tag.text, tag.x, tag.y, FAINT, 0.75 * quiet);
     }
     const narrow = this.w < 640;
-    if (system.landed()) this.drawBackToOrbit();
     const line = system.saying();
     if (line) {
       const y = this.h - (narrow ? 142 : 64);
