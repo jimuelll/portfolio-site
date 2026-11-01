@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
 import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
 import { Cosmos, type Stage } from "./sky/cosmos";
+import { loadSystem } from "./sky/system/load";
 
 const LINKS = [
   { label: "sky", href: "/" },
@@ -22,11 +23,13 @@ const UNLOCK_LOCK = 2500;
 const UNLOCK_NOTE = 3800;
 /** How long colours take to ease over on inner pages (the ring pulse runs about twice as long). Matches globals.css. */
 const FADE_MS = 500;
-/** Holding the toggle is a launch: at three seconds you lift off into the voyage, at five you arrive at the vista. */
+/** Holding the toggle is a launch: at three seconds you lift off into the voyage, at five you arrive at the solar system. */
 const LIFTOFF_MS = 3000;
 const ARRIVE_MS = 5000;
 /** From the voyage, a fresh hold only needs the rest of the way: two more seconds. */
 const ONWARD_MS = ARRIVE_MS - LIFTOFF_MS;
+/** A hold this long is no tap: the solar system's code starts on its way, so it's there on arrival. */
+const PREFETCH_MS = 1000;
 /** How long the cosmos takes to fade away when you land. Matches .cosmos-canvas in globals.css. */
 const LAND_MS = 1000;
 /** How long a page arriving from the sky takes to rise into place. Matches .arriving in globals.css. */
@@ -102,8 +105,11 @@ export function TopNav() {
   const hold = useRef({ start: 0, stage: 0, onward: false, raf: 0, timers: [] as number[], swallowUntil: 0 });
 
   const onEscape = useEffectEvent((e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    // Landed on a world, Escape goes back up to the map first.
+    if (cosmos?.back()) return;
     // Out of the cosmos or the galaxy, the same as a tap on the toggle.
-    if (e.key === "Escape" && (cosmos || document.documentElement.dataset.theme === "deep")) toggle();
+    if (cosmos || document.documentElement.dataset.theme === "deep") toggle();
   });
 
   /** The moon, sun or Earth was held for three seconds (sky/engine.ts): hyperdrive to the galaxy. */
@@ -290,12 +296,11 @@ export function TopNav() {
     showNote("✦ liftoff · keep holding to arrive", ONWARD_MS + 600);
   }
 
-  /** Five seconds: out of warp, in front of the vista. */
+  /** Five seconds: out of warp, in front of the solar system. */
   function arrive() {
-    cosmos?.arrive();
+    cosmos?.arrive((solarSystem) => showNote(solarSystem ? "✦ arrival · tap a world to land · ✧ to go home" : "✦ arrival · tap ✧ to land"));
     setStage("vista");
     buzz([12, 60, 12]);
-    showNote("✦ arrival · tap ✧ to land");
   }
 
   function startHold() {
@@ -314,6 +319,7 @@ export function TopNav() {
     button.current!.dataset.holding = "";
     // The stages run on timers, so they land on time even if frames are dropped; frames only draw the ring.
     h.timers = [
+      ...(onward ? [] : [window.setTimeout(() => { loadSystem().catch(() => {}); }, PREFETCH_MS)]),
       ...(onward ? [] : [window.setTimeout(() => { h.stage = 1; liftoff(); }, LIFTOFF_MS)]),
       window.setTimeout(() => { h.stage = 2; arrive(); }, onward ? ONWARD_MS : ARRIVE_MS),
     ];

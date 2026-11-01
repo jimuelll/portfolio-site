@@ -1,0 +1,356 @@
+/*
+ * The solar system: where the five-second hold arrives (cosmos.ts). A map you can turn and zoom, and on it a few
+ * places you can land, each a small voxel scene that plays by itself like a live wallpaper.
+ *
+ * This is only the picture and what it knows. The Cosmos canvas stays on top, transparent, drawing the readout and the
+ * labels this hands it and passing pointers down. This file and everything it imports is one lazy chunk (load.ts), so
+ * nobody pays for three.js until they've held the toggle.
+ */
+
+import { PerspectiveCamera, Vector3 } from "three";
+import { clamp, ease, smoothstep } from "../engine";
+import { AsciiPass } from "./ascii";
+import { MAP_LENS, Orrery, type World } from "./orrery";
+import type { Diorama, Place } from "./scenes/kit";
+import { fuji } from "./scenes/earth";
+import { moonBase } from "./scenes/moon";
+import { galeCrater } from "./scenes/mars";
+import { release } from "./voxels";
+
+export interface Note { text: string; at: number }
+/** Something the Cosmos canvas should write on the picture. A world's name; or the one in focus, which can be tapped. */
+export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
+
+const PLACES: Record<string, Place> = { earth: fuji, moon: moonBase, mars: galeCrater };
+/** The dive between the map and a place. The view cuts halfway, at its coarsest. */
+const DIVE_SECONDS = 1.7;
+const COARSEST = 7;
+/** How far a drag can turn the view in a place, before it eases back. */
+const YAW_LIMIT = 0.36;
+const PITCH_LIMIT = 0.13;
+/** A fingertip's reach, in px, so the smallest worlds and creatures can still be hit. */
+const TOUCH = 28;
+const NOTE_SECONDS = 5;
+
+type Dive = { t: number; to: Place | null; world: World | null; cut: boolean };
+
+export class SolarSystem {
+  readonly canvas = document.createElement("canvas");
+  private pass: AsciiPass;
+  private map: Orrery;
+  private here: { place: Place; view: Diorama } | null = null;
+  private camera = new PerspectiveCamera(30, 1, 0.5, 1800);
+  private dive: Dive | null = null;
+  /** The world the camera dives at or rises from, held after the cut for the way back out. */
+  private diveWorld: World | null = null;
+  private focus: World | null = null;
+  private note: Note | null = null;
+  private time = 0;
+  private w = 1;
+  private h = 1;
+  private frames = 0;
+  private lastFrame = 0;
+  private lookAround = { yaw: 0, pitch: 0, dragging: false };
+  private look = { x: 0, y: 0 };
+  private rest = 0;
+  private lost: () => void;
+  private reduced: boolean;
+  private coarse: boolean;
+
+  constructor(opts: { family: string; reduced: boolean; coarse: boolean; w: number; h: number; projects: number; onLost: () => void }) {
+    this.reduced = opts.reduced;
+    this.coarse = opts.coarse;
+    this.lost = opts.onLost;
+    this.canvas.className = "system-canvas";
+    this.canvas.setAttribute("aria-hidden", "true");
+    this.pass = new AsciiPass(this.canvas, opts.family);
+    this.pass.fade = opts.reduced ? 1 : 0;
+    this.map = new Orrery(opts.reduced, opts.projects);
+    this.canvas.addEventListener("webglcontextlost", this.onLost);
+    this.resize(opts.w, opts.h);
+    document.body.append(this.canvas);
+  }
+
+  private onLost = () => this.lost();
+
+  resize(w: number, h: number) {
+    this.w = w;
+    this.h = h;
+    this.pass.resize(w, h);
+    this.map.resize(w, h);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  // ── what the pointer does ─────────────────────
+
+  drag(dx: number, dy: number) {
+    if (this.dive) return;
+    if (!this.here) return this.map.drag(dx, dy);
+    this.lookAround.dragging = true;
+    this.lookAround.yaw = clamp(this.lookAround.yaw - dx * 0.0032, -YAW_LIMIT, YAW_LIMIT);
+    this.lookAround.pitch = clamp(this.lookAround.pitch + dy * 0.0022, -PITCH_LIMIT, PITCH_LIMIT);
+  }
+
+  release() {
+    this.map.release();
+    this.lookAround.dragging = false;
+  }
+
+  zoom(factor: number) {
+    if (!this.here && !this.dive) this.map.zoomBy(factor);
+  }
+
+  hover(x: number, y: number) {
+    if (this.here || this.dive) return false;
+    this.focus = this.map.worldAt(x, y, 18);
+    return this.focus !== null;
+  }
+
+  /** A tap: the map tries to land, a place sees if you've touched its creature. */
+  tap(x: number, y: number) {
+    if (this.dive) return;
+    if (this.here) {
+      const { view } = this.here;
+      const p = this.fixOf(view.actor);
+      const r = (view.actorSize / this.camera.position.distanceTo(view.actor)) * (this.h / 2 / Math.tan((this.camera.fov * Math.PI) / 360));
+      if (Math.hypot(p.x - x, p.y - y) <= Math.max(TOUCH, r)) this.say(view.poke(this.time));
+      return;
+    }
+    const world = this.map.worldAt(x, y, TOUCH);
+    if (world) this.choose(world);
+    else this.focus = null;
+  }
+
+  /** Arrow keys walk the worlds, Enter goes to the one in focus. True if the key meant something here. */
+  key(code: string) {
+    if (this.here || this.dive) return false;
+    if (code === "ArrowRight" || code === "ArrowLeft" || code === "ArrowUp" || code === "ArrowDown") {
+      const list = this.map.worlds;
+      const i = this.focus ? list.indexOf(this.focus) : -1;
+      const step = code === "ArrowRight" || code === "ArrowDown" ? 1 : -1;
+      this.focus = list[(i + step + list.length) % list.length];
+      return true;
+    }
+    if (code === "Enter" && this.focus) {
+      this.choose(this.focus);
+      return true;
+    }
+    return false;
+  }
+
+  private choose(world: World) {
+    this.focus = world;
+    const place = world.lands ? PLACES[world.lands] : null;
+    if (place) this.land(place, world);
+    else this.say(world.refusal);
+  }
+
+  private say(text: string) {
+    this.note = { text, at: this.time };
+  }
+
+  // ── going places ──────────────────────────────
+
+  private land(place: Place, world: World) {
+    this.note = null;
+    if (this.reduced) return this.cutTo(place, world);
+    this.dive = { t: 0, to: place, world, cut: false };
+    this.diveWorld = world;
+  }
+
+  /** Back up to the map. False if you're already there. */
+  back() {
+    if (!this.here || this.dive) return false;
+    this.note = null;
+    if (this.reduced) {
+      this.cutTo(null, this.diveWorld);
+      this.diveWorld = null;
+      return true;
+    }
+    this.dive = { t: 0, to: null, world: this.diveWorld, cut: false };
+    return true;
+  }
+
+  private cutTo(place: Place | null, world: World | null) {
+    if (this.here) {
+      release(this.here.view.scene);
+      this.here = null;
+    }
+    this.lookAround.yaw = this.lookAround.pitch = 0;
+    this.rest = 0;
+    this.diveWorld = world;
+    if (!place) return;
+    const view = place.build(this.coarse);
+    this.here = { place, view };
+    if (this.pass.level >= 2) view.thin(0.5);
+    if (this.pass.level >= 3) view.sun.castShadow = false;
+    this.pass.renderer.shadowMap.needsUpdate = true;
+    this.camera.fov = view.fov;
+    this.camera.updateProjectionMatrix();
+    view.update(this.reduced ? 18 : this.time, 0);
+  }
+
+  // ── every frame ───────────────────────────────
+
+  step(dt: number, look: { x: number; y: number }) {
+    this.time += dt;
+    this.look = look;
+    const t = this.time;
+    if (this.pass.fade < 1 && !this.dive) this.pass.fade = Math.min(1, this.pass.fade + dt / 1.4);
+    if (this.dive) this.stepDive(dt);
+    if (this.here) {
+      this.rest += dt;
+      this.here.view.update(t, dt);
+      if (!this.lookAround.dragging) {
+        const k = Math.exp(-1.5 * dt);
+        this.lookAround.yaw *= k;
+        this.lookAround.pitch *= k;
+      }
+    } else this.map.update(t, dt);
+    const now = performance.now();
+    if (this.lastFrame && this.pass.watch(now - this.lastFrame)) {
+      if (this.pass.level === 2) this.here?.view.thin(0.5);
+      if (this.pass.level === 3 && this.here) this.here.view.sun.castShadow = false;
+    }
+    this.lastFrame = now;
+    if (this.here?.view.movingShadows && ++this.frames % 5 === 0) this.pass.renderer.shadowMap.needsUpdate = true;
+  }
+
+  private stepDive(dt: number) {
+    const d = this.dive!;
+    d.t = Math.min(1, d.t + dt / DIVE_SECONDS);
+    // The grid swells in whole steps, so it reads as a change of resolution rather than a zoom.
+    const swell = Math.sin(d.t * Math.PI) ** 2;
+    this.pass.mul = 1 + Math.round(swell * (COARSEST - 1));
+    this.pass.fade = 1 - smoothstep(0.4, 0.5, d.t) * (1 - smoothstep(0.5, 0.62, d.t));
+    if (!d.cut && d.t >= 0.5) {
+      d.cut = true;
+      this.cutTo(d.to, d.world);
+    }
+    if (d.t >= 1) {
+      this.dive = null;
+      if (!d.to) this.diveWorld = null;
+      this.pass.mul = 1;
+      this.pass.fade = 1;
+    }
+  }
+
+  /** How far the map camera has gone in toward the world it's diving at. */
+  private mapDive() {
+    const d = this.dive;
+    if (!d) return 0;
+    return d.to ? Math.min(1, d.t * 2) : 1 - Math.max(0, (d.t - 0.5) * 2);
+  }
+
+  private aimAtPlace(view: Diorama) {
+    const { yaw, pitch } = this.lookAround;
+    const t = this.reduced ? 0 : this.time;
+    const offset = new Vector3().subVectors(view.eye, view.at);
+    // A narrow screen stands further back, so the whole of the landmark still fits across it.
+    const narrow = this.camera.aspect < 1 ? 1 + (1 - this.camera.aspect) * 1.05 : 1;
+    // Settling in: a touch too close, drawing back as the grid sharpens.
+    const settle = this.reduced ? 1 : 1.16 - 0.16 * ease(clamp(this.rest / 2.4, 0, 1));
+    offset.multiplyScalar(narrow / settle);
+    offset.applyAxisAngle(UP, yaw + this.look.x * 0.04 + Math.sin(t * 0.06) * 0.018);
+    const right = new Vector3(offset.z, 0, -offset.x).normalize();
+    offset.applyAxisAngle(right, pitch + this.look.y * 0.016 + Math.sin(t * 0.043) * 0.006);
+    this.camera.position.copy(view.at).add(offset);
+    this.camera.lookAt(view.at);
+    this.camera.updateMatrixWorld();
+  }
+
+  draw() {
+    try {
+      if (this.here) {
+        const { view } = this.here;
+        this.aimAtPlace(view);
+        this.pass.flash = view.flash?.(this.time) ?? 0;
+        this.pass.render(view.scene, this.camera, view.lens);
+      } else {
+        this.map.update(this.time, 0);
+        this.map.aim(this.mapDive(), this.diveWorld);
+        this.pass.flash = 0;
+        this.pass.render(this.map.scene, this.map.camera, MAP_LENS);
+      }
+    } catch {
+      this.lost();
+    }
+  }
+
+  // ── what the Cosmos canvas writes on top ──────
+
+  private fixOf(p: Vector3) {
+    const v = p.clone().project(this.camera);
+    return { x: (v.x + 1) * 0.5 * this.w, y: (1 - v.y) * 0.5 * this.h, z: v.z };
+  }
+
+  tags(): Tag[] {
+    if (this.here || this.dive) return [];
+    const tags: Tag[] = [];
+    for (const world of this.map.worlds) {
+      const f = this.map.fix(world);
+      if (f.depth > 1) continue;
+      const y = f.y + f.r + 12;
+      if (world === this.focus) {
+        const run = () => this.choose(world);
+        tags.push({ text: world.name, x: f.x, y, sub: world.lands ? "land →" : "no landing", run });
+        continue;
+      }
+      // The moon's name would sit on Earth's until you've come in closer.
+      if (world.id === "moon" && f.r < 7) continue;
+      tags.push({ text: world.name, x: f.x, y, dim: true });
+    }
+    return tags;
+  }
+
+  probes() {
+    return this.map.probeFixes();
+  }
+
+  showProbes(on: boolean) {
+    this.map.showProbes(on);
+  }
+
+  /** What the readout says: where you are, and what you can do. */
+  readout() {
+    if (this.here) {
+      const { place } = this.here;
+      return { lines: [`${place.name} · ${place.world}`, place.coords], hint: this.w < 640 ? "drag to look ↯" : "drag to look around ↯" };
+    }
+    const years = this.map.years();
+    return { lines: ["sol · 8 planets · 3 places to land", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
+  }
+
+  /** Whether "back to orbit" belongs on screen. */
+  landed() {
+    return this.here !== null && !this.dive;
+  }
+
+  /** The line a tap has just earned, with how faded it is by now. */
+  saying() {
+    if (!this.note) return null;
+    const age = this.time - this.note.at;
+    const alpha = this.reduced ? 1 : smoothstep(0, 0.3, age) * (1 - smoothstep(NOTE_SECONDS - 0.8, NOTE_SECONDS, age));
+    if (alpha <= 0 && age > 1) {
+      this.note = null;
+      return null;
+    }
+    return { text: this.note.text, alpha };
+  }
+
+  leave() {
+    this.canvas.classList.add("out");
+  }
+
+  destroy() {
+    this.canvas.removeEventListener("webglcontextlost", this.onLost);
+    if (this.here) release(this.here.view.scene);
+    this.here = null;
+    this.map.destroy();
+    this.pass.destroy();
+    this.canvas.remove();
+  }
+}
+
+const UP = new Vector3(0, 1, 0);

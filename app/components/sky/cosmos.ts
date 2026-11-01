@@ -6,21 +6,30 @@
  * you're heading for. Steer with the pointer, a finger or a tilted phone; hold anywhere to go to warp, where the
  * stars stretch into streaks and blue-shift. Now and then a planet, a ringed giant or a nebula slides past.
  *
- * Vista (five seconds, arrival): you drop out of warp in front of the Milky Way and its nebulae. This sky is
- * endless too, made from noise in tiles as you go, so you can drag or fling across it in any direction. Far stars
- * move less than the gas and near ones more, so it has depth, and a tap ignites a newborn star that stays.
+ * Arrival (five seconds): you drop out of warp at the solar system (system/solar-system.ts), a voxel map in WebGL
+ * printed in glyphs, where you can land on a few worlds. It lies under this canvas, which turns transparent and carries
+ * on with the readout, the labels and the pointer.
+ *
+ * Vista (the fallback, when there's no WebGL or the solar system can't load): you arrive in front of the Milky Way and
+ * its nebulae instead. This sky is endless too, made from noise in tiles as you go, so you can drag or fling across it
+ * in any direction. Far stars move less than the gas and near ones more, so it has depth, and a tap ignites a newborn
+ * star that stays.
  *
  * Out here the nav's "projects" and "about" are answered by the sky (NAV_EVENT). On the voyage, your projects
- * come up ahead as named worlds to fly past, and "about" is a transmission typed out on the ship's log. At the
- * vista, the projects are drawn into the sky as new constellations, and your name is traced in stars. Tapping a
- * project or the dossier link asks top-nav (GO_EVENT) to land and open it.
+ * come up ahead as named worlds to fly past, and "about" is a transmission typed out on the ship's log. In the solar
+ * system the projects are probes on the map and "about" is the log again. At the vista, the projects are drawn into
+ * the sky as new constellations, and your name is traced in stars. Tapping a project or the dossier link asks top-nav
+ * (GO_EVENT) to land and open it.
  *
- * Everything is monospace glyphs on one canvas, like the sky behind the site.
+ * Everything else is monospace glyphs on one canvas, like the sky behind the site.
  */
 
 import { coreStack, projects } from "../../lib/portfolio";
 import { GO_EVENT, NAV_EVENT, RAMP, clamp, css, ease, hash, lineGlyph, mix, noise, rand, smoothstep, type NavTarget, type Rgb } from "./engine";
+import { loadSystem } from "./system/load";
+import type { SolarSystem } from "./system/solar-system";
 
+/** "vista" means arrived, whichever sky that turned out to be. */
 export type Stage = "voyage" | "vista";
 
 const TAU = Math.PI * 2;
@@ -63,6 +72,8 @@ const BIRTH_RING = 1.6;
 const TAP_SLOP = 8;
 /** How long an answer takes to put itself away: the log fades, constellations retract, the name scatters. */
 const OVERLAY_FADE = 0.6;
+/** How long the voyage keeps flying for a solar system that hasn't loaded, before settling for the vista. */
+const SYSTEM_WAIT_MS = 4000;
 /** How fast the ship's log types, in characters a second. */
 const TYPE_RATE = 46;
 const ACCENT: Rgb = [159, 196, 255];
@@ -84,7 +95,7 @@ interface Mote { x: number; y: number; z: number; tint: Rgb }
 /** Something big passing on the voyage: where it is in flight space, how big, and what it looks like. */
 interface Wonder { kind: "planet" | "ringed" | "nebula"; x: number; y: number; z: number; size: number; body: Rgb; band: Rgb; seed: number; tilt: number; label?: string; href?: string; dim?: boolean }
 /** Something tappable drawn this frame (a project, the dossier link), in screen px. */
-interface Hit { x: number; y: number; w: number; h: number; href: string }
+interface Hit { x: number; y: number; w: number; h: number; go: string | (() => void) }
 /** A project as a constellation at the vista: its stars in sky px, revealed one by one. */
 interface Figure { label: string; href: string; dim: boolean; stars: [number, number][] }
 /** A star you lit in the vista, in sky px. */
@@ -120,6 +131,12 @@ export class Cosmos {
 
   /** When the arrival began (-1: never; the vista was there from the start). */
   private arriveAt = -1;
+  /** The solar system, once you've arrived at it (null: at the vista, or not there yet). */
+  private system: SolarSystem | null = null;
+  /** Arrival has been asked for and the solar system is still on its way: keep flying. */
+  private waiting = false;
+  private onArrived?: (solarSystem: boolean) => void;
+  private touches = new Map<number, { x: number; y: number }>();
   private cam = { x: 0, y: 0, vx: 7, vy: 2 };
   /** The pointer's pull on the parallax, eased, -1 to 1. */
   private lean = { x: 0, y: 0 };
@@ -172,28 +189,78 @@ export class Cosmos {
     window.addEventListener("deviceorientation", this.onTilt);
     document.addEventListener("visibilitychange", this.schedule);
     window.addEventListener(NAV_EVENT, this.onNav);
+    window.addEventListener("keydown", this.onKey);
+    this.canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    // Fetched by now if the hold came from the toggle; this covers any other way here.
+    loadSystem().catch(() => {});
     // Fades in on the next frame (the opacity transition needs a frame at 0 first).
     requestAnimationFrame(() => this.canvas.classList.add("on"));
     this.schedule();
   }
 
-  /** From the voyage: drop out of warp in front of the vista. */
-  arrive() {
-    if (this.stage === "vista") return;
+  /** From the voyage: on to the solar system, flying on until it's ready, or to the vista if it can't be had. */
+  arrive(onArrived?: (solarSystem: boolean) => void) {
+    if (this.stage === "vista" || this.waiting) return;
+    this.waiting = true;
+    this.onArrived = onArrived;
+    const give = window.setTimeout(() => this.settle(null), SYSTEM_WAIT_MS);
+    loadSystem().then(
+      (mod) => {
+        window.clearTimeout(give);
+        if (!this.waiting) return;
+        try {
+          this.settle(new mod.SolarSystem({ family: this.family, reduced: this.reduced, coarse: this.coarse, w: this.w, h: this.h, projects: projects.length, onLost: this.onSystemLost }));
+        } catch {
+          // No WebGL here, or none to spare.
+          this.settle(null);
+        }
+      },
+      () => {
+        window.clearTimeout(give);
+        this.settle(null);
+      },
+    );
+  }
+
+  /** Drop out of warp, in front of whichever sky this is. */
+  private settle(system: SolarSystem | null) {
+    if (!this.waiting || this.raf === -1) return system?.destroy();
+    this.waiting = false;
     this.stage = "vista";
-    // Without motion there's no drop out of warp to play: the vista is simply there.
+    this.system = system;
+    // Without motion there's no drop out of warp to play: it's simply there.
     this.arriveAt = this.reduced ? -1 : this.time;
     this.warp = false;
     this.speed = WARP * 1.3;
     this.clear();
     // Made now, so the view is all there as it fades in.
+    if (!system) this.makeTiles(Infinity);
+    if (this.reduced) this.render();
+    this.onArrived?.(system !== null);
+  }
+
+  /** The graphics context went away mid-flight: the vista takes over, and the trip goes on. */
+  private onSystemLost = () => {
+    const lost = this.system;
+    if (!lost) return;
+    this.system = null;
+    lost.destroy();
+    this.clear();
     this.makeTiles(Infinity);
     if (this.reduced) this.render();
+  };
+
+  /** One step back toward home: out of a place to the map. False if there's nothing to step back from. */
+  back() {
+    const went = this.system?.back() ?? false;
+    if (went && this.reduced) this.render();
+    return went;
   }
 
   /** Fades out, then lets go of everything. */
   leave() {
     this.canvas.classList.remove("on");
+    this.system?.leave();
     window.setTimeout(() => this.destroy(), this.reduced ? 0 : FADE_MS);
   }
 
@@ -209,6 +276,11 @@ export class Cosmos {
     window.removeEventListener("deviceorientation", this.onTilt);
     document.removeEventListener("visibilitychange", this.schedule);
     window.removeEventListener(NAV_EVENT, this.onNav);
+    window.removeEventListener("keydown", this.onKey);
+    this.canvas.removeEventListener("wheel", this.onWheel);
+    this.waiting = false;
+    this.system?.destroy();
+    this.system = null;
     this.canvas.remove();
     this.tiles.clear();
   }
@@ -240,6 +312,7 @@ export class Cosmos {
     this.h = window.innerHeight;
     this.canvas.width = Math.round(this.w * this.ratio);
     this.canvas.height = Math.round(this.h * this.ratio);
+    this.system?.resize(this.w, this.h);
     if (this.reduced) this.render();
   };
 
@@ -258,6 +331,7 @@ export class Cosmos {
     try { this.canvas.setPointerCapture(e.pointerId); } catch {}
     this.press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, last: performance.now() };
     this.pointer = { x: e.clientX, y: e.clientY, active: true };
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this.stage === "voyage") this.warp = true;
     else { this.cam.vx = 0; this.cam.vy = 0; }
     if (this.reduced) this.render();
@@ -265,7 +339,8 @@ export class Cosmos {
 
   private onMove = (e: PointerEvent) => {
     const p = this.press;
-    if (p && p.id === e.pointerId) {
+    if (this.system) this.moveSystem(e);
+    else if (p && p.id === e.pointerId) {
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       if (!p.moved && Math.hypot(dx, dy) > TAP_SLOP) p.moved = true;
       if (p.moved && this.stage === "vista") {
@@ -285,19 +360,69 @@ export class Cosmos {
     if (e.pointerType === "mouse" || (p && p.id === e.pointerId)) this.pointer = { x: e.clientX, y: e.clientY, active: true };
   };
 
+  /** On the solar system: a drag turns it, two fingers zoom it, and a mouse with nothing held looks for a world. */
+  private moveSystem(e: PointerEvent) {
+    const system = this.system!;
+    const p = this.press;
+    const touch = this.touches.get(e.pointerId);
+    if (touch && this.touches.size === 2) {
+      const [a, b] = [...this.touches.values()];
+      const before = Math.hypot(a.x - b.x, a.y - b.y);
+      touch.x = e.clientX;
+      touch.y = e.clientY;
+      const after = Math.hypot(a.x - b.x, a.y - b.y);
+      if (before > 0 && after > 0) system.zoom(before / after);
+      if (p) p.moved = true;
+    } else if (p && p.id === e.pointerId) {
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      if (!p.moved && Math.hypot(dx, dy) > TAP_SLOP) p.moved = true;
+      if (p.moved) {
+        system.drag(dx, dy);
+        p.x = e.clientX;
+        p.y = e.clientY;
+      }
+    } else if (e.pointerType === "mouse") {
+      this.canvas.style.cursor = system.hover(e.clientX, e.clientY) ? "pointer" : "";
+    }
+    if (this.reduced) this.render();
+  }
+
+  private onWheel = (e: WheelEvent) => {
+    if (!this.system) return;
+    e.preventDefault();
+    this.system.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0016));
+    if (this.reduced) this.render();
+  };
+
+  private onKey = (e: KeyboardEvent) => {
+    const onToggle = e.target instanceof Element && e.target.closest("a, button");
+    if (!this.system || (e.key === "Enter" && onToggle) || e.repeat) return;
+    if (!this.system.key(e.key)) return;
+    e.preventDefault();
+    // The toggle keeps its own Enter, so walking the worlds takes the focus off it.
+    if (onToggle) (document.activeElement as HTMLElement | null)?.blur();
+    if (this.reduced) this.render();
+  };
+
   private onUp = (e: PointerEvent) => {
     const p = this.press;
     if (e.pointerType !== "mouse") this.pointer.active = false;
+    this.touches.delete(e.pointerId);
     if (!p || p.id !== e.pointerId) return;
     this.press = null;
     this.warp = false;
+    this.system?.release();
     // While an answer is putting itself away, taps wait, so a quick second tap doesn't light a stray star.
     if (p.moved || this.closing >= 0) return;
     const hit = this.hits.find((h) => e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h);
-    if (hit) window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.href }));
-    // A tap on empty sky puts the answer away; with nothing showing, at the vista it lights a star.
-    else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.close();
+    if (hit) {
+      if (typeof hit.go === "string") window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.go }));
+      else hit.go();
+    // A tap on empty sky puts the answer away; with nothing showing, the solar system takes it, and the vista lights a star.
+    } else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.close();
+    else if (this.system) this.system.tap(e.clientX, e.clientY);
     else if (this.stage === "vista") this.ignite(e.clientX, e.clientY);
+    if (this.reduced) this.render();
   };
 
   /** The nav's "projects" or "about", answered in this part of the trip. Asked again, it's put away. */
@@ -307,8 +432,14 @@ export class Cosmos {
     this.clear();
     this.overlay = { kind, at: this.time };
     if (this.stage === "voyage" && kind === "projects") this.setCourse();
-    if (this.stage === "vista" && kind === "projects") this.chartProjects();
-    if (this.stage === "vista" && kind === "about") this.traceName();
+    if (this.system) {
+      // Asked from a place, the answer waits up on the map.
+      this.system.back();
+      this.system.showProbes(kind === "projects");
+    } else {
+      if (this.stage === "vista" && kind === "projects") this.chartProjects();
+      if (this.stage === "vista" && kind === "about") this.traceName();
+    }
     if (this.reduced) this.render();
   };
 
@@ -329,6 +460,7 @@ export class Cosmos {
     this.closing = -1;
     this.figures = [];
     this.nameStars = null;
+    this.system?.showProbes(false);
     this.wonders = this.wonders.filter((wd) => !wd.href);
     if (this.reduced) this.render();
   }
@@ -432,7 +564,8 @@ export class Cosmos {
     this.lean.y += (this.look.ty - this.lean.y) * dt * 2;
 
     if (this.stage === "voyage" || this.arriving()) this.stepVoyage(dt);
-    if (this.stage === "vista") this.stepVista(dt);
+    if (this.system) this.system.step(dt, this.look);
+    else if (this.stage === "vista") this.stepVista(dt);
   }
 
   private arriving() {
@@ -441,7 +574,7 @@ export class Cosmos {
 
   private stepVoyage(dt: number) {
     // Warp comes on hard and lets go gently; arriving, you brake right down.
-    const target = this.stage === "vista" ? 0 : this.warp ? WARP : CRUISE;
+    const target = this.stage === "vista" ? 0 : this.warp || this.waiting ? WARP : CRUISE;
     this.speed += (target - this.speed) * dt * (this.stage === "vista" ? 2.2 : this.warp ? 1.4 : 0.8);
     this.travelled += this.speed * dt * 0.6;
     const n = this.moteCount();
@@ -502,15 +635,22 @@ export class Cosmos {
     const { ctx } = this;
     ctx.setTransform(this.ratio, 0, 0, this.ratio, 0, 0);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = css(SPACE);
-    ctx.fillRect(0, 0, this.w, this.h);
+    // Over the solar system this canvas is only the writing on the glass.
+    if (this.system) {
+      ctx.clearRect(0, 0, this.w, this.h);
+      this.system.draw();
+    } else {
+      ctx.fillStyle = css(SPACE);
+      ctx.fillRect(0, 0, this.w, this.h);
+    }
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     // Whatever is tappable is collected afresh as it's drawn.
     this.hits = [];
     const since = this.time - this.arriveAt;
     if (this.stage === "voyage" || this.arriving()) this.drawVoyage(this.stage === "vista" ? 1 - smoothstep(0, ARRIVE_SECONDS * 0.6, since) : 1);
-    if (this.stage === "vista") {
+    if (this.system) this.drawSystemTags();
+    else if (this.stage === "vista") {
       const k = this.arriveAt < 0 ? 1 : smoothstep(ARRIVE_SECONDS * 0.2, ARRIVE_SECONDS, since);
       // Coming out of warp the view settles: a touch too close, easing back.
       const s = 1 + 0.14 * (1 - ease(k));
@@ -630,8 +770,60 @@ export class Cosmos {
     if (wd.label && wd.href) this.label(wd.label, c.x, Math.min(this.h - 40, c.y + r * (wd.kind === "ringed" ? 0.9 : 1.15) + 16), wd.href, wd.dim ?? false, a);
   }
 
+  /** The names on the map, the one in focus with its way in, and what a tap has just earned. */
+  private drawSystemTags() {
+    const system = this.system!;
+    const quiet = this.overlay ? 0.35 : 1;
+    for (const tag of system.tags()) {
+      if (tag.run) {
+        if (!this.overlay) this.label(tag.text, tag.x, tag.y, tag.run, false, 1, tag.sub);
+        continue;
+      }
+      this.ctx.font = `10px ${this.family}`;
+      this.put(tag.text, tag.x, tag.y, FAINT, 0.75 * quiet);
+    }
+    const narrow = this.w < 640;
+    if (system.landed()) this.drawBackToOrbit();
+    const line = system.saying();
+    if (line) {
+      const y = this.h - (narrow ? 142 : 64);
+      this.ctx.font = `12px ${this.family}`;
+      const w = this.ctx.measureText(line.text).width;
+      this.ctx.globalAlpha = 0.72 * line.alpha;
+      this.ctx.fillStyle = css(SPACE);
+      this.ctx.fillRect(this.w / 2 - w / 2 - 12, y - 14, w + 24, 28);
+      this.put(line.text, this.w / 2, y, ACCENT, line.alpha);
+    }
+  }
+
+  /** The way back up, tall enough for a thumb. Phones keep it above the readout, wider screens at the foot of the view. */
+  private drawBackToOrbit() {
+    const { ctx } = this;
+    const text = "← back to orbit";
+    const narrow = this.w < 640;
+    const x = narrow ? this.w - 76 : this.w / 2, y = this.h - (narrow ? 32 : 28);
+    ctx.font = `12px ${this.family}`;
+    const w = ctx.measureText(text).width;
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = css(SPACE);
+    ctx.fillRect(x - w / 2 - 12, y - 15, w + 24, 30);
+    this.put(text, x, y, ACCENT, 0.95);
+    this.hits.push({ x: x - w / 2 - 14, y: y - 22, w: w + 28, h: 44, go: () => this.back() });
+  }
+
+  /** The projects as probes on the map, each with its name, one after another. */
+  private drawProbes(since: number) {
+    const out = this.out();
+    this.system!.probes().forEach((f, i) => {
+      const pr = projects[i];
+      if (!pr || f.depth > 1) return;
+      const live = pr.status === "launched";
+      this.label(live ? pr.name.toLowerCase() : "░░░░ unannounced", f.x, f.y + 16, `/projects#${pr.slug}`, !live, smoothstep(0, 0.5, since - i * 0.35) * out);
+    });
+  }
+
   /** A tappable name under something: the name, and a quieter "open →" beneath it. */
-  private label(text: string, x: number, y: number, href: string, dim: boolean, alpha: number) {
+  private label(text: string, x: number, y: number, go: Hit["go"], dim: boolean, alpha: number, sub = "open →") {
     const { ctx } = this;
     if (alpha < 0.15) return;
     ctx.font = `12px ${this.family}`;
@@ -643,8 +835,8 @@ export class Cosmos {
     ctx.fillRect(x - w / 2 - 8, y - 10, w + 16, 36);
     this.put(text, x, y, dim ? FAINT : ACCENT, alpha);
     ctx.font = `10px ${this.family}`;
-    this.put("open →", x, y + 16, FAINT, alpha * 0.8);
-    if (this.closing < 0) this.hits.push({ x: x - w / 2 - 10, y: y - 14, w: w + 20, h: 40, href });
+    this.put(sub, x, y + 16, FAINT, alpha * 0.8);
+    if (this.closing < 0) this.hits.push({ x: x - w / 2 - 10, y: y - 14, w: w + 20, h: 40, go });
   }
 
   /** What the sky holds at a point (sky px): the Milky Way's band with a dark rift, and nebulae of warped noise. */
@@ -825,7 +1017,9 @@ export class Cosmos {
     ctx.textAlign = narrow ? "left" : "right";
     ctx.font = `11px ${this.family}`;
     let lines: string[], hint: string;
-    if (this.stage === "voyage") {
+    if (this.system) {
+      ({ lines, hint } = this.system.readout());
+    } else if (this.stage === "voyage") {
       lines = [`voyage · ${this.travelled.toFixed(2)} ly`, this.speed > CRUISE * 1.6 ? `warp ${(this.speed / CRUISE).toFixed(1)}` : "cruising"];
       hint = this.coarse ? "hold to warp · drag to steer ↯" : "hold to warp · steer with the cursor ↯";
     } else {
@@ -862,7 +1056,8 @@ export class Cosmos {
     if (this.closing >= 0 && this.out() <= 0) return this.clear();
     const o = this.overlay!;
     const since = this.time - o.at;
-    if (o.kind === "about" && this.stage === "voyage") this.drawLog(since);
+    if (o.kind === "about" && (this.stage === "voyage" || this.system)) this.drawLog(since);
+    else if (o.kind === "projects" && this.system) this.drawProbes(since);
     else if (o.kind === "projects" && this.stage === "vista") this.drawFigures(since);
     else if (o.kind === "about" && this.stage === "vista") this.drawName(since);
     // Once the last of the course has gone by, the answer is done.
@@ -915,7 +1110,7 @@ export class Cosmos {
       const last = i === rows.length - 1;
       const y = py + 20 + i * lh;
       this.put(shown, px + 14, y, i === 0 || last ? ACCENT : STAR, (i === 0 ? 0.6 : 0.85) * a);
-      if (last && shown.length === line.length && this.closing < 0) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, href: "/about" });
+      if (last && shown.length === line.length && this.closing < 0) this.hits.push({ x: px + 8, y: y - 12, w: ctx.measureText(line).width + 14, h: 24, go: "/about" });
       // The cursor sits at the end of whatever is being typed.
       if (budget < 0 && Math.floor(this.time * 2) % 2) this.put("█", px + 14 + ctx.measureText(shown).width + 4, y, ACCENT, 0.7 * a);
     });
