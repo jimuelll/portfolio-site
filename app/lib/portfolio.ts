@@ -75,8 +75,12 @@ export const projects: Project[] = [
  */
 export const cv: { href: string | null } = { href: null };
 
-/** The portrait on /about, shown as a theme-tinted duotone. Put the image in public/ and set its path here. */
-export const profile: { photo: string | null; photoAlt: string } = { photo: null, photoAlt: "Jimuel Jean Untalan" };
+/** The avatar on /about, with an animation that plays when pressed. */
+export const profile = {
+  avatar: "/avatar.webp",
+  avatarPlay: "/avatar-play.gif",
+  avatarAlt: "Illustrated avatar: a character in a yellow hood against a dark blue background",
+};
 
 export type Award = { title: string; event: string; date: string; placeholder?: boolean };
 /** Hackathons and awards on /about. Placeholders show redacted; fill one in and drop `placeholder`. */

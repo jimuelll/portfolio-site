@@ -15,6 +15,9 @@
 :root.theme-fading {
   transition: --bg 0.5s ease, --fg 0.5s ease, --accent 0.5s ease;
 }
+/* While the theme colours ease, nothing runs a transition of its own on top: each would restart on every step of the
+   colours and trail behind the rest of the page. */
+:root:is(.theme-turning, .theme-fading) *, :root:is(.theme-turning, .theme-fading) *::before, :root:is(.theme-turning, .theme-fading) *::after { transition: none !important; }
 .theme-ring {
   position: fixed; z-index: 1000; width: 20px; height: 20px; translate: -50% -50%;
   border: 1px solid var(--accent); border-radius: 50%; pointer-events: none;
@@ -431,10 +434,11 @@ button { font: inherit; color: inherit; }
   }
   .rail-foot { margin-top: auto; padding-top: 28px; }
 }
-/* A short laptop window gives the portrait's height to the links. */
-@media (min-width: 861px) and (max-height: 700px) {
-  .about-photo { display: none; }
-  .dossier-id h1 { margin-top: 0; }
+/* A short laptop window: everything tightens so the portrait still fits, smaller. */
+@media (min-width: 861px) and (max-height: 790px) {
+  .dossier-id h1 { margin-top: 10px; }
+  .dossier-id .section-nav { margin-top: 16px; gap: 4px; }
+  .dossier-id .rail-foot { padding-top: 16px; }
 }
 .dossier-id h1 { margin-top: 18px; font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.08; letter-spacing: -0.015em; }
 .role-line { margin-top: 10px; font-size: 13px; line-height: 1.5; color: var(--muted); }
@@ -455,18 +459,29 @@ button { font: inherit; color: inherit; }
 @media (pointer: coarse) { .section-nav.picker { gap: 0; } .section-nav.picker a { padding-block: 11px; } .section-nav.picker a[aria-current]::before { top: 11px; } }
 .contact-line { list-style: none; display: grid; gap: 4px; margin: 0; padding: 20px 0 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
 
-/* The portrait: a small round duotone in the page's own colours, or the bust drawn in glyphs until there's a photo. */
-.about-photo { margin: 0; width: 84px; }
-.photo-frame { position: relative; aspect-ratio: 1; overflow: hidden; border: 1px solid var(--line); border-radius: 50%; }
-/* Duotone: the photo in grey multiplies onto the highlight colour, then the shadow colour lifts the blacks.
-   Night and Earth: moonlit (light on the page's dark). Day: ink on paper. */
-.duotone { --duo-hi: var(--fg); --duo-lo: var(--bg); position: absolute; inset: 1px; isolation: isolate; background: var(--duo-hi); }
-:root[data-theme="light"] .duotone { --duo-hi: var(--bg); --duo-lo: var(--fg); }
-.duotone img { object-fit: cover; filter: grayscale(1) contrast(1.1); mix-blend-mode: multiply; }
-.duotone::after { content: ""; position: absolute; inset: 0; background: var(--duo-lo); mix-blend-mode: lighten; pointer-events: none; }
-/* The bust sits on the bottom edge of the circle, centred, as a head and shoulders would in a portrait. */
-.photo-placeholder { position: absolute; inset: 0; display: grid; place-items: end center; }
-.photo-placeholder pre { margin: 0; font-family: var(--mono); font-size: 2.8px; line-height: 2.5px; color: var(--muted); }
+/* The avatar, with the animation on top when it plays. */
+/* A square as wide as the rail, giving way only as far as a short window needs. */
+.about-photo { margin: 0; width: min(100%, max(72px, calc(100dvh - 575px))); }
+.photo-frame { position: relative; display: block; width: 100%; padding: 0; aspect-ratio: 1; overflow: hidden; background: none; border: 1px solid var(--line); cursor: pointer; transition: border-color 0.2s; }
+.photo-frame:hover, .photo-frame[aria-pressed="true"] { border-color: var(--accent); }
+/* At rest a duotone in the theme's own colours: the grey image multiplies onto the highlight, then the shadow colour
+   lifts its blacks. The animation plays above all of it in full colour, so pressing it reads as the art coming to life. */
+.photo-frame { --duo-hi: var(--fg); --duo-lo: var(--bg); isolation: isolate; background: var(--duo-hi); }
+:root[data-theme="light"]:not(.cosmos) .photo-frame { --duo-hi: var(--bg); --duo-lo: var(--fg); }
+.photo-frame::after { content: ""; position: absolute; inset: 0; background: var(--duo-lo); mix-blend-mode: lighten; pointer-events: none; }
+.photo-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.photo-frame img:not(.avatar-play) { filter: grayscale(1) contrast(1.15); mix-blend-mode: multiply; }
+/* Hovering eases back to the real colours: multiplying onto white changes nothing, and the lift fades away. */
+.photo-frame, .photo-frame::after, .photo-frame img { transition: background-color 0.3s ease, opacity 0.3s ease, filter 0.3s ease, border-color 0.2s; }
+@media (hover: hover) {
+  .photo-frame:hover, :root[data-theme="light"]:not(.cosmos) .photo-frame:hover { background: #fff; }
+  .photo-frame:hover::after { opacity: 0; }
+  .photo-frame:hover img:not(.avatar-play) { filter: none; }
+}
+.photo-frame:focus-visible { background: #fff; }
+.photo-frame:focus-visible::after { opacity: 0; }
+.photo-frame:focus-visible img:not(.avatar-play) { filter: none; }
+.avatar-play { z-index: 1; animation: fade-op 0.3s ease-out both; }
 
 .cv-btn {
   display: inline-block; margin-top: 20px;
@@ -489,11 +504,16 @@ button { font: inherit; color: inherit; }
 .label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
 
 /* Education: stops on a rail, the way a course is plotted. */
-.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 28px; }
-.timeline li { position: relative; padding-left: 26px; }
-.timeline li::before { content: ""; position: absolute; left: 0; top: 6px; width: 9px; height: 9px; border: 1px solid var(--accent); border-radius: 50%; }
-.timeline li:not(:last-child)::after { content: ""; position: absolute; left: 4px; top: 20px; bottom: -24px; width: 1px; background: var(--line); }
-.timeline-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 16px; }
+.timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 24px; }
+/* Dates get their own column, so a long subtitle wraps before it can run in under the year. */
+.timeline li { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 4px 32px; padding-left: 24px; }
+.timeline li > .muted { grid-column: 1; text-wrap: balance; }
+/* Phones: too narrow for a date column, so the date takes its own line and the text keeps the full width. */
+@media (max-width: 640px) { .timeline li { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+.timeline li::before { content: ""; position: absolute; left: 0; top: 7px; width: 9px; height: 9px; border: 1px solid var(--accent); border-radius: 50%; }
+.timeline li:not(:last-child)::after { content: ""; position: absolute; left: 4px; top: 21px; bottom: -26px; width: 1px; background: var(--line); }
+.timeline-head { display: contents; }
+.timeline-head .faint { white-space: nowrap; }
 .timeline-title { font-family: var(--serif); font-size: 18px; line-height: 1.25; }
 
 /* Inline and balanced, so a wrapped row splits evenly instead of leaving one pill alone. */
@@ -548,6 +568,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 860px) {
   .dossier { grid-template-columns: 1fr; gap: 56px; }
   /* The whole page is one column here, so a list of its sections would only push the record down. */
+  .about-photo { width: 180px; }
   .section-nav { display: none; }
   .dossier-body { gap: 56px; }
 }
