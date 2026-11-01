@@ -505,7 +505,7 @@ export class Cosmos {
   private traceName() {
     const narrow = this.w < 640;
     const lines = narrow ? ["jimuel jean", "untalan"] : ["jimuel jean untalan"];
-    const size = Math.min(narrow ? this.w * 0.2 : this.w * 0.085, 120);
+    const size = Math.min(narrow ? this.w * 0.15 : this.w * 0.075, 110);
     const off = document.createElement("canvas");
     off.width = Math.round(this.w);
     off.height = Math.round(size * 1.15 * lines.length + 20);

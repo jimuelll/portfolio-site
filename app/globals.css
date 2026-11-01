@@ -80,8 +80,7 @@
   --line: color-mix(in srgb, var(--fg) 14%, transparent);
   --gutter: 24px;
   --mono: var(--font-geist-mono), ui-monospace, monospace;
-  --serif: var(--font-instrument-serif), Georgia, serif;
-  --display: var(--font-young-serif), Georgia, serif;
+  --serif: var(--font-young-serif), Georgia, serif;
 }
 @media (min-width: 1024px) {
   :root { --gutter: 14vw; }
@@ -272,7 +271,7 @@ button { font: inherit; color: inherit; }
   background: var(--bg); border: 1px solid var(--line); border-width: 0 1px 1px 0;
 }
 .drifter-say.under::after { bottom: auto; top: -5px; border-width: 1px 0 0 1px; }
-.drifter-say .voice { display: block; font-family: var(--serif); font-style: italic; font-size: 21px; line-height: 1.2; }
+.drifter-say .voice { display: block; font-family: var(--serif); font-size: 17px; line-height: 1.25; }
 .drifter-say .how { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--accent); text-wrap: pretty; }
 .drifter-say .rest { visibility: hidden; }
 
@@ -300,7 +299,7 @@ button { font: inherit; color: inherit; }
   pointer-events: auto;
   cursor: auto;
 }
-.wall-label h1 { font-family: var(--display); font-weight: 400; font-size: clamp(36px, 3.2vw, 80px); line-height: 1.04; letter-spacing: -0.015em; }
+.wall-label h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 3.2vw, 80px); line-height: 1.04; letter-spacing: -0.015em; }
 .wall-label .role { margin: 0.9em 0 0.6em; line-height: 1.5; color: var(--accent); }
 .quote { line-height: 1.5; color: var(--muted); }
 /* Phones and tablets: pinned to the foot, under the disc. */
@@ -378,7 +377,7 @@ button { font: inherit; color: inherit; }
 .page-head { margin-bottom: 64px; }
 .eyebrow { font-size: 12px; color: var(--accent); margin-bottom: 14px; }
 .eyebrow::before { content: "✦ "; }
-.page-head h1 { font-family: var(--serif); font-size: clamp(36px, 4.4vw, 56px); font-weight: 400; line-height: 1.05; }
+.page-head h1 { font-family: var(--serif); font-size: clamp(30px, 3.4vw, 46px); font-weight: 400; line-height: 1.08; letter-spacing: -0.015em; }
 
 .page-head.compact { margin-bottom: 40px; }
 
@@ -398,14 +397,14 @@ button { font: inherit; color: inherit; }
 .pi-row.on { padding-left: 20px; }
 .pi-row.on::before { transform: scaleY(1); }
 .pi-num { font-size: 11px; color: var(--accent); }
-.pi-name { font-family: var(--serif); font-size: 24px; line-height: 1.15; }
+.pi-name { font-family: var(--serif); font-size: 20px; line-height: 1.2; }
 .pi-meta { font-size: 12px; color: var(--faint); white-space: nowrap; }
 .pi-meta.orbiting::before { content: "◌ "; color: var(--accent); }
 .redacted { font-family: var(--mono); font-size: 15px; letter-spacing: 0.04em; color: var(--faint); }
 
 .pi-detail { display: grid; gap: 14px; min-width: 0; animation: detail-in 0.4s ease both; }
 @keyframes detail-in { from { opacity: 0; transform: translateY(8px); } }
-.pi-detail h2 { font-family: var(--serif); font-weight: 400; font-size: 36px; line-height: 1.1; margin-top: 8px; }
+.pi-detail h2 { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.12; letter-spacing: -0.015em; margin-top: 8px; }
 .pi-detail .meta { font-size: 12px; color: var(--muted); }
 .pi-detail p { line-height: 1.7; }
 .pi-detail .muted { color: var(--muted); }
@@ -436,8 +435,8 @@ button { font: inherit; color: inherit; }
 /* Hierarchy: serif name and section titles carry the page; mono stays for body and small labels. */
 /* A dossier: identity, contacts and the CV pinned on the left; the record scrolls past on the right. */
 .dossier { display: grid; grid-template-columns: minmax(260px, 300px) minmax(0, 1fr); gap: 64px; align-items: start; }
-.dossier-id h1 { margin-top: 26px; font-family: var(--display); font-weight: 400; font-size: clamp(34px, 3vw, 48px); line-height: 1.04; letter-spacing: -0.015em; }
-.dossier-id h1 em { color: var(--accent); }
+.dossier-id h1 { margin-top: 26px; font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 3vw, 48px); line-height: 1.04; letter-spacing: -0.015em; }
+.dossier-id h1 em { font-style: normal; color: var(--accent); }
 .dossier-id .about-pitch { font-size: 14px; }
 /* Pinned only where it fits: wide enough for two columns and tall enough to show the whole column (~750px). */
 @media (min-width: 861px) and (min-height: 860px) {
@@ -473,7 +472,6 @@ button { font: inherit; color: inherit; }
     linear-gradient(var(--accent), var(--accent)) bottom right / 1px 9px no-repeat;
   border: 1px solid var(--line);
 }
-.about-photo figcaption { margin-top: 8px; font-size: 11px; color: var(--faint); }
 /* Duotone: the photo in grey multiplies onto the highlight colour, then the shadow colour lifts the blacks.
    Night and Earth: moonlit (light on the page's dark). Day: ink on paper. */
 .duotone { --duo-hi: var(--fg); --duo-lo: var(--bg); position: absolute; inset: 1px; isolation: isolate; background: var(--duo-hi); }
@@ -496,13 +494,13 @@ button { font: inherit; color: inherit; }
 .cv-btn.sent { border-style: dashed; }
 
 .about-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 32px; padding: 32px 0; border-top: 1px solid var(--line); }
-.about-row h2 { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.1; display: flex; align-items: baseline; gap: 12px; }
+.about-row h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.15; display: flex; align-items: baseline; gap: 12px; }
 .about-row h2 span { font-family: var(--mono); font-size: 11px; color: var(--accent); }
 .about-body { display: grid; gap: 22px; font-size: 14px; line-height: 1.65; min-width: 0; }
 .about-body .muted { color: var(--muted); }
 .about-body .faint { color: var(--faint); font-size: 12px; }
 .label { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
-.degree-title { font-family: var(--serif); font-size: 28px; line-height: 1.15; margin-bottom: 4px; }
+.degree-title { font-family: var(--serif); font-size: 22px; line-height: 1.2; margin-bottom: 4px; }
 .capstone { padding-left: 16px; border-left: 2px solid var(--accent); }
 .capstone-title { font-size: 15px; }
 .tags { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }

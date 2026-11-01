@@ -9,17 +9,7 @@ const geistMono = localFont({
   display: "swap",
 });
 
-// Instrument Serif (SIL Open Font License) for headings: the star-atlas voice next to the mono body.
-const instrumentSerif = localFont({
-  src: [
-    { path: "./fonts/instrument-serif-latin-400-normal.woff2", style: "normal", weight: "400" },
-    { path: "./fonts/instrument-serif-latin-400-italic.woff2", style: "italic", weight: "400" },
-  ],
-  variable: "--font-instrument-serif",
-  display: "swap",
-});
-
-// Young Serif for the name alone: wider and sturdier than Instrument Serif, so it reads first beside the disc.
+// Young Serif for every heading: the star-atlas voice next to the mono body. It has no italic.
 const youngSerif = Young_Serif({
   subsets: ["latin"],
   weight: "400",
@@ -112,7 +102,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html suppressHydrationWarning
       lang="en"
-      className={`${geistMono.variable} ${instrumentSerif.variable} ${youngSerif.variable}`}
+      className={`${geistMono.variable} ${youngSerif.variable}`}
     >
       <head>
         {/* Set the theme before first paint so the sky never flashes the wrong colour. Night is the default. */}

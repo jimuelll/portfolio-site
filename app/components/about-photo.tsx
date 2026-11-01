@@ -41,7 +41,6 @@ export function AboutPhoto() {
           </div>
         )}
       </div>
-      <figcaption>fig. 0 — jean</figcaption>
     </figure>
   );
 }
