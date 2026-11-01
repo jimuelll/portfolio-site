@@ -225,9 +225,13 @@ button { font: inherit; color: inherit; }
 /* ── page changes between the sky and the pages ──── */
 /* Leaving (top-nav.tsx adds .departing while the sky plays its move), the page steps back quickly so the sky
    carries the moment; arriving (.arriving), the new page rises into place as the sky settles. */
-:root.departing :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { opacity: 0; transition: opacity 0.45s ease; }
+:root.departing :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { opacity: 0; transition: opacity 0.45s ease, translate 0.45s ease; }
+:root.departing :is(.home-main, .page-main, .page-footer), :root.departing :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
 :root.arriving :is(.home-main, .page-main, .page-footer, .plate, .sky-stats) { animation: arrive-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.25s both; }
 @keyframes arrive-rise { from { opacity: 0; translate: 0 26px; } }
+/* Leaving mid-eclipse the sky can't play its move (engine.ts adds .sky-fade), so it just fades with the page. */
+:root.departing.sky-fade .sky-canvas { opacity: 0; transition: opacity 0.45s ease; }
+:root.arriving.sky-fade .sky-canvas { animation: fade-op 0.9s ease both; }
 /* Once it's gone, the sky behind can stop drawing: hidden, its engine pauses itself. */
 :root.cosmos-still .sky-canvas { display: none; }
 

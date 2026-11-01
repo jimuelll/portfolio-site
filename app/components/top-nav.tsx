@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
-import { DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
+import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
 import { found } from "../lib/secrets";
 import { Cosmos, type Stage } from "./sky/cosmos";
 
@@ -36,20 +36,60 @@ const RISE_MS = 1300;
 const HOLD_SWALLOW = 400;
 /** Once the page has dropped away, the sky behind it stops drawing (it's covered). Matches globals.css. */
 const DROP_MS = 1400;
+/** How long the next page gets to show up before the one we left comes back. */
+const STALL_MS = 3000;
 
 /** The cosmos, kept outside the component: it floats over every page, so it outlives the nav of any one of them. */
 let cosmos: Cosmos | null = null;
+/** After the first mount the page has hydrated, so later navs can read the real theme straight away. */
+let hydrated = false;
+/**
+ * The page change under way. Also outside the component: the nav remounts with every page, and the new one has to
+ * be able to call off what the last one started. push: the move is playing. stall: the route was asked for and hasn't
+ * come. go: landing first, for a link tapped out in the sky. rise: the new page is rising into place.
+ */
+const passage = { push: 0, stall: 0, go: 0, rise: 0 };
+const passing = () => Boolean(passage.push || passage.stall || passage.go);
+const stillMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/** The sky only carries you between itself and an inner page; projects ↔ about is a plain switch. */
+const carried = (from: string, href: string) => (from === "/") !== (href.split("#")[0] === "/");
 
 const readTheme = (t?: string): Theme => (t === "light" || t === "twilight" || t === "deep" ? t : "dark");
 const plain = (t?: string) => t === "dark" || t === "light";
 /** A tick of haptics on phones that have them, once the page has been touched (Chrome refuses it before). */
 const buzz = (pattern: number | number[]) => { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.(pattern); };
 
+/** The next page never came (offline, say): the page we were leaving comes back, and the sky settles where it was. */
+function recover() {
+  const root = document.documentElement;
+  passage.stall = 0;
+  root.classList.remove("departing", "sky-fade");
+  delete root.dataset.skyArrive;
+  window.dispatchEvent(new Event(DEPART_CANCEL_EVENT));
+}
+
+/** Between the sky and an inner page the sky carries you (sky/engine.ts plays the move), then the route changes. */
+function depart(href: string, router: ReturnType<typeof useRouter>) {
+  const root = document.documentElement;
+  // Leaving before the last arrival has finished: the fade picks up from wherever the rise had got to.
+  window.clearTimeout(passage.rise);
+  root.classList.remove("arriving", "sky-fade");
+  router.prefetch(href);
+  root.dataset.skyArrive = "1";
+  root.classList.add("departing");
+  window.dispatchEvent(new Event(DEPART_EVENT));
+  passage.push = window.setTimeout(() => {
+    passage.push = 0;
+    passage.stall = window.setTimeout(recover, STALL_MS);
+    router.push(href);
+  }, DEPART_SECONDS * 1000);
+}
+
 export function TopNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [stage, setStage] = useState<Stage | null>(null);
+  const [theme, setTheme] = useState<Theme>(() => (hydrated ? readTheme(document.documentElement.dataset.theme) : "dark"));
+  const [stage, setStage] = useState<Stage | null>(() => (hydrated ? (cosmos?.stage ?? null) : null));
   const [note, setNote] = useState("");
   const [noteOn, setNoteOn] = useState(false);
   const presses = useRef<number[]>([]);
@@ -81,18 +121,38 @@ export function TopNav() {
 
   /** Something out there asked to go to a page (a project, the dossier): come home first, then go. */
   const onGo = useEffectEvent((href: string) => {
+    // A second tap on the label is the same tap.
+    if (passing()) return;
     const wasDeep = document.documentElement.dataset.theme === "deep";
-    if (!cosmos && !wasDeep) return router.push(href);
+    const away = cosmos || wasDeep;
+    const go = () => {
+      passage.go = 0;
+      if (carried(pathname, href) && !stillMotion()) depart(href, router);
+      else router.push(href);
+    };
+    if (!away) return go();
+    // The lock only guards a burst of presses; this isn't one, and we have to land before we can go.
+    lockUntil.current = 0;
     toggle();
-    window.setTimeout(() => router.push(href), wasDeep ? HYPER_SECONDS * 1000 : LAND_MS);
+    if (stillMotion()) return go();
+    passage.go = window.setTimeout(go, wasDeep ? HYPER_SECONDS * 1000 : LAND_MS);
   });
 
   useEffect(() => {
+    hydrated = true;
+    // A new page is here, whichever way it came (Back, say), so anything still waiting to navigate is out of date.
+    window.clearTimeout(passage.push);
+    window.clearTimeout(passage.stall);
+    window.clearTimeout(passage.go);
+    passage.push = passage.stall = passage.go = 0;
     // Mounting after a page change the sky carried us through: the new page rises into place.
     const root = document.documentElement;
     if (root.classList.contains("departing")) {
       root.classList.replace("departing", "arriving");
-      window.setTimeout(() => root.classList.remove("arriving"), RISE_MS);
+      window.clearTimeout(passage.rise);
+      passage.rise = window.setTimeout(() => root.classList.remove("arriving", "sky-fade"), RISE_MS);
+      // Not at once: in development Strict Mode builds the sky twice in this commit, and the second one needs it too.
+      window.setTimeout(() => delete root.dataset.skyArrive);
     }
     const frame = requestAnimationFrame(() => {
       setTheme(readTheme(document.documentElement.dataset.theme));
@@ -185,7 +245,7 @@ export function TopNav() {
 
   function toggle() {
     const root = document.documentElement;
-    if (performance.now() < lockUntil.current) return;
+    if (passing() || performance.now() < lockUntil.current) return;
     if (cosmos) {
       land();
       return;
@@ -247,7 +307,7 @@ export function TopNav() {
     const root = document.documentElement;
     const h = hold.current;
     // From the day or night sky, or from Earth; out in the galaxy or at the vista, a tap is the way back.
-    if (h.start || root.dataset.theme === "deep" || cosmos?.stage === "vista") return;
+    if (h.start || passing() || root.dataset.theme === "deep" || cosmos?.stage === "vista") return;
     // Already flying: the hold picks up where the first one left off, two seconds from arrival.
     const onward = cosmos?.stage === "voyage";
     h.start = performance.now() - (onward ? LIFTOFF_MS : 0);
@@ -321,21 +381,16 @@ export function TopNav() {
           href={href}
           aria-current={pathname === href ? "page" : undefined}
           onClick={(e) => {
+            // New tabs are left to the browser, whatever is going on in this one.
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            // Already on the way somewhere: the first click stands.
+            if (passing()) return e.preventDefault();
             // Out in the galaxy or the cosmos the page is out of sight, so the links answer out there instead:
             // "sky" brings you home, and the sky itself shows the projects or the about.
             if (!away) {
-              // Between the sky and an inner page the sky carries you (sky/engine.ts plays the move), then the
-              // route changes. Projects ↔ about stays a plain switch, and new tabs are left to the browser.
-              const root = document.documentElement;
-              if ((pathname === "/") === (href === "/") || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-              if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+              if (!carried(pathname, href) || stillMotion()) return;
               e.preventDefault();
-              if (root.classList.contains("departing")) return;
-              router.prefetch(href);
-              root.dataset.skyArrive = "1";
-              root.classList.add("departing");
-              window.dispatchEvent(new Event(DEPART_EVENT));
-              window.setTimeout(() => router.push(href), DEPART_SECONDS * 1000);
+              depart(href, router);
               return;
             }
             e.preventDefault();

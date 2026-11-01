@@ -92,6 +92,8 @@ export const NAV_EVENT = "sky-nav";
 /** Fired on window as a page change between the sky and an inner page begins; the route changes DEPART_SECONDS later. */
 export const DEPART_EVENT = "sky-depart";
 export const DEPART_SECONDS = 0.8;
+/** Fired on window when the next page never came: the sky settles back to where it was. */
+export const DEPART_CANCEL_EVENT = "sky-depart-cancel";
 /** How long the next page's sky takes to settle from the motion it arrives with. */
 const SETTLE_SECONDS = 0.9;
 /** The colour the day's glare washes everything to: the paper of the day pages, a touch brighter. */
@@ -393,12 +395,10 @@ export class SkyEngine {
       window.addEventListener("contextmenu", this.onMenu);
       window.addEventListener(NAV_EVENT, this.onNav);
       window.addEventListener(DEPART_EVENT, this.onDepart);
+      window.addEventListener(DEPART_CANCEL_EVENT, this.onDepartCancel);
       // Arriving from a page change: carry on the motion the last page's sky left with, and let it settle.
-      const root = document.documentElement;
-      if (root.dataset.skyArrive) {
-        delete root.dataset.skyArrive;
-        if (!this.reduced.matches) this.pass = { dir: "in", start: performance.now() / 1000 };
-      }
+      // top-nav.tsx clears the flag once the new page is in.
+      if (document.documentElement.dataset.skyArrive && !this.reduced.matches) this.pass = { dir: "in", start: performance.now() / 1000 };
     }
     this.resize();
     this.schedule();
@@ -425,6 +425,7 @@ export class SkyEngine {
     window.removeEventListener("contextmenu", this.onMenu);
     window.removeEventListener(NAV_EVENT, this.onNav);
     window.removeEventListener(DEPART_EVENT, this.onDepart);
+    window.removeEventListener(DEPART_CANCEL_EVENT, this.onDepartCancel);
     window.clearTimeout(this.charging.timer);
     if (this.overAstro && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
   }
@@ -458,6 +459,8 @@ export class SkyEngine {
     this.galaxyNav = null;
     this.navClosing = -1;
     this.camAim = null;
+    // A settle still running belongs to the old scene; the new one has its own way of turning up.
+    this.pass = null;
     // Inner pages fade their colours over instead, so the sky switches at once.
     const sunrise = document.documentElement.classList.contains(SUNRISE_CLASS);
     // The first read just picks the scene; later changes play the eclipse.
@@ -891,8 +894,22 @@ export class SkyEngine {
 
   /** A page change is starting: the sky begins to carry you out, in its own way. */
   private onDepart = () => {
-    if (this.variant === "emblem" || this.turn || this.reduced.matches || this.scene === "deep") return;
+    if (this.variant === "emblem" || this.reduced.matches) return;
+    this.endCharge();
+    // Mid-eclipse the sky is busy and can't move as well. It fades out with the page instead, and the next sky has
+    // no motion to carry on from.
+    if (this.turn || this.scene === "deep") {
+      const root = document.documentElement;
+      delete root.dataset.skyArrive;
+      root.classList.add("sky-fade");
+      return;
+    }
     this.pass = { dir: "out", start: performance.now() / 1000 };
+  };
+
+  /** The next page never came: the sky comes back from wherever the move had taken it. */
+  private onDepartCancel = () => {
+    if (this.pass) this.pass = { dir: "in", start: performance.now() / 1000 };
   };
 
   /**
@@ -2343,7 +2360,7 @@ export class SkyEngine {
    * hold of the camera instead (two take hold to pinch).
    */
   private onGrab = (e: PointerEvent) => {
-    if (this.turn || e.button !== 0) return;
+    if (this.turn || this.pass?.dir === "out" || e.button !== 0) return;
     if (e.composedPath().some((n) => n instanceof Element && n.matches(INTERACTIVE))) return;
     if (this.scene === "deep") {
       const x = e.clientX - this.origin.left, y = e.clientY - this.origin.top;
@@ -2450,7 +2467,7 @@ export class SkyEngine {
 
   // Clicks on empty sky launch a comet or a flare; links, buttons and text selection are left alone.
   private onClick = (e: MouseEvent) => {
-    if (this.reduced.matches) return;
+    if (this.reduced.matches || this.pass?.dir === "out") return;
     if (e.composedPath().some((n) => n instanceof Element && n.matches(INTERACTIVE))) return;
     if (window.getSelection()?.toString()) return;
     const rect = this.canvas.getBoundingClientRect();
