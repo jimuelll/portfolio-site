@@ -5,7 +5,7 @@
  * the gate, and a live one sits at its foot. It doesn't mind being tapped.
  */
 
-import { Fog, Group, HemisphereLight, type InstancedMesh, type MeshBasicMaterial, MeshDepthMaterial, type MeshLambertMaterial, RGBADepthPacking, Scene, Vector3 } from "three";
+import { Fog, Group, HemisphereLight, InstancedBufferAttribute, type InstancedMesh, type MeshBasicMaterial, MeshDepthMaterial, type MeshLambertMaterial, RGBADepthPacking, Scene, Vector3 } from "three";
 import { clamp, hash, mix, noise, smoothstep, type Rgb } from "../../engine";
 import { Motes, VoxelSet } from "../voxels";
 import { skyDome, sloped, sunlight, type Place } from "./kit";
@@ -307,35 +307,59 @@ function shrub(v: VoxelSet, x: number, z: number, r: number, tone: Rgb, seed: nu
   }
 }
 
+/** Anything loose or stiff: it's pushed bodily, however big it is. */
+const looseMotion = (opts: { sway: number; flutter: number; rooted: boolean; branch?: number }) => `
+    vec3 moved = vec3(${opts.sway.toFixed(3)} * gust + ${opts.flutter.toFixed(3)} * flick, ${opts.rooted ? "0.0" : `${opts.flutter.toFixed(3)} * 0.6 * cos(uWind * 2.7 + seed)`}, ${opts.flutter.toFixed(3)} * 0.7 * sin(uWind * 1.9 + seed * 1.7)) * hold;
+    // Neighbouring leaves share a branch and swing together, big enough to read at the size of a glyph.
+    float limb = fract(sin(dot(floor(root / 5.0), vec2(41.3, 17.9))) * 43758.5453) * 6.2832;
+    moved += ${(opts.branch ?? 0).toFixed(3)} * vec3(sin(uWind * 1.35 + limb), 0.45 * sin(uWind * 1.75 + limb * 2.0), 0.6 * cos(uWind * 1.1 + limb));
+    transformed += moved / vec3(instanceMatrix[0][0], instanceMatrix[1][1], instanceMatrix[2][2]);`;
+
+/**
+ * A plant bends by an angle rather than a distance, so short and tall ones lean alike, and the tip drops as it goes over,
+ * so it bows instead of stretching. Everything is measured from the plant's root, so a blade, its stem and the flower on
+ * top stay in one piece. A shorter ripple runs across the gusts so they don't fall in stripes. Only blades come to a point.
+ */
+const plantMotion = (blade: boolean) => `
+    float up = instanceMatrix[3].y + position.y * instanceMatrix[1][1] - aPlant.z;
+    float ripple = sin(uWind * 2.6 - root.x * 0.31 - root.y * 0.23) * 0.5 + 0.5;
+    float bend = gust + ripple * 0.14 * (0.4 + gust);
+    ${blade ? "transformed.xz *= mix(1.0, 0.3, hold);" : ""}
+    vec3 moved = up * vec3(0.38 * bend + 0.03 * flick, -0.08 * bend * bend, 0.07 * sin(seed) * bend + 0.025 * cos(uWind * 1.9 + seed));
+    transformed += moved / vec3(instanceMatrix[0][0], instanceMatrix[1][1], instanceMatrix[2][2]);`;
+
 /**
  * Wind, in the vertex shader, so a hundred thousand moving things cost one number a frame. Gusts roll across the whole
  * scene, and each instance also flutters on its own and catches the light as it turns. Shadows move with it.
  */
-function windy(mesh: InstancedMesh, wind: { value: number }, opts: { sway: number; flutter: number; shimmer: number; rooted: boolean; branch?: number }) {
+function windy(mesh: InstancedMesh, wind: { value: number }, opts: { sway: number; flutter: number; shimmer: number; rooted: boolean; branch?: number; plant?: "blade" | "bloom"; broad?: number }) {
   const motion = `
-    vec2 root = instanceMatrix[3].xz + instanceMatrix[3].y * 0.3;
+    vec2 root = ${opts.plant ? "aPlant.xy" : "instanceMatrix[3].xz + instanceMatrix[3].y * 0.3"};
     float seed = fract(sin(dot(root, vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
-    float gust = sin(uWind * 1.5 - root.x * 0.13 + root.y * 0.07) * 0.5 + 0.5;
-    gust = gust * gust * (0.6 + 0.4 * sin(uWind * 0.37 + root.y * 0.05));
+    // A gust takes something broad all at once, or the two sides of a tree's crown would lean at different moments and pull it apart.
+    vec2 front = root * ${(opts.broad ?? 1).toFixed(3)};
+    float gust = sin(uWind * 1.5 - front.x * 0.13 + front.y * 0.07) * 0.5 + 0.5;
+    // It never quite drops, so everything stays leaning between the gusts.
+    gust = 0.3 + 0.7 * gust * gust * (0.6 + 0.4 * sin(uWind * 0.37 + front.y * 0.05));
     float hold = ${opts.rooted ? "position.y + 0.5" : "1.0"};
     float flick = sin(uWind * (2.2 + fract(seed) * 1.8) + seed);
-    vec3 moved = vec3(${opts.sway.toFixed(3)} * gust + ${opts.flutter.toFixed(3)} * flick, ${opts.rooted ? "0.0" : `${opts.flutter.toFixed(3)} * 0.6 * cos(uWind * 2.7 + seed)`}, ${opts.flutter.toFixed(3)} * 0.7 * sin(uWind * 1.9 + seed * 1.7)) * hold;
-    // Neighbouring leaves share a branch and swing together, big enough to read at the size of a glyph.
-    float limb = fract(sin(dot(floor(root / 3.2), vec2(41.3, 17.9))) * 43758.5453) * 6.2832;
-    moved += ${(opts.branch ?? 0).toFixed(3)} * vec3(sin(uWind * 1.35 + limb), 0.45 * sin(uWind * 1.75 + limb * 2.0), 0.6 * cos(uWind * 1.1 + limb));
-    transformed += moved / vec3(instanceMatrix[0][0], instanceMatrix[1][1], instanceMatrix[2][2]);`;
+    ${opts.plant ? plantMotion(opts.plant === "blade") : looseMotion(opts)}`;
   const material = mesh.material as MeshLambertMaterial;
+  // three.js shares a compiled shader between materials whose onBeforeCompile reads the same, and these all read the same.
+  const key = JSON.stringify(opts);
+  material.customProgramCacheKey = () => key;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uWind = wind;
-    shader.vertexShader = `uniform float uWind;\nvarying float vShimmer;\n${shader.vertexShader}`.replace(
+    shader.vertexShader = `${opts.plant ? "attribute vec3 aPlant;\n" : ""}uniform float uWind;\nvarying float vShimmer;\n${shader.vertexShader}`.replace(
       "#include <begin_vertex>",
       `#include <begin_vertex>${motion}
-      vShimmer = 1.0 + ${opts.shimmer.toFixed(3)} * (flick * 0.6 + gust * 0.9 - 0.35);`,
+      vShimmer = ${opts.plant === "blade" ? `(0.6 + 0.55 * hold) * (1.0 + ${opts.shimmer.toFixed(3)} * (bend - 0.4) + 0.03 * flick)` : `1.0 + ${opts.shimmer.toFixed(3)} * (flick * 0.6 + gust * 0.9 - 0.35)`};`,
     );
     shader.fragmentShader = `varying float vShimmer;\n${shader.fragmentShader}`.replace("#include <opaque_fragment>", "outgoingLight *= vShimmer;\n#include <opaque_fragment>");
   };
   if (mesh.castShadow) {
     const depth = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
+    depth.customProgramCacheKey = () => key;
     depth.onBeforeCompile = (shader) => {
       shader.uniforms.uWind = wind;
       shader.vertexShader = `uniform float uWind;\n${shader.vertexShader}`.replace("#include <begin_vertex>", `#include <begin_vertex>${motion}`);
@@ -354,6 +378,14 @@ const BLADES: Rgb[] = [[92, 96, 48], [146, 128, 58], [176, 146, 62], [122, 110, 
 function meadow(coarse: boolean) {
   const set = new VoxelSet();
   const flowers = new VoxelSet();
+  /** For each box, in order, which plant it's part of: where that plant is rooted and how high the ground is there. */
+  const setPlants: number[] = [], flowerPlants: number[] = [];
+  /** Lets each instance read its plant in the shader. The shared cube can't carry that, so these meshes get their own copy. */
+  const rooted = (mesh: InstancedMesh, plants: number[]) => {
+    mesh.geometry = mesh.geometry.clone();
+    mesh.geometry.setAttribute("aPlant", new InstancedBufferAttribute(new Float32Array(plants), 3));
+    return mesh;
+  };
   // Autumn's own: red spider lilies, and pampas plumes standing over the grass.
   const plant = (x: number, z: number, density: number) => {
     const ix = Math.round(x * 8), iz = Math.round(z * 8);
@@ -367,13 +399,21 @@ function meadow(coarse: boolean) {
     // Patches lean toward one tone, and each blade strays from it.
     const tone = Math.floor(clamp(clump * 1.5 + (hash(ix, iz, 55) - 0.5) * 0.9 - 0.1, 0, 0.999) * BLADES.length);
     const c = sloped(BLADES[tone], height, px, pz, 0.14);
-    const w = 0.13 + hash(ix, iz, 56) * 0.07;
+    const w = 0.18 + hash(ix, iz, 56) * 0.1;
     set.box(px, base + tall / 2, pz, w, tall, w, c);
+    setPlants.push(px, pz, base);
     const bloom = hash(ix, iz, 57);
-    if (bloom < 0.006) flowers.box(px, base + tall + 0.08, pz, 0.26, 0.22, 0.26, [228, 42, 34]);
-    else if (bloom < 0.02 && clump > 0.5) {
+    if (bloom < 0.006) {
+      flowers.box(px, base + tall + 0.08, pz, 0.26, 0.22, 0.26, [228, 42, 34]);
+      flowerPlants.push(px, pz, base);
+    // Plumes stay back from the stairs and the camera: up close, a leaning stack of cubes reads as a dashed bar across everything.
+    } else if (bloom < 0.02 && clump > 0.5 && Math.abs(px) > 12 && Math.hypot(px - 11, pz - 58) > 26) {
       set.box(px, base + tall + 0.7, pz, w, 1.5, w, [176, 150, 84]);
-      for (let k = 0; k < 4; k++) flowers.box(px + k * 0.06, base + tall + 1.5 + k * 0.28, pz, 0.24 - k * 0.03, 0.3, 0.24 - k * 0.03, [240, 226, 192]);
+      setPlants.push(px, pz, base);
+      for (let k = 0; k < 4; k++) {
+        flowers.box(px + k * 0.06, base + tall + 1.5 + k * 0.28, pz, 0.24 - k * 0.03, 0.3, 0.24 - k * 0.03, [240, 226, 192]);
+        flowerPlants.push(px, pz, base);
+      }
     }
   };
   const near = coarse ? 0.38 : 0.27, mid = coarse ? 0.62 : 0.44;
@@ -384,7 +424,7 @@ function meadow(coarse: boolean) {
       plant(x, z, 0.85);
     }
   }
-  return { blades: set.mesh("lit", { receive: true }), flowers: flowers.mesh("lit", { receive: true }) };
+  return { blades: rooted(set.mesh("lit", { receive: true }), setPlants), flowers: rooted(flowers.mesh("lit", { receive: true }), flowerPlants) };
 }
 
 function fox() {
@@ -480,10 +520,10 @@ export const fushimi: Place = {
     scene.add(land.mesh("lit", { receive: true }), lit.mesh("lit", { cast: true, receive: true }), trunks.mesh("lit", { cast: true, receive: true }));
     const wind = { value: 0 };
     const { blades, flowers } = meadow(coarse);
-    windy(blades, wind, { sway: 0.82, flutter: 0.14, shimmer: 0.26, rooted: true });
-    windy(flowers, wind, { sway: 1.1, flutter: 0.16, shimmer: 0, rooted: false });
+    windy(blades, wind, { sway: 0, flutter: 0, shimmer: 0.2, rooted: true, plant: "blade" });
+    windy(flowers, wind, { sway: 0, flutter: 0, shimmer: 0, rooted: false, plant: "bloom" });
     const canopy = foliage.mesh("lit", { cast: true, receive: true });
-    windy(canopy, wind, { sway: 1.7, flutter: 0.34, shimmer: 0.34, rooted: false, branch: 0.95 });
+    windy(canopy, wind, { sway: 0.7, flutter: 0.18, shimmer: 0.28, rooted: false, branch: 0.3, broad: 0.2 });
     const strips = paper.mesh("glow");
     windy(strips, wind, { sway: 0.26, flutter: 0.13, shimmer: 0, rooted: false });
     scene.add(blades, flowers, canopy, strips);

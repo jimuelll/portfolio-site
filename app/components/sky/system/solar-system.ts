@@ -31,7 +31,7 @@ import { release } from "./voxels";
 
 export interface Note { text: string; at: number }
 /** Something the Cosmos canvas should write on the picture. A world's name; or the one in focus, which can be tapped. */
-export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
+export interface Tag { text: string; x: number; y: number; cx: number; cy: number; r: number; sub?: string; run?: () => void; focus: () => void }
 
 const PLACES: Record<string, Place> = { sun: corona, mercury: prokofiev, venus: navka, earth: fushimi, moon: moonBase, mars: galeCrater, saturn: cloudTops, iapetus, jupiter: greatRedSpot, uranus: paleHaze, neptune: neptuneTops, belt: ida243, miranda: veronaRupes };
 /** Earth has more than one place worth the trip, so its places go round from one to the next. */
@@ -39,11 +39,15 @@ const ROUND: Place[] = [fushimi, aurora];
 /** The dive between the map and a place. The view cuts halfway, at its coarsest. */
 const DIVE_SECONDS = 1.7;
 const COARSEST = 7;
+/** The map's glyphs against the usual: a bit finer, since each world is only a few across. */
+const MAP_CELL = 0.8;
 /** How far a drag can turn the view in a place, before it eases back. */
 const YAW_LIMIT = 0.36;
 const PITCH_LIMIT = 0.13;
 /** A fingertip's reach, in px, so the smallest worlds and creatures can still be hit. */
 const TOUCH = 28;
+/** A mouse is more exact, and has a whole map to cross without setting everything off. */
+const HOVER = 18;
 const NOTE_SECONDS = 5;
 /** How high over the ground a place's camera has to stay, and how far around it that's checked. */
 const CAMERA_HEIGHT = 4.5;
@@ -85,6 +89,7 @@ export class SolarSystem {
     this.map = new Orrery(opts.reduced, opts.projects);
     this.canvas.addEventListener("webglcontextlost", this.onLost);
     this.resize(opts.w, opts.h);
+    this.pass.setCell(MAP_CELL);
     document.body.append(this.canvas);
   }
 
@@ -114,18 +119,30 @@ export class SolarSystem {
     this.lookAround.dragging = false;
   }
 
-  zoom(factor: number) {
-    if (!this.here && !this.dive) this.map.zoomBy(factor);
+  /** Toward the point given, so whichever world you're zooming at stays in view. */
+  zoom(factor: number, x: number, y: number) {
+    if (!this.here && !this.dive) this.map.zoomBy(factor, x, y);
+  }
+
+  /** A finger or button coming down: a map still coasting from the last drag stops under it. */
+  press() {
+    if (!this.here && !this.dive) this.map.grip();
   }
 
   hover(x: number, y: number) {
     if (this.here || this.dive) return false;
-    this.focus = this.map.worldAt(x, y, 18);
+    this.focus = this.map.worldAt(x, y, HOVER);
     return this.focus !== null;
   }
 
+  /** The mouse is over a label: that keeps the focus, unless a world is right there under the mouse too. */
+  hoverOver(x: number, y: number) {
+    if (this.here || this.dive) return;
+    this.focus = this.map.worldAt(x, y, 0) ?? this.focus;
+  }
+
   /** A tap: the map tries to land, a place sees if you've touched its creature. */
-  tap(x: number, y: number) {
+  tap(x: number, y: number, touch = false) {
     if (this.dive) return;
     if (this.here) {
       const { view } = this.here;
@@ -134,9 +151,10 @@ export class SolarSystem {
       if (Math.hypot(p.x - x, p.y - y) <= Math.max(TOUCH, r)) this.say(view.poke(this.time));
       return;
     }
-    const world = this.map.worldAt(x, y, TOUCH);
-    if (world) this.choose(world);
-    else this.focus = null;
+    // A mouse has already said which by hovering. A finger hasn't, so its first tap only picks, and a slip costs nothing.
+    const world = touch ? this.map.worldAt(x, y, TOUCH) : this.focus;
+    if (!world || (touch && world !== this.focus)) this.focus = world;
+    else this.choose(world);
   }
 
   /** Arrow keys walk the worlds, Enter goes to the one in focus. True if the key meant something here. */
@@ -211,7 +229,7 @@ export class SolarSystem {
     this.rest = 0;
     this.diveWorld = world;
     if (!place) {
-      this.pass.setCell(1);
+      this.pass.setCell(MAP_CELL);
       return;
     }
     markPlace(place.id);
@@ -242,7 +260,10 @@ export class SolarSystem {
         this.lookAround.yaw *= k;
         this.lookAround.pitch *= k;
       }
-    } else this.map.update(t, dt);
+    } else {
+      this.map.calm(this.focus !== null);
+      this.map.update(dt);
+    }
     const now = performance.now();
     if (this.lastFrame && this.pass.watch(now - this.lastFrame)) {
       if (this.pass.level === 2) this.here?.view.thin(0.5);
@@ -308,7 +329,7 @@ export class SolarSystem {
         this.pass.flash = view.flash?.(this.time) ?? 0;
         this.pass.render(view.scene, this.camera, view.lens);
       } else {
-        this.map.update(this.time, 0);
+        this.map.update(0);
         this.map.aim(this.mapDive(), this.diveWorld);
         this.pass.flash = 0;
         this.pass.render(this.map.scene, this.map.camera, MAP_LENS);
@@ -331,15 +352,14 @@ export class SolarSystem {
     for (const world of this.map.worlds) {
       const f = this.map.fix(world);
       if (f.depth > 1) continue;
-      const y = f.y + f.r + 12;
+      const tag = { text: world.name, x: f.x, y: f.y + f.r + 12, cx: f.x, cy: f.y, r: f.r, focus: () => { this.focus = world; } };
       if (world === this.focus) {
-        const run = () => this.choose(world);
-        tags.push({ text: world.name, x: f.x, y, sub: world.approach ?? "land →", run });
+        tags.unshift({ ...tag, sub: world.approach ?? "land →", run: () => this.choose(world) });
         continue;
       }
       // A moon's name would sit on its planet's until you've come in closer.
       if (world.around && f.r < 7) continue;
-      tags.push({ text: world.name, x: f.x, y, dim: true });
+      tags.push(tag);
     }
     return tags;
   }
@@ -359,7 +379,7 @@ export class SolarSystem {
       return { lines: [`${place.name} · ${place.world}`, place.coords], hint: this.w < 640 ? "drag to look ↯" : "drag to look around ↯" };
     }
     const years = this.map.years();
-    return { lines: [`sol · 8 planets · ${placesCount()}/${PLACE_IDS.length} places`, `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
+    return { lines: [`sol · 8 planets · ${placesCount()}/${PLACE_IDS.length} places`, `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.coarse ? "drag · pinch · tap a world twice ↯" : this.w < 640 ? "drag · scroll · click a world ↯" : "drag to turn · scroll to zoom · click a world ↯" };
   }
 
   /** Whether "back to orbit" belongs on screen. */

@@ -149,6 +149,7 @@ interface Mote { x: number; y: number; z: number; tint: Rgb }
 interface Wonder { kind: "planet" | "ringed" | "nebula" | SightKind; x: number; y: number; z: number; size: number; body: Rgb; band: Rgb; seed: number; tilt: number; label?: string; href?: string; dim?: boolean; name?: string; fact?: string; vx?: number; locked?: boolean; surface?: Surface; pace?: number; parts?: Bit[] }
 /** Something tappable drawn this frame (a project, the dossier link), in screen px. */
 interface Hit { x: number; y: number; w: number; h: number; go: string | (() => void) }
+const inBox = (b: { x: number; y: number; w: number; h: number }, x: number, y: number) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
 /** A project as a constellation at the vista: its stars in sky px, revealed one by one. */
 interface Figure { label: string; href: string; dim: boolean; stars: [number, number][] }
 /** A star you lit in the vista, in sky px. */
@@ -248,6 +249,10 @@ export class Cosmos {
   /** Your name traced in stars at the vista, in sky px, with the point the caption hangs from. */
   private nameStars: { pts: [number, number][]; x: number; y: number } | null = null;
   private hits: Hit[] = [];
+  /** The worlds' names on the map, each a way of picking that world. */
+  private names: { x: number; y: number; w: number; h: number; focus: () => void }[] = [];
+  /** Where a mouse rests, so a world drifting under it is noticed without the mouse moving. */
+  private mouseAt: { x: number; y: number } | null = null;
 
   private press: Press | null = null;
   private pointer = { x: 0, y: 0, active: false };
@@ -492,6 +497,9 @@ export class Cosmos {
     this.press = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, last: performance.now() };
     this.pointer = { x: e.clientX, y: e.clientY, active: true };
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    this.system?.press();
+    // A finger on a laptop's screen: wherever the mouse was left has no say now.
+    if (e.pointerType !== "mouse") this.mouseAt = null;
     if (this.stage === "voyage") this.warp = true;
     else { this.cam.vx = 0; this.cam.vy = 0; }
     if (this.reduced) this.render();
@@ -538,7 +546,7 @@ export class Cosmos {
       touch.x = e.clientX;
       touch.y = e.clientY;
       const after = Math.hypot(a.x - b.x, a.y - b.y);
-      if (before > 0 && after > 0) system.zoom(before / after);
+      if (before > 0 && after > 0) system.zoom(before / after, (a.x + b.x) / 2, (a.y + b.y) / 2);
       if (p) p.moved = true;
     } else if (p && p.id === e.pointerId) {
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
@@ -549,15 +557,36 @@ export class Cosmos {
         p.y = e.clientY;
       }
     } else if (e.pointerType === "mouse") {
-      this.canvas.style.cursor = system.hover(e.clientX, e.clientY) ? "pointer" : "";
+      this.mouseAt = { x: e.clientX, y: e.clientY };
+      this.hoverSystem();
     }
     if (this.reduced) this.render();
+  }
+
+  /** What a resting mouse is on. A label already showing stays while the mouse travels to it. */
+  private hoverSystem() {
+    const { x, y } = this.mouseAt!;
+    const system = this.system!;
+    if (this.hits.some((h) => inBox(h, x, y))) {
+      system.hoverOver(x, y);
+      this.canvas.style.cursor = "pointer";
+      return;
+    }
+    let found = system.hover(x, y);
+    if (!found) {
+      const name = this.names.find((n) => inBox(n, x, y));
+      if (name) {
+        name.focus();
+        found = true;
+      }
+    }
+    this.canvas.style.cursor = found ? "pointer" : "";
   }
 
   private onWheel = (e: WheelEvent) => {
     if (!this.system) return;
     e.preventDefault();
-    this.system.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0016));
+    this.system.zoom(Math.exp(clamp(e.deltaY, -120, 120) * 0.0016), e.clientX, e.clientY);
     if (this.reduced) this.render();
   };
 
@@ -571,6 +600,8 @@ export class Cosmos {
     if (!this.system || (e.key === "Enter" && onToggle) || e.repeat) return;
     if (!this.system.key(e.key)) return;
     e.preventDefault();
+    // The keys have the focus now, until the mouse next moves.
+    this.mouseAt = null;
     // The toggle keeps its own Enter, so walking the worlds takes the focus off it.
     if (onToggle) (document.activeElement as HTMLElement | null)?.blur();
     if (this.reduced) this.render();
@@ -586,15 +617,24 @@ export class Cosmos {
     // Held long enough to feel the warp, it wasn't a tap.
     const brief = !this.punched && this.held < SPOOL_SECONDS * 0.6;
     this.system?.release();
+    if (this.system && e.pointerType === "mouse") {
+      this.mouseAt = { x: e.clientX, y: e.clientY };
+      this.hoverSystem();
+    }
     // While an answer is putting itself away, taps wait, so a quick second tap doesn't light a stray star.
     if (p.moved || this.closing >= 0) return;
-    const hit = this.hits.find((h) => e.clientX >= h.x && e.clientX <= h.x + h.w && e.clientY >= h.y && e.clientY <= h.y + h.h);
+    const hit = this.hits.find((h) => inBox(h, e.clientX, e.clientY));
     if (hit) {
       if (typeof hit.go === "string") window.dispatchEvent(new CustomEvent(GO_EVENT, { detail: hit.go }));
       else hit.go();
     // A tap on empty sky puts the answer away; with nothing showing, the solar system takes it, and the vista lights a star.
     } else if (this.overlay && (this.stage === "vista" || this.overlay.kind === "about")) this.close();
-    else if (this.system) this.system.tap(e.clientX, e.clientY);
+    else if (this.system) {
+      const touch = e.pointerType !== "mouse";
+      const name = touch ? this.names.find((n) => inBox(n, e.clientX, e.clientY)) : undefined;
+      if (name) name.focus();
+      else this.system.tap(e.clientX, e.clientY, touch);
+    }
     else if (this.stage === "vista") this.ignite(e.clientX, e.clientY);
     else if (brief) this.tapVoyage(e.clientX, e.clientY);
     if (this.reduced) this.render();
@@ -770,6 +810,10 @@ export class Cosmos {
 
   private onLeave = () => {
     this.pointer.active = false;
+    if (this.system && this.mouseAt) {
+      this.mouseAt = null;
+      this.system.hover(-1e4, -1e4);
+    }
   };
 
   private onTilt = (e: DeviceOrientationEvent) => {
@@ -1244,6 +1288,7 @@ export class Cosmos {
     if (this.landing) this.drawLanding(this.landing);
     else if (this.liftFrom) this.drawIgnition(this.liftFrom);
     ctx.globalAlpha = 1;
+    if (this.system && this.mouseAt && !this.press) this.hoverSystem();
   }
 
   /** The point you're flying toward, on screen. */
@@ -1607,13 +1652,23 @@ export class Cosmos {
   private drawSystemTags() {
     const system = this.system!;
     const quiet = this.overlay ? 0.35 : 1;
+    this.names = [];
     for (const tag of system.tags()) {
       if (tag.run) {
-        if (!this.overlay) this.label(tag.text, tag.x, tag.y, tag.run, false, 1, tag.sub);
+        if (this.overlay) continue;
+        this.label(tag.text, tag.x, tag.y, tag.run, false, 1, tag.sub);
+        // Brackets round what a click will land on, since the small worlds are only a glyph or two across.
+        this.ctx.font = `12px ${this.family}`;
+        this.put("[", tag.cx - tag.r - 8, tag.cy, ACCENT, 0.95);
+        this.put("]", tag.cx + tag.r + 8, tag.cy, ACCENT, 0.95);
         continue;
       }
       this.ctx.font = `10px ${this.family}`;
       this.put(tag.text, tag.x, tag.y, FAINT, 0.75 * quiet);
+      if (!this.overlay) {
+        const w = this.ctx.measureText(tag.text).width;
+        this.names.push({ x: tag.x - w / 2 - 6, y: tag.y - 10, w: w + 12, h: 20, focus: tag.focus });
+      }
     }
     const narrow = this.w < 640;
     const line = system.saying();
@@ -1668,8 +1723,11 @@ export class Cosmos {
   private label(text: string, x: number, y: number, go: Hit["go"], dim: boolean, alpha: number, sub = "open →") {
     const { ctx } = this;
     if (alpha < 0.15) return;
+    ctx.font = `10px ${this.family}`;
+    const subW = ctx.measureText(sub).width;
     ctx.font = `12px ${this.family}`;
-    const w = ctx.measureText(text).width;
+    // As wide as whichever line is longer, so "nice try →" can be clicked all the way along.
+    const w = Math.max(ctx.measureText(text).width, subW);
     x = clamp(x, w / 2 + 16, this.w - w / 2 - 16);
     // A dark backing, so the name reads even over the brightest gas.
     ctx.globalAlpha = 0.72 * alpha;
