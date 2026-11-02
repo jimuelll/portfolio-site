@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent as KeyEvent } from "react";
-import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
-import { Cosmos, type Stage } from "./sky/cosmos";
+import { DEPART_CANCEL_EVENT, DEPART_EVENT, DEPART_SECONDS, GO_EVENT, HYPERDRIVE_EVENT, HYPER_SECONDS, NAV_EVENT, NOTE_EVENT, SUNRISE_CLASS, TURN_SECONDS, exposure, type NavTarget } from "./sky/engine";
+import type { Cosmos, Stage } from "./sky/cosmos";
 import { markSecret } from "./sky/secrets";
-import { loadSystem } from "./sky/system/load";
+import { loadCosmos, loadSystem } from "./sky/system/load";
 
 const LINKS = [
   { label: "sky", href: "/" },
@@ -29,9 +29,13 @@ const LIFTOFF_MS = 3000;
 const ARRIVE_MS = 5000;
 /** From the voyage, a fresh hold only needs the rest of the way: two more seconds. */
 const ONWARD_MS = ARRIVE_MS - LIFTOFF_MS;
+/** This long before arrival, a hold still going spools the warp, so the jump has its punch. */
+const BRACE_MS = 900;
 /** A hold this long is no tap: the solar system's code starts on its way, so it's there on arrival. */
 const PREFETCH_MS = 1000;
-/** How long the cosmos takes to fade away when you land. Matches .cosmos-canvas in globals.css. */
+/** Held this long it's no tap either, so the voyage's own code starts on its way, well before liftoff needs it. */
+const VOYAGE_PREFETCH_MS = 350;
+/** How long the cosmos takes to close in on the toggle when you land. Matches FADE_MS in sky/cosmos.ts. */
 const LAND_MS = 1000;
 /** How long a page arriving from the sky takes to rise into place. Matches .arriving in globals.css. */
 const RISE_MS = 1300;
@@ -44,6 +48,9 @@ const STALL_MS = 3000;
 
 /** The cosmos, kept outside the component: it floats over every page, so it outlives the nav of any one of them. */
 let cosmos: Cosmos | null = null;
+/** The voyage's code, once it has been fetched. */
+let cosmosCode: typeof import("./sky/cosmos") | null = null;
+const fetchCosmos = () => loadCosmos().then((code) => { cosmosCode = code; });
 /** After the first mount the page has hydrated, so later navs can read the real theme straight away. */
 let hydrated = false;
 /**
@@ -125,6 +132,8 @@ export function TopNav() {
     showNote("✦ hyperdrive · tap ✧ to jump home");
   });
 
+  const onSkyNote = useEffectEvent((text: string) => showNote(text));
+
   /** Something out there asked to go to a page (a project, the dossier): come home first, then go. */
   const onGo = useEffectEvent((href: string) => {
     // A second tap on the label is the same tap.
@@ -168,9 +177,11 @@ export function TopNav() {
     const onKey = (e: KeyboardEvent) => onEscape(e);
     const onJump = () => onHyperdrive();
     const onGoTo = (e: Event) => onGo((e as CustomEvent<string>).detail);
+    const onNote = (e: Event) => onSkyNote((e as CustomEvent<string>).detail);
     window.addEventListener("keydown", onKey);
     window.addEventListener(HYPERDRIVE_EVENT, onJump);
     window.addEventListener(GO_EVENT, onGoTo);
+    window.addEventListener(NOTE_EVENT, onNote);
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(held.raf);
@@ -179,6 +190,7 @@ export function TopNav() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener(HYPERDRIVE_EVENT, onJump);
       window.removeEventListener(GO_EVENT, onGoTo);
+      window.removeEventListener(NOTE_EVENT, onNote);
       exposure.k = 0;
     };
   }, []);
@@ -236,11 +248,12 @@ export function TopNav() {
     commit();
   }
 
-  /** Back down from the cosmos: it fades away and the page rises back into place. */
+  /** Back down from the cosmos: it closes in on the toggle and the page rises back into place. */
   function land() {
     if (!cosmos) return;
     const root = document.documentElement;
-    cosmos.leave();
+    const b = button.current?.getBoundingClientRect();
+    cosmos.leave(b && { x: b.left + b.width / 2, y: b.top + b.height / 2 });
     cosmos = null;
     setStage(null);
     setNoteOn(false);
@@ -288,7 +301,7 @@ export function TopNav() {
   /** Three seconds: the page drops away below and the voyage begins. */
   function liftoff() {
     const root = document.documentElement;
-    cosmos = new Cosmos("voyage");
+    cosmos = new cosmosCode!.Cosmos("voyage", { x: exposure.x, y: exposure.y });
     markSecret("voyage");
     fadeColours();
     root.classList.add("cosmos");
@@ -302,7 +315,9 @@ export function TopNav() {
 
   /** Five seconds: out of warp, in front of the solar system. */
   function arrive() {
-    cosmos?.arrive((solarSystem) => {
+    if (!cosmos) return;
+    hold.current.stage = 2;
+    cosmos.arrive((solarSystem) => {
       markSecret("vista");
       showNote(solarSystem ? "✦ arrival · tap a world to land · ✧ to go home" : "✦ arrival · tap ✧ to land");
     });
@@ -327,8 +342,16 @@ export function TopNav() {
     // The stages run on timers, so they land on time even if frames are dropped; frames only draw the ring.
     h.timers = [
       ...(onward ? [] : [window.setTimeout(() => { loadSystem().catch(() => {}); }, PREFETCH_MS)]),
-      ...(onward ? [] : [window.setTimeout(() => { h.stage = 1; liftoff(); }, LIFTOFF_MS)]),
-      window.setTimeout(() => { h.stage = 2; arrive(); }, onward ? ONWARD_MS : ARRIVE_MS),
+      ...(onward ? [] : [window.setTimeout(() => { fetchCosmos().catch(() => {}); }, VOYAGE_PREFETCH_MS)]),
+      ...(onward ? [] : [window.setTimeout(() => {
+        const go = () => { h.stage = 1; liftoff(); };
+        if (cosmosCode) return go();
+        // A slow connection: lift off as soon as the code is here, if they're still holding.
+        const began = h.start;
+        fetchCosmos().then(() => { if (h.start === began) go(); }, () => {});
+      }, LIFTOFF_MS)]),
+      window.setTimeout(() => cosmos?.brace(true), (onward ? ONWARD_MS : ARRIVE_MS) - BRACE_MS),
+      window.setTimeout(arrive, onward ? ONWARD_MS : ARRIVE_MS),
     ];
     const tick = () => {
       const held = performance.now() - h.start;
@@ -346,6 +369,7 @@ export function TopNav() {
     cancelAnimationFrame(h.raf);
     h.timers.forEach((t) => window.clearTimeout(t));
     h.raf = 0;
+    cosmos?.brace(false);
     button.current?.style.removeProperty("--hold");
     if (button.current) delete button.current.dataset.holding;
     exposure.k = 0;
@@ -358,7 +382,7 @@ export function TopNav() {
     h.onward = false;
     if (stage > 0 && !onwardTap) {
       h.swallowUntil = performance.now() + HOLD_SWALLOW;
-      Cosmos.askTilt();
+      cosmosCode?.Cosmos.askTilt();
     }
     if (stage === 1 && !onwardTap) showNote("✦ voyage · hold ✧ to arrive · tap to land");
     return onwardTap ? 0 : stage;

@@ -11,7 +11,7 @@
 
 import type { Rgb, Scene } from "./engine";
 
-export type SecretId = "earth" | "voyage" | "vista" | "milkyway";
+export type SecretId = "earth" | "voyage" | "vista" | "milkyway" | "wormhole";
 export type DrifterSky = Exclude<Scene, "deep">;
 
 /** The colours a drifter is drawn in: the part of the sky's palette it needs. */
@@ -249,17 +249,20 @@ export const DRIFTERS: Record<DrifterSky, Partial<Record<SecretId, Sprite>>> = {
     voyage: { parts: rocket, gait: "cruise", face: "path", reach: 1.3, tall: 0.5, says: { voice: "want a ride?", how: "press and hold the ☾ in the top bar for 3 seconds" } },
     vista: { parts: ufo, gait: "hover", face: "bank", reach: 1, tall: 0.85, says: { voice: "we come in peace.", how: "press and hold the ☾ in the top bar for 5 seconds" } },
     milkyway: { parts: astronaut, gait: "coast", face: "spin", reach: 0.75, tall: 0.75, says: { voice: "houston, try this:", how: "press and hold the big moon for 3 seconds" } },
+    wormhole: { parts: station, gait: "coast", face: "spin", reach: 1.15, tall: 0.55, says: { voice: "something's out past the charts.", how: "on the voyage, fly past 12 light years, then steer or tap into the ring" } },
   },
   day: {
     earth: { parts: probe, gait: "coast", face: "sun", reach: 0.95, tall: 0.8, says: { voice: "too hot out here!", how: "press the ☼ in the top bar 5 times, fast, to reach Earth" } },
     voyage: { parts: sail, gait: "glide", face: "rock", reach: 1, tall: 1, says: { voice: "catch the solar wind:", how: "press and hold the ☼ in the top bar for 3 seconds" } },
     vista: { parts: comet, gait: "cruise", face: "still", reach: 1.55, tall: 1.55, says: { voice: "can't stop!", how: "press and hold the ☼ in the top bar for 5 seconds" } },
     milkyway: { parts: parasol, gait: "coast", face: "rock", reach: 0.9, tall: 0.9, says: { voice: "wear sunscreen.", how: "press and hold the big sun for 3 seconds" } },
+    wormhole: { parts: probe, gait: "coast", face: "sun", reach: 0.95, tall: 0.8, says: { voice: "my readings make no sense.", how: "on the voyage, fly past 12 light years, then steer or tap into the ring" } },
   },
   earth: {
     voyage: { parts: shuttle, gait: "cruise", face: "path", reach: 1.15, tall: 0.55, says: { voice: "next launch is yours:", how: "press and hold the ⊕ in the top bar for 3 seconds" } },
     vista: { parts: station, gait: "coast", face: "spin", reach: 1.15, tall: 0.55, says: { voice: "the view's better up here.", how: "press and hold the ⊕ in the top bar for 5 seconds" } },
     milkyway: { parts: astronaut, gait: "coast", face: "spin", reach: 0.75, tall: 0.75, says: { voice: "houston, try this:", how: "press and hold the big Earth for 3 seconds" } },
+    wormhole: { parts: ufo, gait: "hover", face: "bank", reach: 1, tall: 0.85, says: { voice: "there's a shortcut, you know.", how: "on the voyage, fly past 12 light years, then steer or tap into the ring" } },
   },
 };
 

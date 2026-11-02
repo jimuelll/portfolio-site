@@ -96,6 +96,8 @@ const TWILIGHT_BG: Rgb = [14, 22, 46];
 export const exposure = { k: 0, x: 0, y: 0 };
 /** Fired on window when the hero has been held long enough: top-nav.tsx switches to the galaxy. */
 export const HYPERDRIVE_EVENT = "sky-hyperdrive";
+/** Fired on window when the sky has something to say in the nav's note (sky/cosmos.ts): the text is the detail. */
+export const NOTE_EVENT = "sky-note";
 /**
  * Out in the galaxy or the cosmos, the nav's "projects" and "about" are answered by the sky itself: top-nav.tsx
  * fires NAV_EVENT with which one, and the sky shows it its own way. GO_EVENT (detail: a path) asks top-nav to bring
@@ -127,16 +129,16 @@ const SAY_RATE = 42;
 export const HYPER_SECONDS = 2.6;
 const DEEP_BG: Rgb = [5, 6, 13];
 const BLUESHIFT: Rgb = [150, 196, 255];
-const GALAXY_CORE: Rgb = [255, 226, 180];
-const GALAXY_ARM: Rgb = [150, 172, 255];
-const GALAXY_NEBULA: Rgb = [236, 120, 190];
+export const GALAXY_CORE: Rgb = [255, 226, 180];
+export const GALAXY_ARM: Rgb = [150, 172, 255];
+export const GALAXY_NEBULA: Rgb = [236, 120, 190];
 /** Spiral arms wind out as a logarithmic spiral, r ∝ e^(bθ); b = 0.32 is a pitch of about 18°, like the Milky Way's. */
-const ARM_PITCH = 0.32;
+export const ARM_PITCH = 0.32;
 /** The galaxy's disc seen at an angle: squashed and turned a little on screen (see galaxySquash for phones). */
-const GALAXY_SQUASH_WIDE = 0.6;
-const GALAXY_TURN = -0.32;
+export const GALAXY_SQUASH_WIDE = 0.6;
+export const GALAXY_TURN = -0.32;
 /** Where the sun sits: partway out along one arm. */
-const SUN_ORBIT = 0.58;
+export const SUN_ORBIT = 0.58;
 const GALAXY_ACCENT: Rgb = [195, 166, 255];
 const GALAXY_FAINT: Rgb = [154, 150, 184];
 /** How close the camera comes to the sun for the pilot's card. */
@@ -151,6 +153,14 @@ const SAT_W0 = (TAU / 8) * 1.3 ** 1.5;
  */
 const LAND = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADwD6AAAAAAAAAAAAAAAAA/7//8AAAAAAYAAAAAAABhlz//+ABAAAAAwAAAAAAAur8A//gAAACAf/ACAAAAAP6vwP/wAAABD///14AIf///fnB/4AA/gP///////n////58fw4Af/////////A////yODgAAf/////////gf///4OAIAAPP///////ngAwf/+D8AAAgz//////8DAAAB//+/gAAcZ//////+BwAAAP///8AAHf///////4AAAAB///5gAAf///////8AAAAAP///AAAH///////+AAAAAD//+AAAF+8P/////IAAAAA///AAAB4X//////AAAAAAP//gAAAcBv////+RAAAAAB//4AAAD8Af////lwAAAAAP/8AAAB/mP////4gAAAAAA/yAAAA///////+AAAAAAAXgQAAAf//ff///gAAAAAAA4AAAAP///+P//wAAAAAAAPIgAAD//+/h+fwAAAAAAAB+CAAA///3wPHwAAAAAAAABwAAAP//9wDg+AAAAAAAAAEAAAD///wAYHhAAAAAAAAAnwAAf///AEBQAAAAAAAAAD+AAD///wAgACAAAAAAAAA/8AAAf/4AAKMAAAAAAAAAP/AAAH/8AABnAAAAAAAAAH/8AAB/+AAAJ8AAAAAAAAB//4AAP/AAADADwAAAAAAAf//AAD/wAAAOAeAAAAAAAD//gAAf8AAAAAAgAAAAAAAf/wAAH/AAAAAMgAAAAAAAH/8AAD/7AAAAPsAAAAAAAAf/AAA/4wAAAH/AAAAAAAAH/wAAH+YAAAH/4AAAAAAAB/wAAB/mAAAD//AAAAAAAAf4AAAfwAAAA//4AAAAAAAH8AAAD4AAAAH/+AAAAAAAB/AAAA8AAAAB5/AAAAAAAA/AAAAAAAAAAAHwAAAAAAAPwAAAAAAAAAAA4AgAAAAADwAAAAAAAAAAAAAIAAAAAA4AAAAAAAAAAAAAIAAAAAAcAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAABwAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAwABmBAAAAAAAAAIAAAAAD/5////+AAAAAAAPAAA//////////8AAAV4//wAA//////////+AAf///8AAP///////////AAD////oDj///////////gAD/////3/////////////D//////////////////////////////////////////w==";
 let landBits: Uint8Array | null = null;
+/**
+ * How far the sky has stepped down for this device (0 full, 3 lowest), by the same rule as the voyage and the solar
+ * system: two slow seconds in a row, never back up. Kept outside the engine, so a new page doesn't have to find out again.
+ */
+let skyQuality = 0;
+const SLOW_FRAME_MS = 28;
+const SKY_STARS = [1, 0.7, 0.45, 0.3];
+const SKY_GLYPH = [1, 1.2, 1.45, 1.7];
 export function isLand(lon: number, lat: number) {
   if (!landBits) {
     const raw = atob(LAND);
@@ -239,6 +249,18 @@ export function hash(x: number, y: number, z: number) {
   return (h >>> 0) / 4294967296;
 }
 
+/** A two-armed spiral at a point on its disc, r out from the centre: how much core, arm and dust lane there is there, and the sum of them. */
+export function spiralField(u: number, v: number, spin: number, pitch = ARM_PITCH) {
+  const r = Math.hypot(u, v);
+  const th = Math.atan2(v, u) - spin;
+  const phase = th - Math.log(r + 0.02) / pitch;
+  const core = Math.exp(-((r / 0.13) ** 2));
+  const arm = (0.5 + 0.5 * Math.cos(2 * phase)) ** 3 * Math.exp(-r / 0.75) * smoothstep(0.04, 0.2, r) * (1 - smoothstep(0.95, 1.15, r));
+  const lane = (0.5 + 0.5 * Math.cos(2 * phase + 0.7)) ** 14 * smoothstep(0.12, 0.3, r);
+  const n = noise(u * 9 + 3, v * 9, 61);
+  return { r, core, arm, lane, n, d: core * 1.3 + arm * (0.8 + 1.1 * n) + 0.07 * Math.exp(-r / 0.6) * n - lane * 0.25 };
+}
+
 export function noise(x: number, y: number, seed: number) {
   const xi = Math.floor(x), yi = Math.floor(y);
   const u = smoothstep(0, 1, x - xi), v = smoothstep(0, 1, y - yi);
@@ -262,7 +284,18 @@ function overlap(d: number, r: number) {
 }
 
 export const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
-export const css = (c: Rgb) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+/** Colour strings, kept: thousands of glyphs a frame ask for the same few, and building each one anew is a real cost. */
+const inks = new Map<number, string>();
+export const css = (c: Rgb) => {
+  const key = ((c[0] & 255) << 16) | ((c[1] & 255) << 8) | (c[2] & 255);
+  let ink = inks.get(key);
+  if (!ink) {
+    if (inks.size > 8192) inks.clear();
+    ink = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+    inks.set(key, ink);
+  }
+  return ink;
+};
 const norm = (v: Vec): Vec => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
 
 interface Star { x: number; y: number; z: number; phase: number; speed: number; glyph: string; tint: 0 | 1 | 2 }
@@ -307,6 +340,8 @@ export class SkyEngine {
   private acc = 0;
   private raf = 0;
   private frames = 0;
+  private slowFor = 0;
+  private quality = skyQuality;
   private visible = true;
   private disposed = false;
   private palette = DARK;
@@ -531,7 +566,7 @@ export class SkyEngine {
   private resize() {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
-    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const ratio = skyQuality >= 3 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     const first = this.w === 1;
     this.w = rect.width;
     this.h = rect.height;
@@ -566,7 +601,7 @@ export class SkyEngine {
       p.y = h * 0.4;
     }
     // Small glyphs, so craters, coastlines and sunspots read as detail rather than noise.
-    p.font = clamp(p.r / 20, 6, 11);
+    p.font = clamp(p.r / 20, 6, 11) * SKY_GLYPH[skyQuality];
     p.cw = p.font * 0.62;
     p.ch = p.font * 1.08;
     this.moonAt = { x: p.x, y: p.y };
@@ -587,7 +622,7 @@ export class SkyEngine {
   private targetStars() {
     if (this.variant === "emblem") return Math.round(clamp((this.w * this.h) / 2600, 20, 60));
     const density = this.variant === "full" ? 4200 : 6500;
-    return Math.round(clamp((this.w * this.h) / density, 90, 460));
+    return Math.round(clamp((this.w * this.h) / density, 90, 460) * SKY_STARS[skyQuality]);
   }
 
   private seedStars() {
@@ -630,7 +665,24 @@ export class SkyEngine {
     this.raf = requestAnimationFrame(this.frame);
   };
 
+  /** Two slow seconds step the quality down. A long gap is a hidden tab or a page change, not a slow device. */
+  private watch(ms: number) {
+    if (this.variant === "emblem" || ms > 200) return;
+    // Another page's sky may have stepped down already.
+    if (this.quality !== skyQuality) {
+      this.quality = skyQuality;
+      this.resize();
+    }
+    if (skyQuality >= 3) return;
+    this.slowFor = ms > SLOW_FRAME_MS ? this.slowFor + ms : Math.max(0, this.slowFor - ms * 2);
+    if (this.slowFor < 2000) return;
+    this.slowFor = 0;
+    this.quality = ++skyQuality;
+    this.resize();
+  }
+
   private frame = (now: number) => {
+    this.watch(now - this.last);
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
     this.acc += dt;
@@ -2521,16 +2573,9 @@ export class SkyEngine {
         const dx = gx - cx, dy = gy - cy;
         // Back onto the disc: undo the turn, then the squash.
         const u = (dx * ct + dy * st) / R, v = (-dx * st + dy * ct) / (R * squash);
-        const r = Math.hypot(u, v);
-        if (r > 1.15) continue;
+        if (Math.hypot(u, v) > 1.15) continue;
         const ix = Math.round(x / cw), iy = Math.round(y / ch);
-        const th = Math.atan2(v, u) - spin;
-        const phase = th - Math.log(r + 0.02) / ARM_PITCH;
-        const core = Math.exp(-((r / 0.13) ** 2));
-        const arm = (0.5 + 0.5 * Math.cos(2 * phase)) ** 3 * Math.exp(-r / 0.75) * smoothstep(0.04, 0.2, r) * (1 - smoothstep(0.95, 1.15, r));
-        const lane = (0.5 + 0.5 * Math.cos(2 * phase + 0.7)) ** 14 * smoothstep(0.12, 0.3, r);
-        const n = noise(u * 9 + 3, v * 9, 61);
-        const d = core * 1.3 + arm * (0.8 + 1.1 * n) + 0.07 * Math.exp(-r / 0.6) * n - lane * 0.25;
+        const { r, core, arm, n, d } = spiralField(u, v, spin);
         if (d <= 0 || hash(ix, iy, 63) > d * 2.2) continue;
         const tw = 0.8 + 0.2 * Math.sin(this.time * 1.3 + hash(ix, iy, 64) * TAU);
         const knot = arm > 0.35 && n > 0.7 && hash(ix, iy, 65) < 0.5;

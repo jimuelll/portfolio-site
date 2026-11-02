@@ -5,7 +5,7 @@
 
 import type { SecretId } from "./drifters";
 
-export const SECRETS: readonly SecretId[] = ["earth", "voyage", "vista", "milkyway"];
+export const SECRETS: readonly SecretId[] = ["earth", "voyage", "vista", "milkyway", "wormhole"];
 
 const KEY = "sky-secrets";
 const listeners = new Set<() => void>();

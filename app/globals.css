@@ -221,6 +221,10 @@ button { font: inherit; color: inherit; }
   touch-action: none; cursor: crosshair; user-select: none; -webkit-user-select: none;
 }
 .cosmos-canvas.on { opacity: 1; }
+/* Lifting off and landing, it's fully there and opens or closes on the toggle by itself (drawOpening in sky/cosmos.ts). */
+.cosmos-canvas.iris { opacity: 1; transition: none; }
+/* On the way out, the page coming back under it can already be clicked. */
+.cosmos-canvas:not(.on) { pointer-events: none; }
 /* The solar system's picture, under the Cosmos canvas, which keeps the writing and the pointer. It fades in by itself. */
 .system-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 28; pointer-events: none; transition: opacity 1s ease; }
 .system-canvas.out { opacity: 0; }
