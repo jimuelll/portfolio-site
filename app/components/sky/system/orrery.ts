@@ -35,14 +35,14 @@ const WORLDS: World[] = [
   { id: "venus", name: "venus", orbit: 15, size: 1.7, year: 0.62, spin: -0.08, tilt: 0.05, voxel: 0.24, lands: "venus", ecc: 0.007, incline: 0.059, peri: 2.29, paint: bands([238, 208, 150], [204, 152, 96], 5, 9) },
   { id: "earth", name: "earth", orbit: 20, size: 1.9, year: 1, spin: 0.35, tilt: 0.41, voxel: 0.2, lands: "earth", ecc: 0.017, peri: 1.8, paint: paintEarth },
   { id: "mars", name: "mars", orbit: 26, size: 1.45, year: 1.88, spin: 0.34, tilt: 0.44, voxel: 0.2, lands: "mars", ecc: 0.093, incline: 0.032, peri: 5.86, paint: paintMars },
-  { id: "jupiter", name: "jupiter", orbit: 40, size: 4.4, year: 11.9, spin: 0.8, tilt: 0.05, voxel: 0.34, lands: "jupiter", ecc: 0.048, incline: 0.023, peri: 0.25, approach: "dive →", paint: (x, y, z) => {
+  { id: "jupiter", name: "jupiter", orbit: 50, size: 4.4, year: 11.9, spin: 0.8, tilt: 0.05, voxel: 0.34, lands: "jupiter", ecc: 0.048, incline: 0.023, peri: 0.25, approach: "dive →", paint: (x, y, z) => {
     const { lon, lat } = lonLat(x, y, z);
     if (Math.hypot(lon - 0.8, (lat + 0.36) * 1.9) < 0.3) return [204, 84, 56];
     return bands([232, 208, 172], [168, 112, 76], 11, 10)(x, y, z);
   } },
-  { id: "saturn", name: "saturn", orbit: 52, size: 3.6, year: 29.4, spin: 0.7, tilt: 0.47, voxel: 0.3, lands: "saturn", ecc: 0.054, incline: 0.043, peri: 1.61, approach: "dive →", paint: bands([236, 214, 164], [186, 158, 110], 8, 11) },
-  { id: "uranus", name: "uranus", orbit: 62, size: 2.5, year: 84, spin: -0.4, tilt: 1.7, voxel: 0.26, lands: "uranus", ecc: 0.047, incline: 0.013, peri: 3.0, approach: "go on →", paint: bands([176, 228, 232], [136, 204, 214], 3, 12) },
-  { id: "neptune", name: "neptune", orbit: 71, size: 2.4, year: 165, spin: 0.45, tilt: 0.49, voxel: 0.26, lands: "neptune", ecc: 0.009, incline: 0.031, peri: 0.84, approach: "dive →", paint: bands([70, 112, 226], [38, 70, 176], 5, 13) },
+  { id: "saturn", name: "saturn", orbit: 81, size: 3.6, year: 29.4, spin: 0.7, tilt: 0.47, voxel: 0.3, lands: "saturn", ecc: 0.054, incline: 0.043, peri: 1.61, approach: "dive →", paint: bands([236, 214, 164], [186, 158, 110], 8, 11) },
+  { id: "uranus", name: "uranus", orbit: 110, size: 2.5, year: 84, spin: -0.4, tilt: 1.7, voxel: 0.26, lands: "uranus", ecc: 0.047, incline: 0.013, peri: 3.0, approach: "go on →", paint: bands([176, 228, 232], [136, 204, 214], 3, 12) },
+  { id: "neptune", name: "neptune", orbit: 126, size: 2.4, year: 165, spin: 0.45, tilt: 0.49, voxel: 0.26, lands: "neptune", ecc: 0.009, incline: 0.031, peri: 0.84, approach: "dive →", paint: bands([70, 112, 226], [38, 70, 176], 5, 13) },
 ];
 const MOON: World = { id: "moon", name: "the moon", orbit: 3.4, size: 0.62, year: 0.08, spin: 0.2, tilt: 0.1, voxel: 0.16, lands: "moon", around: "earth", paint: paintMoon };
 // Half tar, half ice, and the one big moon out of the plane of the rings, 15° off it.
@@ -53,7 +53,7 @@ const BELT: World = { id: "belt", name: "the belt", orbit: 32.8, size: 0.8, year
 // Patched together from pieces, and a good deal of it cliff.
 const MIRANDA: World = { id: "miranda", name: "miranda", orbit: 6, size: 0.5, year: 0.06, spin: 0.1, tilt: 0, voxel: 0.14, lands: "miranda", around: "uranus", paint: (x, y, z) => mix([200, 204, 208], [92, 92, 100], noise(x * 5 + y * 2, z * 5, 20) > 0.5 ? 0.85 : 0.1) };
 /** Encke's comet, which has the shortest period of any: a real year count, on an orbit squeezed like the rest. */
-const COMET = { orbit: 30, ecc: 0.7, year: 3.3, incline: 0.2, peri: 2.6 };
+const COMET = { orbit: 25, ecc: 0.65, year: 3.3, incline: 0.2, peri: 2.6 };
 /** Jupiter's big four, with Io, Europa and Ganymede in the 1:2:4 they really keep. Nothing to land on, so not worlds. */
 const GALILEANS = [
   { orbit: 6.2, year: 0.06, size: 2.2, tone: [226, 196, 92] as Rgb },
@@ -104,7 +104,7 @@ function voxelBall(world: World, look: "lit" | "glow" = "lit") {
 
 export class Orrery {
   readonly scene = new Scene();
-  readonly camera = new PerspectiveCamera(FOV, 1, 0.1, 1500);
+  readonly camera = new PerspectiveCamera(FOV, 1, 0.1, 3000);
   readonly worlds = [SUN, ...WORLDS.slice(0, 3), MOON, WORLDS[3], BELT, ...WORLDS.slice(4, 6), IAPETUS, WORLDS[6], MIRANDA, WORLDS[7]];
   private nodes = new Map<string, Object3D>();
   private pivots: { world: World; node: Group; phase: number; angle: number; around?: Object3D }[] = [];
@@ -233,7 +233,7 @@ export class Orrery {
       const u = band ? spread : hash(i, 1, 51) * 2 - 1, a = hash(i, 2, 51) * Math.PI * 2, s = Math.sqrt(1 - u * u);
       const x = Math.cos(a) * s, y = u, z = Math.sin(a) * s;
       const tilt = band ? 1.05 : 0, c = Math.cos(tilt), n = Math.sin(tilt);
-      positions.push(x * 700, (y * c - z * n) * 700, (y * n + z * c) * 700);
+      positions.push(x * 1400, (y * c - z * n) * 1400, (y * n + z * c) * 1400);
       const b = band ? 0.2 + hash(i, 3, 51) ** 2 * 0.62 : 0.4 + hash(i, 3, 51) * 0.6;
       colours.push(b, b * 0.96, b * (0.86 + hash(i, 4, 51) * 0.3));
     }
@@ -333,8 +333,8 @@ export class Orrery {
 
   /** How far back the camera sits so the planets fit; a narrow screen crops the outer ones rather than shrink them all. */
   private distance() {
-    const fit = 158 / (this.camera.aspect * 2 * Math.tan((FOV * Math.PI) / 360));
-    return Math.min(fit, 196) * this.zoom;
+    const fit = 280 / (this.camera.aspect * 2 * Math.tan((FOV * Math.PI) / 360));
+    return Math.min(fit, 347) * this.zoom;
   }
 
   drag(dx: number, dy: number) {
@@ -354,7 +354,7 @@ export class Orrery {
     const at = this.planeAt(x, y);
     if (at) this.center.sub(at).multiplyScalar(zoom / this.zoom).add(at);
     this.zoom = zoom;
-    this.center.clampLength(0, 115 * Math.max(0, 1 - zoom));
+    this.center.clampLength(0, 204 * Math.max(0, 1 - zoom));
   }
 
   /** The point of the orbital plane seen at (x, y), if there is one that near. */
@@ -362,7 +362,7 @@ export class Orrery {
     const ray = new Vector3((x / this.w) * 2 - 1, 1 - (y / this.h) * 2, 0.5).unproject(this.camera).sub(this.camera.position);
     if (ray.y >= 0) return null;
     const at = ray.multiplyScalar(-this.camera.position.y / ray.y).add(this.camera.position);
-    return at.length() < 160 ? at : null;
+    return at.length() < 283 ? at : null;
   }
 
   /** Stops the coasting from the last drag. */
