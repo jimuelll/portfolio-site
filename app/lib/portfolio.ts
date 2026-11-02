@@ -23,7 +23,7 @@ export const projects: Project[] = [
     name: "Enverga-Candelaria Library System",
     kind: "ai-enabled library platform · capstone",
     year: "2026",
-    short: "Library management system: public catalogue, patron self-service, desk operations, and AI-assisted recommendations and analytics.",
+    short: "RBAC · Real-time notifications · AI recommendations · Analytics dashboards · Barcode/QR circulation · Vector embeddings · Rate limiting",
     summary:
       "A web-based library management system for Manuel S. Enverga University Foundation — Candelaria Inc. It combines a public library website and catalogue, patron self-service, and a role-based workspace for library operations.",
     stack: ["React", "TypeScript", "Vite", "Tailwind", "Node.js", "Express", "MySQL", "WebSockets", "Gemini embeddings", "Groq", "JWT", "Cloudinary"],
@@ -98,7 +98,7 @@ export const toolkit = [
   { name: "data", items: "MySQL, MariaDB, PostgreSQL, MongoDB, Redis, Cloudinary" },
   { name: "cloud", items: "Vercel, Cloudflare, CI/CD" },
   { name: "python & ml", items: "Python, TensorFlow, NumPy, Matplotlib, Pillow, OpenCV, Flask" },
-  { name: "ai & dev tools", items: "Claude Code, Codex, n8n, agentic workflows" },
+  { name: "ai & dev tools", items: "Claude Code, Codex, n8n" },
 ];
 
 export const education = [
@@ -106,10 +106,5 @@ export const education = [
     date: "2022 — now",
     title: "B.S. Computer Science",
     place: "Manuel S. Enverga University Foundation — Candelaria",
-  },
-  {
-    date: "2025 — 2026",
-    title: "Capstone: AI-enhanced smart library system",
-    place: "Academic resource access, scalable architecture, practical UX",
-  },
+  }
 ];

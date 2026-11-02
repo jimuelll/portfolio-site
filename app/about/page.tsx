@@ -62,13 +62,6 @@ export default function AboutPage() {
                 </div>
                 <p className="muted">{degree.place}</p>
               </li>
-              <li>
-                <div className="timeline-head">
-                  <p className="timeline-title">{capstone.title}</p>
-                  <p className="faint">{capstone.date}</p>
-                </div>
-                <p className="muted">{capstone.place}</p>
-              </li>
             </ol>
           </section>
 
@@ -134,7 +127,7 @@ export default function AboutPage() {
           <section className="about-section" id="about-me">
             <div className="section-head"><h2>About Me</h2></div>
             <p className="about-pitch">
-              Just a guy who likes software. I genuinely love exploring unique UI styles (i mean look at this portfolio xd).
+              Just a guy who likes software and grew up with it. I love exploring UI styles (i mean look at this portfolio xd).
             </p>
             <div className="about-eggs">
               <p>oh yea one more thing, if u&apos;ve read this far, site has cool easter eggs so try to uncover &apos;em all</p>

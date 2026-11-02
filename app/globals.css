@@ -298,7 +298,7 @@ button { font: inherit; color: inherit; }
   pointer-events: none;
 }
 .wall-label {
-  width: clamp(20rem, 24vw, 36rem);
+  width: clamp(30rem, 24vw, 36rem);
   padding: clamp(16px, 1.3vw, 28px);
   background: var(--surface, var(--bg));
   border: 1px solid var(--line);
