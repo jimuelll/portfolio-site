@@ -245,12 +245,12 @@ export class AsciiPass {
     this.pass(this.print, null);
   }
 
-  /** Watches the frame time; two slow seconds in a row step the quality down one level. True when it just did. */
+  /** Watches the frame time; three slow seconds in a row step the quality down one level. True when it just did. */
   watch(ms: number) {
     // A long gap is a hidden tab or a scene being built, not a slow device.
     if (this.level >= 3 || ms > 200) return false;
-    this.slowFor = ms > 28 ? this.slowFor + ms : Math.max(0, this.slowFor - ms * 2);
-    if (this.slowFor < 2000) return false;
+    this.slowFor = ms > 40 ? this.slowFor + ms : Math.max(0, this.slowFor - ms * 2);
+    if (this.slowFor < 3000) return false;
     this.slowFor = 0;
     this.level++;
     if (this.level === 1) this.resize(this.w, this.h);
