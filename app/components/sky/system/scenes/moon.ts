@@ -208,7 +208,7 @@ function experiments(v: VoxelSet) {
   v.fill(cx - 0.4, cg + 2.7, cz - 0.6, cx + 0.4, cg + 3.3, cz + 0.6, [52, 52, 60], 0.15, 0.05);
 }
 
-function astronaut() {
+export function astronaut() {
   const body = new Group();
   const set = new VoxelSet();
   const gold: Rgb = [246, 190, 76], grey: Rgb = [188, 190, 196], blue: Rgb = [80, 112, 196], red: Rgb = [210, 56, 50];

@@ -811,6 +811,16 @@ export class Cosmos {
     ctx.fillRect(x - w / 2 - 12, y - 15, w + 24, 30);
     this.put(text, x, y, ACCENT, 0.95);
     this.hits.push({ x: x - w / 2 - 14, y: y - 22, w: w + 28, h: 44, go: () => this.back() });
+    if (!this.system?.hasNext()) return;
+    // Above it on a phone, where there's only the one corner free; beside it anywhere wider.
+    const nextText = "next place →";
+    const nw = ctx.measureText(nextText).width;
+    const nx = narrow ? x + w / 2 - nw / 2 : x + w / 2 + 32 + nw / 2, ny = narrow ? y - 44 : y;
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = css(SPACE);
+    ctx.fillRect(nx - nw / 2 - 12, ny - 15, nw + 24, 30);
+    this.put(nextText, nx, ny, ACCENT, 0.95);
+    this.hits.push({ x: nx - nw / 2 - 14, y: ny - 22, w: nw + 28, h: 44, go: () => this.system?.next() });
   }
 
   /** The projects as probes on the map, each with its name, one after another. */

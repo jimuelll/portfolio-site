@@ -14,6 +14,7 @@ import { MAP_LENS, Orrery, type World } from "./orrery";
 import type { Diorama, Place } from "./scenes/kit";
 import { fushimi } from "./scenes/earth";
 import { moonBase } from "./scenes/moon";
+import { aurora } from "./scenes/aurora";
 import { galeCrater } from "./scenes/mars";
 import { prokofiev } from "./scenes/mercury";
 import { iapetus } from "./scenes/iapetus";
@@ -27,6 +28,8 @@ export interface Note { text: string; at: number }
 export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
 
 const PLACES: Record<string, Place> = { sun: corona, mercury: prokofiev, venus: navka, earth: fushimi, moon: moonBase, mars: galeCrater, saturn: cloudTops, iapetus };
+/** Earth has more than one place worth the trip, so its places go round from one to the next. */
+const ROUND: Place[] = [fushimi, aurora];
 /** The dive between the map and a place. The view cuts halfway, at its coarsest. */
 const DIVE_SECONDS = 1.7;
 const COARSEST = 7;
@@ -165,6 +168,21 @@ export class SolarSystem {
     if (this.reduced) return this.cutTo(place, world);
     this.dive = { t: 0, to: place, world, cut: false };
     this.diveWorld = world;
+  }
+
+  /** On to the next place in the round, if this place is in one. */
+  next() {
+    if (!this.hasNext()) return;
+    const at = ROUND.indexOf(this.here!.place);
+    this.note = null;
+    const to = ROUND[(at + 1) % ROUND.length];
+    if (this.reduced) return this.cutTo(to, this.diveWorld);
+    this.dive = { t: 0, to, world: this.diveWorld, cut: false };
+  }
+
+  /** Whether "next place" belongs on screen. */
+  hasNext() {
+    return this.here !== null && !this.dive && ROUND.includes(this.here.place);
   }
 
   /** Back up to the map. False if you're already there. */
@@ -336,7 +354,7 @@ export class SolarSystem {
       return { lines: [`${place.name} · ${place.world}`, place.coords], hint: this.w < 640 ? "drag to look ↯" : "drag to look around ↯" };
     }
     const years = this.map.years();
-    return { lines: ["sol · 8 planets · 8 places to go", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
+    return { lines: ["sol · 8 planets · 9 places to go", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
   }
 
   /** Whether "back to orbit" belongs on screen. */
