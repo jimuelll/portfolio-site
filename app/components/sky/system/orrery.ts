@@ -8,7 +8,7 @@ import { clamp, ease, hash, isLand, mix, noise, type Rgb } from "../engine";
 import type { Lens } from "./ascii";
 import { VoxelSet, release } from "./voxels";
 
-export interface World { id: string; name: string; orbit: number; size: number; year: number; spin: number; tilt: number; lands?: string; approach?: string; around?: string; incline?: number; refusal: string; paint: (x: number, y: number, z: number) => Rgb; voxel: number }
+export interface World { id: string; name: string; orbit: number; size: number; year: number; spin: number; tilt: number; lands: string; approach?: string; around?: string; incline?: number; paint: (x: number, y: number, z: number) => Rgb; voxel: number }
 export interface Fix { x: number; y: number; r: number; depth: number }
 
 const lonLat = (x: number, y: number, z: number) => ({ lon: Math.atan2(x, z), lat: Math.asin(clamp(y, -1, 1)) });
@@ -29,24 +29,28 @@ const paintMars = (x: number, y: number, z: number): Rgb => {
 const bands = (a: Rgb, b: Rgb, freq: number, seed: number) => (x: number, y: number, z: number): Rgb => mix(a, b, noise(y * freq + noise(x, z, seed) * 0.5, seed, seed));
 
 const WORLDS: World[] = [
-  { id: "mercury", name: "mercury", orbit: 11, size: 1.15, year: 0.24, spin: 0.1, tilt: 0, voxel: 0.2, lands: "mercury", refusal: "", paint: (x, y, z) => mix([170, 160, 150], [96, 90, 86], noise(x * 4 + 2, y * 4 + z * 3, 8)) },
-  { id: "venus", name: "venus", orbit: 15, size: 1.7, year: 0.62, spin: -0.08, tilt: 0.05, voxel: 0.24, lands: "venus", refusal: "", paint: bands([238, 208, 150], [204, 152, 96], 5, 9) },
-  { id: "earth", name: "earth", orbit: 20, size: 1.9, year: 1, spin: 0.35, tilt: 0.41, voxel: 0.2, lands: "earth", refusal: "", paint: paintEarth },
-  { id: "mars", name: "mars", orbit: 26, size: 1.45, year: 1.88, spin: 0.34, tilt: 0.44, voxel: 0.2, lands: "mars", refusal: "", paint: paintMars },
-  { id: "jupiter", name: "jupiter", orbit: 40, size: 4.4, year: 11.9, spin: 0.8, tilt: 0.05, voxel: 0.34, refusal: "jupiter · no ground to land on", paint: (x, y, z) => {
+  { id: "mercury", name: "mercury", orbit: 11, size: 1.15, year: 0.24, spin: 0.1, tilt: 0, voxel: 0.2, lands: "mercury", paint: (x, y, z) => mix([170, 160, 150], [96, 90, 86], noise(x * 4 + 2, y * 4 + z * 3, 8)) },
+  { id: "venus", name: "venus", orbit: 15, size: 1.7, year: 0.62, spin: -0.08, tilt: 0.05, voxel: 0.24, lands: "venus", paint: bands([238, 208, 150], [204, 152, 96], 5, 9) },
+  { id: "earth", name: "earth", orbit: 20, size: 1.9, year: 1, spin: 0.35, tilt: 0.41, voxel: 0.2, lands: "earth", paint: paintEarth },
+  { id: "mars", name: "mars", orbit: 26, size: 1.45, year: 1.88, spin: 0.34, tilt: 0.44, voxel: 0.2, lands: "mars", paint: paintMars },
+  { id: "jupiter", name: "jupiter", orbit: 40, size: 4.4, year: 11.9, spin: 0.8, tilt: 0.05, voxel: 0.34, lands: "jupiter", approach: "dive →", paint: (x, y, z) => {
     const { lon, lat } = lonLat(x, y, z);
     if (Math.hypot(lon - 0.8, (lat + 0.36) * 1.9) < 0.3) return [204, 84, 56];
     return bands([232, 208, 172], [168, 112, 76], 11, 10)(x, y, z);
   } },
-  { id: "saturn", name: "saturn", orbit: 52, size: 3.6, year: 29.4, spin: 0.7, tilt: 0.47, voxel: 0.3, lands: "saturn", approach: "dive →", refusal: "", paint: bands([236, 214, 164], [186, 158, 110], 8, 11) },
-  { id: "uranus", name: "uranus", orbit: 62, size: 2.5, year: 84, spin: -0.4, tilt: 1.7, voxel: 0.26, refusal: "uranus · no ground, and -224°c · go on, make the joke", paint: bands([176, 228, 232], [136, 204, 214], 3, 12) },
-  { id: "neptune", name: "neptune", orbit: 71, size: 2.4, year: 165, spin: 0.45, tilt: 0.49, voxel: 0.26, refusal: "neptune · 2,000 km/h winds · maybe next time", paint: bands([70, 112, 226], [38, 70, 176], 5, 13) },
+  { id: "saturn", name: "saturn", orbit: 52, size: 3.6, year: 29.4, spin: 0.7, tilt: 0.47, voxel: 0.3, lands: "saturn", approach: "dive →", paint: bands([236, 214, 164], [186, 158, 110], 8, 11) },
+  { id: "uranus", name: "uranus", orbit: 62, size: 2.5, year: 84, spin: -0.4, tilt: 1.7, voxel: 0.26, lands: "uranus", approach: "go on →", paint: bands([176, 228, 232], [136, 204, 214], 3, 12) },
+  { id: "neptune", name: "neptune", orbit: 71, size: 2.4, year: 165, spin: 0.45, tilt: 0.49, voxel: 0.26, lands: "neptune", approach: "dive →", paint: bands([70, 112, 226], [38, 70, 176], 5, 13) },
 ];
-const MOON: World = { id: "moon", name: "the moon", orbit: 3.4, size: 0.62, year: 0.08, spin: 0.2, tilt: 0.1, voxel: 0.16, lands: "moon", around: "earth", refusal: "", paint: paintMoon };
+const MOON: World = { id: "moon", name: "the moon", orbit: 3.4, size: 0.62, year: 0.08, spin: 0.2, tilt: 0.1, voxel: 0.16, lands: "moon", around: "earth", paint: paintMoon };
 // Half tar, half ice, and the one big moon out of the plane of the rings, 15° off it.
 const paintIapetus = (x: number, y: number, z: number): Rgb => (x + noise(y * 3 + 2, z * 3, 16) * 0.5 - 0.25 > 0 ? mix([66, 46, 34], [104, 76, 54], noise(y * 4, z * 4, 17)) : mix([232, 234, 238], [176, 174, 170], noise(y * 4 + 3, z * 4, 18)));
-const IAPETUS: World = { id: "iapetus", name: "iapetus", orbit: 11.5, size: 0.62, year: 0.217, spin: 0.1, tilt: 0, voxel: 0.16, lands: "iapetus", around: "saturn", incline: 0.27, refusal: "", paint: paintIapetus };
-const SUN: World = { id: "sun", name: "the sun", orbit: 0, size: 6, year: 1, spin: 0.05, tilt: 0.12, voxel: 0.5, lands: "sun", approach: "nice try →", refusal: "", paint: () => [255, 200, 90] };
+const IAPETUS: World = { id: "iapetus", name: "iapetus", orbit: 11.5, size: 0.62, year: 0.217, spin: 0.1, tilt: 0, voxel: 0.16, lands: "iapetus", around: "saturn", incline: 0.27, paint: paintIapetus };
+// Stands in for the belt on the map, somewhere for a finger to land among all that gravel.
+const BELT: World = { id: "belt", name: "the belt", orbit: 32.8, size: 0.8, year: 4.84, spin: 0.3, tilt: 0.2, voxel: 0.17, lands: "belt", paint: (x, y, z) => mix([168, 154, 134], [96, 88, 78], noise(x * 3 + 3, y * 3 + z * 3, 19)) };
+// Patched together from pieces, and a good deal of it cliff.
+const MIRANDA: World = { id: "miranda", name: "miranda", orbit: 6, size: 0.5, year: 0.06, spin: 0.1, tilt: 0, voxel: 0.14, lands: "miranda", around: "uranus", paint: (x, y, z) => mix([200, 204, 208], [92, 92, 100], noise(x * 5 + y * 2, z * 5, 20) > 0.5 ? 0.85 : 0.1) };
+const SUN: World = { id: "sun", name: "the sun", orbit: 0, size: 6, year: 1, spin: 0.05, tilt: 0.12, voxel: 0.5, lands: "sun", approach: "nice try →", paint: () => [255, 200, 90] };
 
 /** How much slower than real time the worlds go round: Earth's year in a minute. */
 const YEAR_SECONDS = 60;
@@ -65,7 +69,7 @@ function voxelBall(world: World, look: "lit" | "glow" = "lit") {
 export class Orrery {
   readonly scene = new Scene();
   readonly camera = new PerspectiveCamera(FOV, 1, 0.1, 1500);
-  readonly worlds = [SUN, ...WORLDS.slice(0, 3), MOON, ...WORLDS.slice(3, 6), IAPETUS, ...WORLDS.slice(6)];
+  readonly worlds = [SUN, ...WORLDS.slice(0, 3), MOON, WORLDS[3], BELT, ...WORLDS.slice(4, 6), IAPETUS, WORLDS[6], MIRANDA, WORLDS[7]];
   private nodes = new Map<string, Object3D>();
   private pivots: { world: World; node: Group; phase: number; around?: Object3D }[] = [];
   private belt = new Group();

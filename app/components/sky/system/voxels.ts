@@ -82,7 +82,9 @@ export class VoxelSet {
       matrices[m + 13] = this.data[at + 1];
       matrices[m + 14] = this.data[at + 2];
       matrices[m + 15] = 1;
-      colours.set(this.data.slice(at + 6, at + 9), i * 3);
+      colours[i * 3] = this.data[at + 6];
+      colours[i * 3 + 1] = this.data[at + 7];
+      colours[i * 3 + 2] = this.data[at + 8];
     }
     mesh.instanceColor = new InstancedBufferAttribute(colours, 3);
     mesh.castShadow = Boolean(shadows.cast);

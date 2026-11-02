@@ -15,19 +15,25 @@ import type { Diorama, Place } from "./scenes/kit";
 import { fushimi } from "./scenes/earth";
 import { moonBase } from "./scenes/moon";
 import { aurora } from "./scenes/aurora";
+import { ida243 } from "./scenes/belt";
+import { greatRedSpot } from "./scenes/jupiter";
+import { veronaRupes } from "./scenes/miranda";
 import { galeCrater } from "./scenes/mars";
+import { neptuneTops } from "./scenes/neptune";
+import { paleHaze } from "./scenes/uranus";
 import { prokofiev } from "./scenes/mercury";
 import { iapetus } from "./scenes/iapetus";
 import { cloudTops } from "./scenes/saturn";
 import { corona } from "./scenes/sun";
 import { navka } from "./scenes/venus";
+import { PLACE_IDS, markPlace, placesCount } from "../secrets";
 import { release } from "./voxels";
 
 export interface Note { text: string; at: number }
 /** Something the Cosmos canvas should write on the picture. A world's name; or the one in focus, which can be tapped. */
 export interface Tag { text: string; x: number; y: number; sub?: string; dim?: boolean; run?: () => void }
 
-const PLACES: Record<string, Place> = { sun: corona, mercury: prokofiev, venus: navka, earth: fushimi, moon: moonBase, mars: galeCrater, saturn: cloudTops, iapetus };
+const PLACES: Record<string, Place> = { sun: corona, mercury: prokofiev, venus: navka, earth: fushimi, moon: moonBase, mars: galeCrater, saturn: cloudTops, iapetus, jupiter: greatRedSpot, uranus: paleHaze, neptune: neptuneTops, belt: ida243, miranda: veronaRupes };
 /** Earth has more than one place worth the trip, so its places go round from one to the next. */
 const ROUND: Place[] = [fushimi, aurora];
 /** The dive between the map and a place. The view cuts halfway, at its coarsest. */
@@ -152,9 +158,7 @@ export class SolarSystem {
 
   private choose(world: World) {
     this.focus = world;
-    const place = world.lands ? PLACES[world.lands] : null;
-    if (place) this.land(place, world);
-    else this.say(world.refusal);
+    this.land(PLACES[world.lands], world);
   }
 
   private say(text: string) {
@@ -210,6 +214,7 @@ export class SolarSystem {
       this.pass.setCell(1);
       return;
     }
+    markPlace(place.id);
     const view = place.build(this.coarse);
     this.here = { place, view };
     this.pass.setCell(view.cell ?? 1);
@@ -329,7 +334,7 @@ export class SolarSystem {
       const y = f.y + f.r + 12;
       if (world === this.focus) {
         const run = () => this.choose(world);
-        tags.push({ text: world.name, x: f.x, y, sub: world.lands ? world.approach ?? "land →" : "no landing", run });
+        tags.push({ text: world.name, x: f.x, y, sub: world.approach ?? "land →", run });
         continue;
       }
       // A moon's name would sit on its planet's until you've come in closer.
@@ -354,7 +359,7 @@ export class SolarSystem {
       return { lines: [`${place.name} · ${place.world}`, place.coords], hint: this.w < 640 ? "drag to look ↯" : "drag to look around ↯" };
     }
     const years = this.map.years();
-    return { lines: ["sol · 8 planets · 9 places to go", `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
+    return { lines: [`sol · 8 planets · ${placesCount()}/${PLACE_IDS.length} places`, `${years.toFixed(1)} earth ${years < 1.05 && years > 0.95 ? "year" : "years"} out here`], hint: this.w < 640 ? "drag · pinch · tap a world ↯" : "drag to turn · scroll to zoom · tap a world ↯" };
   }
 
   /** Whether "back to orbit" belongs on screen. */
