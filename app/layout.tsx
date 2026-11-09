@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Young_Serif } from "next/font/google";
 import localFont from "next/font/local";
+import { GuestOrb } from "./components/guest-orb";
 import { SITE_NAME, siteOrigin, socialImage } from "./lib/seo";
 import "./globals.css";
 
@@ -107,6 +108,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
         {children}
+        <GuestOrb />
       </body>
     </html>
   );

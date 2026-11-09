@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { SkyCanvas } from "./sky/sky-canvas";
 import { TopNav } from "./top-nav";
+import { VisitorCount } from "./visitor-count";
 
 /** Interior pages: a quieter, fixed starfield behind ordinary scrolling content. */
 export function PageShell({ children, wide = false, centered = false }: { children: ReactNode; wide?: boolean; centered?: boolean }) {
@@ -13,6 +14,7 @@ export function PageShell({ children, wide = false, centered = false }: { childr
       <footer className={`page-footer gutter ${width}`}>
         <span>© 2026 jimuel jean untalan</span>
         <span>quezon, ph · utc+8</span>
+        <VisitorCount />
       </footer>
     </div>
   );

@@ -6,6 +6,7 @@ import { CvReceiver } from "./cv-receiver";
 import { SecretCount } from "./secret-count";
 import { Socials } from "./socials";
 import { TopNav } from "./top-nav";
+import { VisitorCount } from "./visitor-count";
 
 export function HomeSky() {
   const [stats, setStats] = useState<SkyStats>({
@@ -84,6 +85,7 @@ export function HomeSky() {
             </>
           )}
           <SecretCount />
+          <VisitorCount className="visitor-line" />
         </div>
       )}
       <main className="home-main">

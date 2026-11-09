@@ -31,8 +31,7 @@ const SECTIONS = [
   { id: "projects", label: "Projects" },
   ...(realAwards.length > 0 ? [{ id: "awards", label: "Awards" }] : []),
   { id: "activity", label: "Activity" },
-  { id: "about-me", label: "About Me" },
-];
+  { id: "about-me", label: "About Me" },];
 const ACTIVITY_WEEKS = 36;
 
 /**
