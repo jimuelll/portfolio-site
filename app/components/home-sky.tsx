@@ -18,6 +18,7 @@ export function HomeSky() {
     launched: 0,
     flared: 0,
   });
+  const [more, setMore] = useState(false);
 
   // The home page is a single screen at every size: no scrolling and no overscroll bounce. Restored when leaving.
   useEffect(() => {
@@ -89,14 +90,23 @@ export function HomeSky() {
         </div>
       )}
       <main className="home-main">
-        <section className="wall-label fade-in" data-sky-avoid>
+        <section className="wall-label fade-in" data-sky-avoid data-more={more || undefined}>
           <h1>Jimuel Jean Untalan</h1>
-          <p className="role">aspiring software engineer, open to internships</p>
-          <p className="label-note">Computer Science student building full-stack web apps with React, TypeScript, Node.js, and SQL. I use AI coding agents and build AI features into real projects.</p>
-          <blockquote className="quote">
-            through the rough, to the stars
-            <span className="caret" aria-hidden="true" />
-          </blockquote>
+          <p className="role">
+            aspiring software engineer, open to internships
+            {/* Phones and tablets only: it trails the role line, where there's room, rather than crowding the links. */}
+            <button type="button" className="label-more" aria-expanded={more} aria-controls="label-extra" onClick={() => setMore((m) => !m)}>
+              {more ? "less ↑" : "more ↓"}
+            </button>
+          </p>
+          {/* On phones and tablets this folds away behind "more", so the sky keeps the screen; desktop always shows it. */}
+          <div className="label-extra" id="label-extra">
+            <p className="label-note">Computer Science student building full-stack web apps with React, TypeScript, Node.js, and SQL. I use AI coding agents and build AI features into real projects.</p>
+            <blockquote className="quote">
+              through the rough, to the stars
+              <span className="caret" aria-hidden="true" />
+            </blockquote>
+          </div>
           <div className="actions">
             <Socials />
             <CvReceiver />

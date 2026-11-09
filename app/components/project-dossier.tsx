@@ -31,7 +31,10 @@ export function ProjectDossier() {
   useEffect(() => {
     const read = () => {
       const choice = choiceFor(window.location.hash);
-      if (choice) setCurrent(choice);
+      if (!choice) return;
+      setCurrent(choice);
+      // On phones every project is on the page, so arriving for one scrolls to it.
+      if (window.matchMedia("(max-width: 860px)").matches) document.getElementById(choice)?.scrollIntoView();
     };
     const frame = requestAnimationFrame(read);
     window.addEventListener("hashchange", read);
@@ -58,7 +61,15 @@ export function ProjectDossier() {
     window.history.replaceState(window.history.state, "", `#${id}`);
   }
 
-  const project = launched.find((p) => p.slug === current);
+  // Phones list every project down the page, each trimmed until "see more"; this tracks which ones are opened.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const toggle = (slug: string) =>
+    setOpen((o) => {
+      const next = new Set(o);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
 
   return (
     <div className="dossier">
@@ -74,36 +85,71 @@ export function ProjectDossier() {
         <RailFoot className="wide-foot" />
       </aside>
 
+      {/* Desktop shows only the picked project ([data-current]); phones show them all, one after another. */}
       <div className="dossier-body">
-        {project ? (
-          <section ref={section} tabIndex={-1} className="about-section fade-in" key={project.slug} aria-label={project.name}>
-            <div className="section-head">
-              <h2>{project.name}</h2>
-              <p>{project.year}</p>
-            </div>
-            {project.gallery && <ProjectGallery shots={project.gallery} />}
-            <p className="muted">{project.kind}</p>
-            <p className="about-pitch">{project.summary}</p>
-            {project.highlights && (
-              <dl className="highlights">
-                {project.highlights.map((h) => (
-                  <div key={h.title}>
-                    <dt>{h.title}</dt>
-                    <dd>{h.text}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            <div>
-              <p className="label">stack</p>
-              <ul className="tags">{project.stack.map((s) => <li key={s}>{s}</li>)}</ul>
-            </div>
-            <p className="project-links">
-              {project.links.map((l) => <a key={l.href} className="ink-link" href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}
-            </p>
-          </section>
-        ) : (
-          <section ref={section} tabIndex={-1} className="about-section fade-in" key={IN_ORBIT} aria-label="In orbit">
+        {launched.map((project) => {
+          const isCurrent = current === project.slug;
+          const isOpen = open.has(project.slug);
+          return (
+            <section
+              ref={isCurrent ? section : undefined}
+              tabIndex={-1}
+              className="about-section project-card fade-in"
+              key={project.slug}
+              id={project.slug}
+              aria-label={project.name}
+              data-current={isCurrent || undefined}
+              data-open={isOpen || undefined}
+            >
+              <div className="section-head">
+                <h2>{project.name}</h2>
+                <p>{project.year}</p>
+              </div>
+              {project.gallery && <ProjectGallery shots={project.gallery} />}
+              <p className="muted">{project.kind}</p>
+              <p className="about-pitch">{project.summary}</p>
+              {/* The long part: on phones it waits behind "see more"; desktop always shows it. */}
+              <div className="project-extra" id={`${project.slug}-more`}>
+                {project.highlights && (
+                  <dl className="highlights">
+                    {project.highlights.map((h) => (
+                      <div key={h.title}>
+                        <dt>{h.title}</dt>
+                        <dd>{h.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <div>
+                  <p className="label">stack</p>
+                  <ul className="tags">{project.stack.map((s) => <li key={s}>{s}</li>)}</ul>
+                </div>
+              </div>
+              <p className="project-links">
+                {project.links.map((l) => <a key={l.href} className="ink-link" href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}
+                <button
+                  type="button"
+                  className="see-more"
+                  aria-expanded={isOpen}
+                  aria-controls={`${project.slug}-more`}
+                  onClick={() => toggle(project.slug)}
+                >
+                  {isOpen ? "see less ↑" : "see more ↓"}
+                </button>
+              </p>
+            </section>
+          );
+        })}
+        {orbiting.length > 0 && (
+          <section
+            ref={current === IN_ORBIT ? section : undefined}
+            tabIndex={-1}
+            className="about-section project-card fade-in"
+            key={IN_ORBIT}
+            id={IN_ORBIT}
+            aria-label="In orbit"
+            data-current={current === IN_ORBIT || undefined}
+          >
             <div className="section-head">
               <h2>In orbit</h2>
               <p>launching soon</p>

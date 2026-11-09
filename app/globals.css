@@ -310,11 +310,18 @@ button { font: inherit; color: inherit; }
 .wall-label .role { margin: 0.9em 0 0.6em; line-height: 1.5; color: var(--accent); }
 .label-note { margin-bottom: 0.6em; line-height: 1.5; }
 .quote { line-height: 1.5; color: var(--muted); }
-/* Phones and tablets: pinned to the foot, under the disc. */
+/* "more": only on phones and tablets, where the description and quote fold away so the sky keeps the screen. */
+.label-more { display: none; padding: 2px 4px; font: inherit; color: var(--muted); background: none; border: 0; cursor: pointer; transition: color 0.15s; }
+.label-more:hover, .label-more:focus-visible { color: var(--accent); }
+/* Phones and tablets: pinned to the foot, under the disc, and compact until asked for more. */
 @media (max-width: 1023px) {
-  .home-main { align-items: flex-end; padding: 16px; }
+  .home-main { align-items: flex-end; padding: 16px 16px 24px; }
   .wall-label { width: min(24rem, 100%); padding: 16px; font-size: 13px; }
-  .wall-label h1 { font-size: 36px; }
+  .wall-label h1 { font-size: 30px; }
+  .wall-label .role { margin-bottom: 0; }
+  .wall-label:not([data-more]) .label-extra { display: none; }
+  .wall-label[data-more] .label-extra { margin-top: 0.7em; animation: fade 0.3s ease-out both; }
+  .label-more { display: inline; margin-left: 8px; white-space: nowrap; }
 }
 .caret {
   display: inline-block;
@@ -370,6 +377,10 @@ button { font: inherit; color: inherit; }
 @media (max-width: 1023px) {
   .sky-stats { top: 64px; right: auto; bottom: auto; left: 16px; text-align: left; }
 }
+/* Phones: just what the sky is doing. Secrets stay on bigger screens, and visitors are in the star log. */
+@media (max-width: 640px) {
+  .sky-stats > .secret-count, .sky-stats .visitor-line.visitor-count { display: none; }
+}
 
 /* A phone on its side has no room above the label, and the label matters more. */
 @media (max-height: 480px) {
@@ -402,7 +413,12 @@ button { font: inherit; color: inherit; }
 .highlights dt { font-family: var(--serif); font-size: 16px; line-height: 1.3; }
 .highlights dd { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--muted); }
 @media (max-width: 640px) { .highlights { grid-template-columns: minmax(0, 1fr); } }
-.project-links { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; }
+.project-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; font-size: 13px; }
+/* Desktop shows the one project picked in the rail; phones show them all (see the 860px block). */
+@media (min-width: 861px) { .project-card:not([data-current]) { display: none; } }
+.project-extra { display: grid; gap: 24px; }
+.see-more { display: none; margin-left: auto; padding: 4px 0; font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer; }
+.see-more:hover, .see-more:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .orbit-list { list-style: none; padding: 0; margin: 0; border-bottom: 1px solid var(--line); }
 .orbit-list li { display: grid; gap: 2px; padding: 14px 0; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
 .redacted { font-size: 13px; letter-spacing: 0.04em; color: var(--faint); }
@@ -465,7 +481,9 @@ button { font: inherit; color: inherit; }
 
 /* The avatar, with the animation on top when it plays. */
 /* A square as wide as the rail, giving way only as far as a short window needs. */
-.about-photo { margin: 0; width: min(100%, max(72px, calc(100dvh - 575px))); }
+/* The 672px is everything else in the rail (about 510px) plus the room it leaves the star log light at the foot of the
+   window, so the rail fits without scrolling. */
+.about-photo { margin: 0; width: min(100%, max(72px, calc(100dvh - 672px))); }
 .photo-frame { position: relative; display: block; width: 100%; padding: 0; aspect-ratio: 1; overflow: hidden; background: none; border: 1px solid var(--line); cursor: pointer; transition: border-color 0.2s; }
 .photo-frame:hover, .photo-frame[aria-pressed="true"] { border-color: var(--accent); }
 /* At rest a duotone in the theme's own colours: the grey image multiplies onto the highlight, then the shadow colour
@@ -1033,11 +1051,60 @@ button { font: inherit; color: inherit; }
 }
 
 @media (max-width: 860px) {
-  .dossier { grid-template-columns: 1fr; gap: 56px; }
+  /* minmax(0, …) and min-width: 0, so the swipeable chip row scrolls inside its card instead of widening the page. */
+  .dossier { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .dossier-id { min-width: 0; }
   /* The whole page is one column here, so a list of its sections would only push the record down. */
   .about-photo { width: 180px; }
   .section-nav { display: none; }
-  .dossier-body { gap: 56px; }
+  .dossier-body { gap: 20px; }
+
+  /* One column on a phone, so each section becomes its own plate: a framed card over the faint sky, its title as the
+     card's header. The frames do the dividing that the side rail does on desktop. */
+  .about-section,
+  .dossier-id,
+  .narrow-foot {
+    padding: 20px 18px;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    border: 1px solid var(--line);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+  .about-section { gap: 20px; scroll-margin-top: 72px; }
+  .section-head { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .section-head h2 { font-size: 24px; }
+
+  /* The profile: portrait beside the name, so who this is fits in one glance instead of a screenful. */
+  .dossier-id:has(.about-photo) { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 16px; align-items: end; }
+  .dossier-id:has(.about-photo) .about-photo { width: 96px; grid-row: span 2; align-self: start; }
+  .dossier-id:has(.about-photo) h1 { margin-top: 0; font-size: 26px; }
+  .dossier-id:has(.about-photo) .role-line { align-self: start; }
+  .dossier-id .rail-foot { grid-column: 1 / -1; margin-top: 18px; }
+  .dossier-id h1 { margin-top: 0; }
+
+  /* Contacts as one wrapped line rather than a tall list. */
+  /* Spacing rather than dots between them, so a wrapped line never starts with a stray separator. */
+  .rail-foot .contact-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 20px; padding-top: 14px; }
+  .rail-foot .cv-btn { margin-top: 14px; }
+  .narrow-foot .contact-line { padding-top: 0; border-top: 0; }
+
+  /* Phones list every project down the page, so there's nothing to pick. */
+  .section-nav.picker { display: none; }
+
+  /* Each project is trimmed to its pitch until "see more" opens the highlights and stack. */
+  .project-card:not([data-open]) .project-extra { display: none; }
+  .project-card[data-open] .project-extra { animation: fade 0.3s ease-out both; }
+  .see-more { display: inline-block; }
+
+  /* Lists that read as a wall of text get rules between their items. */
+  .highlights { gap: 0; }
+  .highlights > div { padding: 14px 0; border-top: 1px solid var(--line); }
+  .highlights > div:first-child { padding-top: 0; border-top: 0; }
+  .toolkit-groups dt { padding-top: 10px; border-top: 1px solid var(--line); }
+  .toolkit-groups dt:first-child { padding-top: 0; border-top: 0; }
+  /* The card header already draws a rule, so a list right under it starts without its own. */
+  .section-head + :is(.project-lines, .orbit-list) > li:first-child,
+  .section-head + .project-lines > li:first-child a { border-top: 0; padding-top: 0; }
 }
 @media (max-width: 480px) {
   .toolkit-groups { grid-template-columns: minmax(0, 1fr); gap: 2px; }
@@ -1065,6 +1132,8 @@ button { font: inherit; color: inherit; }
   /* Stacked, so each takes its own full height rather than overlapping the next. */
   .contact-line { gap: 0; }
   .contact-line a { display: inline-block; padding-block: 12px; }
+  /* In the phone layout's single wrapped row, a little less, so the row doesn't read as gaps. */
+  @media (max-width: 860px) { .contact-line a { padding-block: 9px; } }
   .more { padding-block: 12px; margin-block: -12px; }
   .cv-btn, .cv-receiver { min-height: 44px; }
   .cv-btn { display: inline-flex; align-items: center; }

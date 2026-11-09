@@ -338,6 +338,20 @@ export function StarMap({ entries, onClose }: { entries: GuestEntry[]; onClose: 
       onKeyDown={(e) => {
         // The site listens for keys on window (sky shortcuts); none of them should fire from in here.
         e.stopPropagation();
+        // Tab wraps around inside the chart, so keyboard focus can't wander onto the page hidden behind it.
+        if (e.key === "Tab" && root.current) {
+          const stops = [...root.current.querySelectorAll<HTMLElement | SVGElement>("button, [tabindex='0']")];
+          const first = stops[0];
+          const last = stops[stops.length - 1];
+          const at = document.activeElement;
+          if (e.shiftKey && (at === first || at === root.current)) {
+            e.preventDefault();
+            last?.focus();
+          } else if (!e.shiftKey && at === last) {
+            e.preventDefault();
+            first?.focus();
+          }
+        }
         if (e.key === "Escape") {
           if (active) setActive(null);
           else onClose();

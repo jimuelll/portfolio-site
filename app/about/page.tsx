@@ -15,7 +15,7 @@ export const metadata: Metadata = pageMetadata({
   path: "/about",
 });
 
-const [degree, capstone] = education;
+const [degree] = education;
 const launched = projects.filter((p) => p.status === "launched");
 const orbiting = projects.length - launched.length;
 // Each toolkit group without what the core tags already show; a group left empty is dropped.

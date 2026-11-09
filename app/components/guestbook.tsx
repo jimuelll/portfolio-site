@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { deleteEntry, postEntry, type GuestbookState } from "../lib/guestbook-actions";
 import { MESSAGE_MAX, NAME_MAX, type GuestEntry } from "../lib/guestbook";
 import { shownName } from "../lib/star-names";
@@ -8,6 +8,15 @@ import { shownName } from "../lib/star-names";
 const initial: GuestbookState = { ok: false };
 /** How many lines show at first, and how many more each "show older" adds. Keeps a long book quick to scan. */
 const PAGE = 15;
+// Whether the main pointer is a finger, which decides what Enter does in the message box.
+const TOUCH = "(pointer: coarse)";
+const readTouch = () => window.matchMedia(TOUCH).matches;
+function subscribeTouch(onChange: () => void) {
+  const query = window.matchMedia(TOUCH);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
 /** The character count only appears once it starts to matter. */
 const COUNT_FROM = MESSAGE_MAX - 60;
 
@@ -67,6 +76,7 @@ export function Guestbook({
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [handled, setHandled] = useState<number | undefined>();
+  const touch = useSyncExternalStore(subscribeTouch, readTouch, () => false);
 
   // Both fields are controlled so a failed post keeps what was typed (React resets uncontrolled fields after any
   // action). A new successful post clears the message and keeps the name for the next one. Adjusting state during
@@ -146,9 +156,10 @@ export function Guestbook({
             placeholder="say hi, leave a note..."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            // Enter sends, as in a chat; Shift+Enter still makes a new line.
+            // With a keyboard, Enter sends as in a chat and Shift+Enter makes a new line. On a touch keyboard there is no
+            // Shift+Enter, so Enter stays a new line there and the ✦ button sends.
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              if (!touch && e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 e.currentTarget.form?.requestSubmit();
               }
@@ -161,7 +172,7 @@ export function Guestbook({
         {/* Honeypot: hidden from people and assistive tech, irresistible to form-filling bots. */}
         <input className="guest-trap" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
         <p className={`guest-note${state.error ? " error" : ""}`} role="status">
-          {state.error ?? (state.admin && !message ? "moderation on for this session ✦" : message.length >= COUNT_FROM ? `${message.length}/${MESSAGE_MAX}` : "enter to send · shift+enter for a new line")}
+          {state.error ?? (state.admin && !message ? "moderation on for this session ✦" : message.length >= COUNT_FROM ? `${message.length}/${MESSAGE_MAX}` : touch ? "tap ✦ to send" : "enter to send · shift+enter for a new line")}
         </p>
       </form>
     </>
