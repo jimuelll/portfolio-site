@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties }
 import type { GuestEntry } from "../lib/guestbook";
 import { leaveAdmin } from "../lib/guestbook-actions";
 import { Guestbook } from "./guestbook";
+import { addMine, StarMap } from "./star-map";
 
 // Each mote's sideways drift and its place in the cycle, staggered so one is usually in the air.
 const SPARKS = [
@@ -51,6 +52,7 @@ export function GuestOrb() {
   // Whether this browser holds the moderation pass this session. Only shows the delete buttons; every delete is
   // checked again on the server.
   const [admin, setAdmin] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
 
@@ -83,7 +85,9 @@ export function GuestOrb() {
     if (!open) return;
     panel.current?.focus();
     const onDown = (e: PointerEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) {
+      // The star map is drawn outside the orb (over the whole page), but it belongs to the guestbook.
+      const inMap = e.target instanceof Element && e.target.closest(".star-map");
+      if (root.current && !root.current.contains(e.target as Node) && !inMap) {
         markSeen(newest);
         setOpen(false);
       }
@@ -102,7 +106,7 @@ export function GuestOrb() {
           ref={panel}
           className="orb-panel"
           role="dialog"
-          aria-label="Guestbook"
+          aria-label="Star log"
           tabIndex={-1}
           // The page listens for keys on window (sky shortcuts, Escape); typing here shouldn't reach any of that.
           onKeyDown={(e) => {
@@ -111,12 +115,23 @@ export function GuestOrb() {
           }}
         >
           <div className="orb-head">
-            <h2>guestbook</h2>
-            <p className="orb-meta">
-              {count} {count === 1 ? "light" : "lights"}
-              {visitors !== null && <> · {visitors.toLocaleString("en-US")} {visitors === 1 ? "visitor" : "visitors"}</>}
-            </p>
-            <button type="button" className="orb-close" onClick={() => toggle(false)} aria-label="Close guestbook">×</button>
+            <div className="orb-title">
+              <h2>star log</h2>
+              <p className="orb-meta">
+                {count} {count === 1 ? "light" : "lights"}
+                {visitors !== null && <> · {visitors.toLocaleString("en-US")} {visitors === 1 ? "visitor" : "visitors"}</>}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="orb-map-btn"
+              onClick={() => setMapOpen(true)}
+              disabled={!entries || entries.length === 0}
+              title="see the lights as a constellation"
+            >
+              ✦ chart
+            </button>
+            <button type="button" className="orb-close" onClick={() => toggle(false)} aria-label="Close star log">×</button>
           </div>
           {admin && (
             <div className="orb-admin">
@@ -135,19 +150,23 @@ export function GuestOrb() {
           <Guestbook
             entries={entries}
             admin={admin}
-            onPosted={(e) => setEntries((prev) => [e, ...(prev ?? [])])}
+            onPosted={(e) => {
+              addMine(e.id);
+              setEntries((prev) => [e, ...(prev ?? [])]);
+            }}
             onAdmin={() => setAdmin(true)}
             onDeleted={(id) => setEntries((prev) => prev?.filter((e) => e.id !== id))}
           />
         </div>
       )}
+      {mapOpen && entries && entries.length > 0 && <StarMap entries={entries} onClose={() => setMapOpen(false)} />}
       <button
         type="button"
         className="orb-btn"
         onClick={() => toggle()}
         aria-expanded={open}
         data-unread={unread > 0 || undefined}
-        aria-label={unread > 0 ? `Open guestbook, ${unread} new` : "Open guestbook"}
+        aria-label={unread > 0 ? `Open the star log, ${unread} new` : "Open the star log"}
       >
         <span className="orb-body" aria-hidden="true">
           {/* Motes the light keeps shedding, so it reads as something alive to reach for rather than a fixed star. */}

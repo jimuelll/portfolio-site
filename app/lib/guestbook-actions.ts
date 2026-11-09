@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { ENTRIES_KEY, MAX_ENTRIES, MESSAGE_MAX, NAME_MAX, type GuestEntry } from "./guestbook";
 import { grantAdmin, isAdmin, isAdminKeyword, revokeAdmin } from "./guestbook-admin";
 import { redis } from "./redis";
+import { randomStarName } from "./star-names";
 
 export type GuestbookState = { ok: boolean; error?: string; sent?: number; entry?: GuestEntry; admin?: boolean };
 
@@ -16,12 +17,13 @@ const clean = (v: FormDataEntryValue | null) =>
 
 /** Server actions are public POST endpoints, so everything is re-validated here regardless of what the form enforces. */
 export async function postEntry(_prev: GuestbookState, formData: FormData): Promise<GuestbookState> {
-  if (!redis) return { ok: false, error: "the guestbook is offline right now" };
+  if (!redis) return { ok: false, error: "the star log is offline right now" };
 
   // Honeypot: real visitors never see this field. Pretend success so bots get no signal to adapt to.
   if (clean(formData.get("website"))) return { ok: true, sent: Date.now() };
 
-  const name = clean(formData.get("name")).slice(0, NAME_MAX) || "anonymous";
+  // Left blank, a light takes the name of a real star.
+  const name = clean(formData.get("name")).slice(0, NAME_MAX) || randomStarName();
   const message = clean(formData.get("message"));
   if (!message) return { ok: false, error: "write something first" };
   if (message.length > MESSAGE_MAX) return { ok: false, error: `keep it under ${MESSAGE_MAX} characters` };
