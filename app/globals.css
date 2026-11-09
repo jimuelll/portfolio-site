@@ -438,7 +438,9 @@ button { font: inherit; color: inherit; }
    in the right column, so the rail's container runs to the very end of the page and never pushes the rail back up. */
 @media (min-width: 861px) {
   .page-main.wide.centered { padding-top: 80px; padding-bottom: 0; }
-  .page-footer.wide.centered { margin-top: -48px; padding-left: calc(24px + var(--rail) + var(--rail-gap)); }
+  /* The footer sits in the right column here, away from the star log light, so it keeps its original short foot:
+     any taller and the page would run past the rail's column, and the pinned rail would let go near the bottom. */
+  .page-footer.wide.centered { margin-top: -48px; padding-bottom: 32px; padding-left: calc(24px + var(--rail) + var(--rail-gap)); }
   .dossier-body { position: relative; padding-bottom: 96px; }
   /* A rule down the middle of the gap, top of the page to the bottom, so the rail reads as its own column. */
   .dossier-body::before {
@@ -446,7 +448,7 @@ button { font: inherit; color: inherit; }
     width: 1px; background: var(--line);
   }
   .dossier-id {
-    position: sticky; top: 80px; height: calc(100dvh - 160px); /* ends above the guestbook light */
+    position: sticky; top: 80px; height: calc(100dvh - 104px);
     display: flex; flex-direction: column;
     /* A window too short for all of it scrolls the rail itself. The margin keeps focus rings from being clipped. */
     margin-inline: -8px; padding-inline: 8px; overflow-y: auto;
@@ -481,9 +483,21 @@ button { font: inherit; color: inherit; }
 
 /* The avatar, with the animation on top when it plays. */
 /* A square as wide as the rail, giving way only as far as a short window needs. */
-/* The 672px is everything else in the rail (about 510px) plus the room it leaves the star log light at the foot of the
-   window, so the rail fits without scrolling. */
-.about-photo { margin: 0; width: min(100%, max(72px, calc(100dvh - 672px))); }
+/* 614px is everything else in the rail (about 510px) plus where it sits on the page, so it fits without scrolling. */
+.about-photo { margin: 0; width: min(100%, max(72px, calc(100dvh - 614px))); }
+/* Narrow desktops: the rail starts so close to the window's left edge that the star log light would sit on the CV
+   button, so the rail stops short of it there and the portrait gives up the difference. Wider, they share the row. */
+@media (min-width: 861px) and (max-width: 1080px) {
+  .dossier-id { height: calc(100dvh - 160px); }
+  .about-photo { width: min(100%, max(72px, calc(100dvh - 672px))); }
+}
+/* Short windows tighten the rail's spacing (the 790px block above), which frees about 40px; the portrait takes it. */
+@media (min-width: 861px) and (max-height: 790px) {
+  .about-photo { width: min(100%, max(72px, calc(100dvh - 575px))); }
+}
+@media (min-width: 861px) and (max-width: 1080px) and (max-height: 790px) {
+  .about-photo { width: min(100%, max(72px, calc(100dvh - 633px))); }
+}
 .photo-frame { position: relative; display: block; width: 100%; padding: 0; aspect-ratio: 1; overflow: hidden; background: none; border: 1px solid var(--line); cursor: pointer; transition: border-color 0.2s; }
 .photo-frame:hover, .photo-frame[aria-pressed="true"] { border-color: var(--accent); }
 /* At rest a duotone in the theme's own colours: the grey image multiplies onto the highlight, then the shadow colour
