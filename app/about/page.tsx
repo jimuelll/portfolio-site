@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Fragment } from "react";
 import { AboutNav } from "../components/about-nav";
 import { AboutPhoto } from "../components/about-photo";
 import { Constellation } from "../components/constellation";
 import { PageShell } from "../components/page-shell";
 import { RailFoot } from "../components/rail-foot";
 import { pageMetadata } from "../lib/seo";
-import { awards, coreStack, education, projects, toolkit } from "../lib/portfolio";
+import { awards, coreStack, education, projects, toolkit, workflow } from "../lib/portfolio";
 
 export const metadata: Metadata = pageMetadata({
   title: "About | Jimuel Jean Untalan",
@@ -17,7 +16,6 @@ export const metadata: Metadata = pageMetadata({
 
 const [degree] = education;
 const launched = projects.filter((p) => p.status === "launched");
-const orbiting = projects.length - launched.length;
 // Each toolkit group without what the core tags already show; a group left empty is dropped.
 const extras = toolkit
   .map((t) => ({ name: t.name, items: t.items.split(", ").filter((item) => !coreStack.includes(item)) }))
@@ -41,7 +39,7 @@ const ACTIVITY_WEEKS = 36;
 export default function AboutPage() {
   return (
     <PageShell wide centered>
-      <div className="dossier">
+      <div className="dossier plated">
         <aside className="dossier-id">
           <AboutPhoto />
           <h1>Jimuel Jean<br />Untalan</h1>
@@ -72,33 +70,40 @@ export default function AboutPage() {
                 {coreStack.map((s) => <li key={s}>{s}</li>)}
               </ul>
             </div>
-            <dl className="toolkit-groups">
+            <div className="skill-grid">
               {extras.map((g) => (
-                <Fragment key={g.name}>
-                  <dt className="label">{g.name}</dt>
-                  <dd>{g.items.map((item) => <Fragment key={item}><span>{item}</span>{" "}</Fragment>)}</dd>
-                </Fragment>
+                <div className="skill-col" key={g.name}>
+                  <p className="label" id={`skills-${g.name.replace(/\W+/g, "-")}`}>{g.name}</p>
+                  <ul aria-labelledby={`skills-${g.name.replace(/\W+/g, "-")}`}>
+                    {g.items.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </div>
               ))}
-            </dl>
+            </div>
+            <p className="skill-workflow">
+              <span className="label">builds with</span>
+              {workflow.join(" · ")}
+            </p>
           </section>
 
           <section className="about-section" id="projects">
             <div className="section-head">
               <h2>Projects</h2>
-              <p>{launched.length} launched{orbiting > 0 && ` · ${orbiting} in orbit`}</p>
+              <p>{launched.length} launched</p>
             </div>
             <ul className="project-lines">
               {launched.map((p) => (
                 <li key={p.slug}>
-                  <a href={p.links[0]?.href} target="_blank" rel="noopener noreferrer">
-                    <span>{p.name}</span>
-                    <span className="arrow" aria-hidden="true">↗</span>
+                  <Link href={`/projects#${p.slug}`}>
+                    <span className="project-line-name">{p.name}</span>
+                    <span className="arrow" aria-hidden="true">→</span>
                     <span className="muted">{p.short}</span>
-                  </a>
+                    <span className="project-line-stack">{p.stack.slice(0, 4).join(" · ")}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
-            <Link className="ink-link more" href="/projects">see all projects →</Link>
+            <Link className="ink-link more" href="/projects">see all projects in detail →</Link>
           </section>
 
           {realAwards.length > 0 && (
@@ -126,7 +131,7 @@ export default function AboutPage() {
           <section className="about-section" id="about-me">
             <div className="section-head"><h2>About Me</h2></div>
             <p className="about-pitch">
-              Just a guy who likes software and grew up with it. I love exploring UI styles (i mean look at this portfolio xd).
+              Ever since I was a kid, I&apos;ve been deeply fond of computers, so the career path was pretty clear, I wanna be a software engineer. Also fond of design, so I try to make my work visually appealing but functional. I&apos;m a Computer Science student at Manuel S. Enverga University Foundation in Quezon, Philippines, and I&apos;m looking for an internship to gain experience and contribute to real-world projects.
             </p>
             <div className="about-eggs">
               <p>oh yea one more thing, if u&apos;ve read this far, site has cool easter eggs so try to uncover &apos;em all</p>
