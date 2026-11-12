@@ -76,11 +76,14 @@
 :root {
   --muted-k: 62%;
   --faint-k: 52%;
+  --line-k: 22%;
 }
+:root[data-theme="light"] { --line-k: 26%; }
 :root {
   --muted: color-mix(in srgb, var(--fg) var(--muted-k), transparent);
   --faint: color-mix(in srgb, var(--fg) var(--faint-k), transparent);
-  --line: color-mix(in srgb, var(--fg) 14%, transparent);
+  /* Rules sit around 1.6:1 against the page: quiet, but they still read as dividers. */
+  --line: color-mix(in srgb, var(--fg) var(--line-k), transparent);
   --gutter: 24px;
   --mono: var(--font-geist-mono), ui-monospace, monospace;
   --serif: var(--font-young-serif), Georgia, serif;
@@ -551,7 +554,7 @@ button { font: inherit; color: inherit; }
 .section-head p { font-size: 13px; color: var(--faint); }
 .about-section .muted { color: var(--muted); }
 .about-section .faint { color: var(--faint); font-size: 13px; }
-.label { display: block; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
+.label { display: block; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; color: var(--muted); margin-bottom: 4px; }
 
 /* Education: stops on a rail, the way a course is plotted. */
 .timeline { list-style: none; padding: 0; margin: 0; display: grid; gap: 24px; }
