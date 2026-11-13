@@ -78,15 +78,32 @@ export const projects: Project[] = [
     ],
   },
   {
-    slug: "in-orbit-2",
-    status: "in-orbit",
-    name: "Unannounced project",
-    kind: "in orbit · launching soon",
-    year: "soon",
-    short: "",
-    summary: "Another one is still on the launch pad. Check back soon.",
-    stack: [],
-    links: [],
+    slug: "fluxion",
+    status: "launched",
+    name: "Fluxion",
+    kind: "ui style gallery · 3d tv wall",
+    year: "2026",
+    short: "A handmade collection of distinct UI styles, browsed on a wall of 3D retro TVs that play live previews.",
+    summary:
+      "A collection of handmade UI styles (landing pages, marketing sites, product UI and dashboards), each with its own type, colour, layout and motion. They are browsed on a 3D wall of CRT televisions, where every screen plays a recorded preview of its style; pick one to open it full size.",
+    stack: ["Next.js", "React", "TypeScript", "three.js", "React Three Fiber", "GSAP", "Playwright"],
+    facts: ["solo design and build", "static export"],
+    links: [
+      { label: "live site", href: "https://fluxion-mauve.vercel.app/" },
+      { label: "source", href: "https://github.com/jimuelll/fluxion" },
+    ],
+    gallery: [
+      { src: "/fluxion-wall.webp", width: 1536, height: 800, alt: "A wall of stacked retro CRT televisions, some playing site previews, others showing static", caption: "The TV wall, with live previews playing on the CRT screens" },
+      { src: "/fluxion-bakawan.webp", width: 1536, height: 800, alt: "Bakawan landing page: a mangrove aerial photo under the headline Restoring the Mangroves That Protect Us", caption: "Bakawan: a landing page for mangrove restoration" },
+      { src: "/fluxion-kaye.webp", width: 1536, height: 800, alt: "Kaye Eats marketing site with a bold purple headline and phone mockups", caption: "Kaye Eats: a loud marketing site for a food content creator" },
+      { src: "/fluxion-agos.webp", width: 1536, height: 800, alt: "Agos dark logistics dashboard with KPI tiles and a Philippines hub map", caption: "Agos: a dark operations dashboard with a live hub map" },
+    ],
+    highlights: [
+      { title: "3D TV wall", text: "A react-three-fiber room of stacked CRTs with a custom scanline shader; unused slots show NO SIGNAL static." },
+      { title: "Live previews", text: "Each TV plays a video of its style, recorded by a Playwright script, so the wall always matches the real pages." },
+      { title: "Distinct styles", text: "Every style is its own design with its own type, colour, layout and motion, not a re-skin of one template." },
+      { title: "Lighter on phones", text: "Mobile and low-power devices get a reduced wall, keeping the scene smooth." },
+    ],
   },
 ];
 
