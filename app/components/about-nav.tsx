@@ -10,21 +10,23 @@ export function AboutNav({ sections }: { sections: { id: string; label: string }
   const [current, setCurrent] = useState(sections[0]?.id);
   /** A clicked link stays marked through its scroll, and until the reader next scrolls for themselves. */
   const chosen = useRef(false);
+  const nav = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const measure = () => {
-      if (chosen.current) return;
       const height = window.innerHeight;
       const left = document.documentElement.scrollHeight - height - window.scrollY;
       // The last sections are too short to scroll up to the reading line, so near the end the line comes down to them.
       const sweep = Math.min(1, Math.max(0, 1 - left / (height * SWEEP)));
       const line = height * (0.3 + 0.7 * sweep);
-      let reading = sections[0]?.id;
-      for (const { id } of sections) {
-        const section = document.getElementById(id);
-        if (section && section.getBoundingClientRect().top <= line) reading = id;
-      }
-      setCurrent(reading);
+      const tops = sections.map(({ id }) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity);
+      const at = Math.max(0, tops.findLastIndex((top) => top <= line));
+      // The thread runs star to star, so it is measured in sections: how far the reading line is from this one to the next.
+      const next = tops[at + 1];
+      const into = next === undefined ? 0 : Math.min(1, Math.max(0, (line - tops[at]) / (next - tops[at])));
+      nav.current?.style.setProperty("--progress", String(sections.length > 1 ? (at + into) / (sections.length - 1) : 1));
+      if (chosen.current) return;
+      setCurrent(sections[at]?.id);
     };
     const release = () => { chosen.current = false; };
     measure();
@@ -59,9 +61,10 @@ export function AboutNav({ sections }: { sections: { id: string; label: string }
   }
 
   return (
-    <nav className="section-nav" aria-label="On this page">
-      {sections.map(({ id, label }) => (
-        <a key={id} href={`#${id}`} onClick={(e) => go(e, id)} aria-current={current === id ? "location" : undefined}>{label}</a>
+    <nav ref={nav} className="section-nav" aria-label="On this page">
+      {sections.map(({ id, label }, i) => (
+        <a key={id} href={`#${id}`} onClick={(e) => go(e, id)} aria-current={current === id ? "location" : undefined}
+          data-read={i < sections.findIndex((s) => s.id === current) || undefined}>{label}</a>
       ))}
     </nav>
   );

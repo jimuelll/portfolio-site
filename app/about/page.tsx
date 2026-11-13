@@ -16,10 +16,11 @@ export const metadata: Metadata = pageMetadata({
 
 const [degree] = education;
 const launched = projects.filter((p) => p.status === "launched");
-// Each toolkit group without what the core tags already show; a group left empty is dropped.
-const extras = toolkit
-  .map((t) => ({ name: t.name, items: t.items.split(", ").filter((item) => !coreStack.includes(item)) }))
-  .filter((t) => t.items.length > 0);
+// The toolkit drawn as the stack it is: the app's own layers, top to bottom, with what runs alongside them beside.
+const LAYERS = ["frontend", "backend", "data"];
+const groups = toolkit.map((t) => ({ name: t.name, items: t.items.split(", ") }));
+const layers = groups.filter((g) => LAYERS.includes(g.name));
+const beside = groups.filter((g) => !LAYERS.includes(g.name));
 // Placeholders stay out of sight: the section and its link turn up with the first real entry.
 const realAwards = awards.filter((a) => !a.placeholder);
 
@@ -64,19 +65,17 @@ export default function AboutPage() {
 
           <section className="about-section" id="skills">
             <div className="section-head"><h2>Skills</h2></div>
-            <div>
-              <p className="label" id="core-stack">core stack</p>
-              <ul className="tags" aria-labelledby="core-stack">
-                {coreStack.map((s) => <li key={s}>{s}</li>)}
-              </ul>
-            </div>
-            <div className="skill-grid">
-              {extras.map((g) => (
-                <div className="skill-col" key={g.name}>
-                  <p className="label" id={`skills-${g.name.replace(/\W+/g, "-")}`}>{g.name}</p>
-                  <ul aria-labelledby={`skills-${g.name.replace(/\W+/g, "-")}`}>
-                    {g.items.map((item) => <li key={item}>{item}</li>)}
-                  </ul>
+            <div className="stack">
+              {[layers, beside].map((col, i) => (
+                <div className="stack-col" key={i}>
+                  {col.map((g) => (
+                    <div className="stack-layer" key={g.name}>
+                      <p className="label" id={`skills-${g.name.replace(/\W+/g, "-")}`}>{g.name}</p>
+                      <ul className="stack-items" aria-labelledby={`skills-${g.name.replace(/\W+/g, "-")}`}>
+                        {g.items.map((item) => <li key={item}>{coreStack.includes(item) ? <strong>{item}</strong> : item}</li>)}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>

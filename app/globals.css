@@ -493,7 +493,19 @@ button { font: inherit; color: inherit; }
 .section-nav { display: grid; justify-items: start; gap: 8px; margin-top: 28px; padding-left: 16px; font-size: 13px; }
 .section-nav a { position: relative; color: var(--muted); transition: color 0.15s; }
 .section-nav a:hover, .section-nav a[aria-current] { color: var(--fg); }
-.section-nav a[aria-current]::before { content: "✦"; position: absolute; left: -16px; color: var(--accent); }
+/* The contents as a constellation being charted: each section a star in the gutter, brightening up the sky's own glyph
+   ramp (· then * then ✦) as it is read, and a thread drawn in star to star as the page is. */
+.section-nav { position: relative; }
+/* A long name wraps tight to itself, with clear air before the next, so it still reads as one item. */
+.section-nav { gap: 12px; }
+.section-nav a { line-height: 18px; }
+.section-nav a::before { content: "·"; position: absolute; left: -16px; z-index: 1; width: 9px; text-align: center; color: var(--faint); transition: color 0.3s; }
+.section-nav a[data-read]::before { content: "*"; color: color-mix(in srgb, var(--accent) 70%, transparent); }
+.section-nav a[aria-current]::before { content: "✦"; color: var(--accent); text-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent); }
+/* Uncharted, the thread is a faint dotted guide; charted, it is solid. Both run between the first and last star's centres. */
+.section-nav::before, .section-nav::after { content: ""; position: absolute; top: 9px; bottom: 9px; left: 4px; width: 1px; }
+.section-nav::before { background: repeating-linear-gradient(var(--line) 0 2px, transparent 2px 5px); }
+.section-nav::after { background: color-mix(in srgb, var(--accent) 55%, transparent); transform-origin: top; transform: scaleY(var(--progress, 0)); }
 .narrow-foot { display: none; }
 @media (max-width: 860px) { .wide-foot { display: none; } .narrow-foot { display: block; margin-top: 0; } }
 .contact-line { list-style: none; display: grid; gap: 4px; margin: 0; padding: 20px 0 0; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
@@ -578,15 +590,23 @@ button { font: inherit; color: inherit; }
 /* Items, not a dotted string: each stays whole, no separator is left dangling, and balancing avoids a lone last word. */
 .toolkit-groups dd { margin: 0; text-wrap: balance; }
 .toolkit-groups dd span { display: inline-block; margin-right: 14px; white-space: nowrap; }
-/* Skills beyond the core: one short column per area, read top to bottom like a spec sheet. */
-.skill-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 24px; }
-.skill-col { padding-top: 10px; border-top: 1px solid var(--line); }
-.skill-col ul { list-style: none; padding: 0; margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); }
+/* Skills as a layered stack: frontend over backend over data in solid frames, with what runs alongside them (ai, testing,
+   devops) in dashed frames beside. The core of each layer leads in the accent. Rows share heights so the columns square up. */
+.stack { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 8px; }
+.stack-col { display: grid; grid-auto-rows: 1fr; gap: 8px; }
+.stack-layer { padding: 10px 14px; border: 1px solid var(--line); }
+.stack-col + .stack-col .stack-layer { border-style: dashed; }
+.stack-layer .label { margin-bottom: 2px; }
+.stack-items { list-style: none; padding: 0; margin: 0; font-size: 14px; line-height: 1.6; color: var(--muted); }
+.stack-items li { display: inline; }
+.stack-items li + li::before { content: " · "; color: var(--faint); }
+.stack-items strong { font-weight: inherit; color: var(--accent); }
 /* Tools the work is made with: a quieter line under the grid, not another column of it. */
 .skill-workflow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 14px; color: var(--muted); }
 .skill-workflow .label { margin: 0; }
 @media (max-width: 480px) {
-  .skill-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; }
+  .stack { grid-template-columns: minmax(0, 1fr); }
+  .stack-col { grid-auto-rows: auto; }
 }
 
 .project-lines { list-style: none; padding: 0; margin: 0; border-bottom: 1px solid var(--line); }
