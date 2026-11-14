@@ -60,7 +60,7 @@ const structuredData = {
         addressLocality: "Quezon",
         addressCountry: "PH",
       },
-      sameAs: ["https://github.com/jimuelll", "https://www.linkedin.com/in/jimuel-jean-untalan-8b84a42a5"],
+      sameAs: ["https://github.com/jimuelll", "https://www.linkedin.com/in/jimuel-jean/"],
       knowsAbout: [
         "TypeScript",
         "React",
