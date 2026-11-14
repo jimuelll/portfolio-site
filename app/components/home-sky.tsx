@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { SkyCanvas, type SkyStats } from "./sky/sky-canvas";
 import { CvReceiver } from "./cv-receiver";
+import { ProjectOrbits } from "./project-orbits";
 import { SecretCount } from "./secret-count";
 import { Socials } from "./socials";
 import { TopNav } from "./top-nav";
@@ -38,6 +39,7 @@ export function HomeSky() {
   return (
     <div className="home">
       <SkyCanvas variant="full" onStats={setStats} className="sky-fill" />
+      <ProjectOrbits hidden={stats.scene !== "night" && stats.scene !== "day"} />
       <TopNav />
       {stats.detail && (
         <div
@@ -57,9 +59,12 @@ export function HomeSky() {
           ) : stats.scene === "earth" ? (
             <>
               <div>{stats.detail}</div>
-              <div key={stats.sats} className="flash">
-                {stats.sats} {stats.sats === 1 ? "satellite" : "satellites"}
-              </div>
+              {/* Counts appear once there's something to count; until then the hint speaks alone. */}
+              {stats.sats > 0 && (
+                <div key={stats.sats} className="flash">
+                  {stats.sats} {stats.sats === 1 ? "satellite" : "satellites"}
+                </div>
+              )}
               {stats.sats === 0 && (
                 <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to launch a satellite ↯</div>
               )}
@@ -67,9 +72,11 @@ export function HomeSky() {
           ) : stats.scene === "night" ? (
             <>
               <div>{stats.detail}</div>
-              <div key={stats.comets} className="flash">
-                {stats.comets} {stats.comets === 1 ? "comet" : "comets"}
-              </div>
+              {stats.launched > 0 && (
+                <div key={stats.comets} className="flash">
+                  {stats.comets} {stats.comets === 1 ? "comet" : "comets"}
+                </div>
+              )}
               {stats.launched === 0 && (
                 <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> the sky ↯</div>
               )}
@@ -77,9 +84,11 @@ export function HomeSky() {
           ) : (
             <>
               <div>{stats.detail}</div>
-              <div key={stats.flared} className="flash">
-                {stats.flares} {stats.flares === 1 ? "flare" : "flares"}
-              </div>
+              {stats.flared > 0 && (
+                <div key={stats.flared} className="flash">
+                  {stats.flares} {stats.flares === 1 ? "flare" : "flares"}
+                </div>
+              )}
               {stats.flared === 0 && (
                 <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to flare ↯</div>
               )}

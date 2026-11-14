@@ -46,46 +46,45 @@ export function ProjectDossier() {
               aria-labelledby={`${project.slug}-title`}
               data-open={isOpen || undefined}
             >
+              {/* What it is comes first, in one line, so a skim gets the point before the screenshot. */}
               <div className="project-head">
                 <div className="section-head">
                   <h2 id={`${project.slug}-title`}>{project.name}</h2>
-                  <p>{project.year}</p>
                 </div>
+                <p className="about-pitch">{project.short}</p>
                 <ul className="project-meta">
                   <li>{project.kind}</li>
                   {project.facts?.map((f) => <li key={f}>{f}</li>)}
                 </ul>
-                <p className="project-links">
-                  {project.links.map((l) => <a key={l.href} className="ink-link" href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}
-                </p>
               </div>
               {project.gallery && <ProjectGallery shots={project.gallery} />}
-              <p className="about-pitch">{project.summary}</p>
-              {/* The long part: it waits behind "see more". */}
+              <p className="project-links">
+                {project.links.map((l) => <a key={l.href} className="ink-link" href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}
+              </p>
+              {/* The long parts wait behind "more details"; the first two highlights always show, since they're the best of it. */}
+              <p className="about-pitch project-extra" id={`${project.slug}-summary`}>{project.summary}</p>
+              {project.highlights && (
+                <dl className="highlights" id={`${project.slug}-highlights`}>
+                  {project.highlights.map((h) => (
+                    <div key={h.title}>
+                      <dt>{h.title}</dt>
+                      <dd>{h.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               <div className="project-extra" id={`${project.slug}-more`}>
-                {project.highlights && (
-                  <dl className="highlights">
-                    {project.highlights.map((h) => (
-                      <div key={h.title}>
-                        <dt>{h.title}</dt>
-                        <dd>{h.text}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                <div>
-                  <p className="label">stack</p>
-                  <ul className="tags">{project.stack.map((s) => <li key={s}>{s}</li>)}</ul>
-                </div>
+                <p className="label">stack</p>
+                <ul className="tags">{project.stack.map((s) => <li key={s}>{s}</li>)}</ul>
               </div>
               <button
                 type="button"
                 className="see-more"
                 aria-expanded={isOpen}
-                aria-controls={`${project.slug}-more`}
+                aria-controls={`${project.slug}-summary ${project.slug}-highlights ${project.slug}-more`}
                 onClick={() => toggle(project.slug)}
               >
-                {isOpen ? "see less ↑" : "see more ↓"}
+                {isOpen ? "fewer details ↑" : "more details ↓"}
               </button>
             </section>
           );
