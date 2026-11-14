@@ -15,7 +15,7 @@ const SECTIONS = launched.map((p) => ({ id: p.slug, label: p.name }));
  * being read and jumps between them; arriving for one (/projects#slug, from a star on the home sky) lands on it.
  */
 export function ProjectDossier() {
-  // Phones trim each project until "see more"; this tracks which ones are opened.
+  // Each project is trimmed until "see more"; this tracks which ones are opened.
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (slug: string) =>
     setOpen((o) => {
@@ -61,7 +61,7 @@ export function ProjectDossier() {
               </div>
               {project.gallery && <ProjectGallery shots={project.gallery} />}
               <p className="about-pitch">{project.summary}</p>
-              {/* The long part: on phones it waits behind "see more"; desktop always shows it. */}
+              {/* The long part: it waits behind "see more". */}
               <div className="project-extra" id={`${project.slug}-more`}>
                 {project.highlights && (
                   <dl className="highlights">

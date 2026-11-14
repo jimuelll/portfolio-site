@@ -423,7 +423,9 @@ button { font: inherit; color: inherit; }
 .project-meta li:not(:first-child) { color: var(--fg); }
 .project-meta li:not(:first-child)::before { content: "✦"; margin-right: 6px; color: var(--accent); font-size: 10px; vertical-align: 1px; }
 .project-extra { display: grid; gap: 24px; }
-.see-more { display: none; justify-self: start; padding: 4px 0; font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer; }
+.project-card:not([data-open]) .project-extra { display: none; }
+.project-card[data-open] .project-extra { animation: fade 0.3s ease-out both; }
+.see-more { display: inline-block; justify-self: start; padding: 4px 0; font: inherit; color: var(--accent); background: none; border: 0; cursor: pointer; }
 .see-more:hover, .see-more:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .orbit-list { list-style: none; padding: 0; margin: 0; border-bottom: 1px solid var(--line); }
 .orbit-list li { display: grid; gap: 2px; padding: 14px 0; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
@@ -1150,11 +1152,6 @@ button { font: inherit; color: inherit; }
   .rail-foot .contact-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 20px; padding-top: 14px; }
   .rail-foot .cv-btn { margin-top: 14px; }
   .narrow-foot .contact-line { padding-top: 0; border-top: 0; }
-
-  /* Each project is trimmed to its pitch until "see more" opens the highlights and stack. */
-  .project-card:not([data-open]) .project-extra { display: none; }
-  .project-card[data-open] .project-extra { animation: fade 0.3s ease-out both; }
-  .see-more { display: inline-block; }
 
   /* Lists that read as a wall of text get rules between their items. */
   .highlights { gap: 0; }
