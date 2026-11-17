@@ -95,8 +95,6 @@ const TWILIGHT_BG: Rgb = [14, 22, 46];
  * round (x, y), the toggle in viewport px, leaving trails.
  */
 export const exposure = { k: 0, x: 0, y: 0 };
-/** Where the home sky's disc sits (canvas pixels), so things on the page can orbit it (project-orbits.tsx). */
-export const disc = { x: 0, y: 0, r: 0 };
 /** Fired on window when the hero has been held long enough: top-nav.tsx switches to the galaxy. */
 export const HYPERDRIVE_EVENT = "sky-hyperdrive";
 /** Fired on window when the sky has something to say in the nav's note (sky/cosmos.ts): the text is the detail. */
@@ -635,7 +633,6 @@ export class SkyEngine {
     p.cw = p.font * 0.62;
     p.ch = p.font * 1.08;
     this.moonAt = { x: p.x, y: p.y };
-    if (this.variant === "full") Object.assign(disc, { x: p.x, y: p.y, r: p.r });
     // A comet launched a few moon radii out takes several seconds to go round once, at any screen size.
     const r0 = p.r * 2.6;
     const v0 = (TAU * r0) / 7;

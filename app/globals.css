@@ -232,16 +232,16 @@ button { font: inherit; color: inherit; }
 .system-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 28; pointer-events: none; transition: opacity 1s ease; }
 .system-canvas.out { opacity: 0; }
 /* Liftoff: the page drops away below, slowly and then fast, as the ground does. Landing, it rises back. */
-.home-main, .page-main, .page-footer, .sky-stats, .project-orbits { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }
-:root.cosmos :is(.home-main, .page-main, .page-footer, .sky-stats, .project-orbits) { opacity: 0; translate: 0 40vh; pointer-events: none; }
+.home-main, .page-main, .page-footer, .sky-stats { transition: opacity 1.1s ease, translate 1.4s cubic-bezier(0.5, 0, 0.75, 0); }
+:root.cosmos :is(.home-main, .page-main, .page-footer, .sky-stats) { opacity: 0; translate: 0 40vh; pointer-events: none; }
 :root.cosmos .drifter-say, :root.departing .drifter-say { opacity: 0; }
 :root.cosmos :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
 /* ── page changes between the sky and the pages ──── */
 /* Leaving (top-nav.tsx adds .departing while the sky plays its move), the page steps back quickly so the sky
    carries the moment; arriving (.arriving), the new page rises into place as the sky settles. */
-:root.departing :is(.home-main, .page-main, .page-footer, .sky-stats, .project-orbits) { opacity: 0; transition: opacity 0.45s ease, translate 0.45s ease; }
+:root.departing :is(.home-main, .page-main, .page-footer, .sky-stats) { opacity: 0; transition: opacity 0.45s ease, translate 0.45s ease; }
 :root.departing :is(.home-main, .page-main, .page-footer), :root.departing :is(.home-main, .page-main, .page-footer) * { pointer-events: none; }
-:root.arriving :is(.home-main, .page-main, .page-footer, .sky-stats, .project-orbits) { animation: arrive-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.25s both; }
+:root.arriving :is(.home-main, .page-main, .page-footer, .sky-stats) { animation: arrive-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) 0.25s both; }
 @keyframes arrive-rise { from { opacity: 0; translate: 0 26px; } }
 /* Leaving mid-eclipse the sky can't play its move (engine.ts adds .sky-fade), so it just fades with the page. */
 :root.departing.sky-fade .sky-canvas { opacity: 0; transition: opacity 0.45s ease; }
@@ -358,44 +358,6 @@ button { font: inherit; color: inherit; }
 .socials .sep { opacity: 0.4; }
 .socials a { opacity: 0.7; }
 .socials a:hover { opacity: 1; }
-
-/* The work in orbit round the disc (project-orbits.tsx): faint dotted paths on one tilted plane, the far halves hidden
-   behind the disc, and a small lit body on each carrying the project's name. Hover or focus stops it and says what it is. */
-.project-orbits { position: absolute; inset: 0; z-index: 15; pointer-events: none; transition: opacity 0.6s ease; }
-.project-orbits[data-off] { opacity: 0; }
-.project-orbits[data-off] * { pointer-events: none !important; }
-.orbit-paths { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.orbit-paths path { fill: none; stroke: color-mix(in srgb, var(--fg) 26%, transparent); stroke-width: 1; stroke-dasharray: 1 6; stroke-linecap: round; }
-.orbit-body {
-  position: absolute; left: 0; top: 0; display: flex; align-items: center; height: 44px; translate: -22px -22px;
-  font-size: 12px; line-height: 1.35; white-space: nowrap; pointer-events: auto; cursor: pointer;
-  transition: opacity 0.4s ease;
-}
-.orbit-body[data-flip] { flex-direction: row-reverse; translate: calc(-100% + 22px) -22px; text-align: right; }
-.orbit-body[data-hidden]:not(:focus-visible) { opacity: 0; pointer-events: none; }
-.orbit-body:focus-visible { outline: none; }
-.orbit-dot { display: grid; place-items: center; width: 44px; height: 44px; flex: none; }
-.orbit-dot::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--fg);
-  box-shadow: 0 0 6px 1px color-mix(in srgb, var(--fg) 35%, transparent);
-  transition: background 0.2s, box-shadow 0.2s, scale 0.2s;
-}
-/* A halo of the page colour, so a name crossing the disc's face still reads. */
-.orbit-tag { display: grid; text-shadow: 0 0 2px var(--bg), 0 0 6px var(--bg), 0 0 12px var(--bg); }
-.orbit-name { color: var(--muted); transition: color 0.2s; }
-.orbit-kind { max-height: 0; overflow: hidden; opacity: 0; color: var(--accent); transition: max-height 0.25s ease, opacity 0.25s ease; }
-.orbit-body:is(:hover, :focus-visible) .orbit-name { color: var(--fg); }
-.orbit-body:is(:hover, :focus-visible) .orbit-kind { max-height: 1.4em; opacity: 1; }
-.orbit-body:is(:hover, :focus-visible) .orbit-dot::before { background: var(--accent); scale: 1.4; box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 50%, transparent); }
-:root[data-theme="deep"] .project-orbits { opacity: 0; }
-:root[data-theme="deep"] .project-orbits * { pointer-events: none !important; }
-@media (max-height: 480px) { .project-orbits { display: none; } }
-/* Phones: no room for the one-line description, so just the name, wrapping onto a second line if it's long. */
-@media (max-width: 640px) {
-  .orbit-kind { display: none; }
-  .orbit-body { white-space: normal; }
-  .orbit-tag { width: max-content; max-width: 8.5rem; }
-}
 
 /* What the sky is doing right now: across the disc from the label on desktop, in the empty sky above it on phones. */
 .sky-stats {

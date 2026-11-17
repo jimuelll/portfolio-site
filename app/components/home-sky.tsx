@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { SkyCanvas, type SkyStats } from "./sky/sky-canvas";
 import { CvReceiver } from "./cv-receiver";
-import { ProjectOrbits } from "./project-orbits";
 import { SecretCount } from "./secret-count";
 import { Socials } from "./socials";
 import { TopNav } from "./top-nav";
@@ -39,7 +38,6 @@ export function HomeSky() {
   return (
     <div className="home">
       <SkyCanvas variant="full" onStats={setStats} className="sky-fill" />
-      <ProjectOrbits hidden={stats.scene !== "night" && stats.scene !== "day"} />
       <TopNav />
       {stats.detail && (
         <div
