@@ -15,10 +15,10 @@ interface Layer { x: number; y: number; r: number; alpha: number }
 /** halo: how much of the ring round the moon shows now (0 to 1). */
 export interface MoonLayer extends Layer { light: V3; lib: [number, number]; lit: number; glow: number; hov: number; bump: number; halo: number }
 /**
- * x, y, r: the sun, which the beams fan from; w, h: the page; masks: discs in front of it (moon, sun, Earth) where
+ * x, y, r: the sun, which the field comes off; w, h: the page; masks: discs in front of it (moon, sun, Earth) where
  * it doesn't show; the rest, how much of each shows.
  */
-export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; beams: number; paper: number }
+export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; field: number; paper: number }
 export interface SunLayer extends Layer {
   /** false: only the light round it, for the corner of the plate the inner pages show. */
   disc: boolean;
@@ -316,7 +316,7 @@ uniform vec3 uOcc, uWarm;
 uniform vec4 uDim[${MAX_DIMS}];
 uniform float uDimN, uDimHard, uShimmer;
 uniform vec2 uPtr;
-uniform float uMilky, uNebula, uBeams, uPaper, uHaloK;
+uniform float uMilky, uNebula, uField, uPaper, uHaloK;
 uniform vec2 uScreen;
 uniform vec4 uMask[${MAX_MASKS}];
 const float TAU = 6.2831853;
@@ -438,7 +438,8 @@ vec4 sun(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
   if (uRays > 0.02) {
     // The glow round it (drawSunGlow): radial hatching in ink, soft dots otherwise.
     float fall = exp(-(d - 1.0) * 3.4);
-    if (d > 1.03 && d < 1.75 && hash(ci + 12.0) < 0.14 + fall * 0.5) {
+    // In ink it's thinned to half, so the magnetic loops behind it (the backdrop) show through.
+    if (d > 1.03 && d < 1.75 && hash(ci + 12.0) < (0.14 + fall * 0.5) * (uInk > 0.5 ? 0.45 : 1.0)) {
       bool hatched = uInk > 0.5;
       idx = hatched ? (fall > 0.16 ? lineIdx(rel) : 15.0) : fall > 0.6 ? 2.0 : fall > 0.3 ? 15.0 : 1.0;
       col = hatched ? mix(INK_LIMB, INK_MID, fall) : mix(SUN_MID, SUN_CORE, fall);
@@ -506,7 +507,7 @@ float calm(vec2 pp) {
   return k;
 }
 
-// Behind everything: the Milky Way and a nebula by night, sunbeams and the engraved plate by day.
+// Behind everything: the Milky Way and a nebula by night, the magnetic field and the engraved plate by day.
 vec4 backdrop(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
   float quiet = calm(pp);
   // Nothing of it shows through the bodies in front: each masks a disc, wherever it is this frame.
@@ -534,15 +535,50 @@ vec4 backdrop(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
       o = over(ink(si, f, mix(vec3(0.72, 0.8, 1.0), vec3(1.0, 0.95, 0.85), hash(ci + 32.0)), (0.35 + 0.5 * tw) * (0.4 + 0.6 * c.a)), o);
     }
   }
-  if (uBeams > 0.01) {
-    // Long soft beams fanning from the sun across the paper, breathing slowly.
+  if (uField > 0.01) {
+    // The sun's magnetic field, printed: closed loops arching off the surface, and open lines carried out into space.
     vec2 rel = pc - uC;
-    float d = length(rel) / uRad, ang = atan(rel.y, rel.x);
-    if (d > 1.75) {
-      vec2 a2 = vec2(cos(ang), sin(ang));
-      float beam = smoothstep(0.55, 0.85, n2d(a2 * 4.0 + vec2(uTime * 0.02, 3.0))) * (0.7 + 0.3 * sin(uTime * 0.35 + ang * 5.0));
-      float fall = exp(-(d - 1.75) * 0.55);
-      if (hash(ci + 21.0) < beam * fall * 0.4) o = over(ink(lineIdx(rel), f, mix(INK_CORE, INK_MID, 1.0 - fall), 0.38 * beam * fall * uBeams), o);
+    float dist = length(rel), d = dist / uRad, ang = atan(rel.y, rel.x);
+    float cw = uCellD.x / uRatio;
+    vec2 er = rel / max(dist, 0.001), et = vec2(-er.y, er.x);
+    // It turns with the sun (SUN_SPIN in engine.ts).
+    float spin = uTime * 0.0483;
+    if (d > 1.12) {
+      // Open lines: the Parker spiral. Each leaves the sun straight out and winds back as the sun turns under it.
+      float stepA = TAU / 22.0, wind = 0.32;
+      float u = ang + wind * (d - 1.0) - spin;
+      float i = floor(u / stepA + 0.5), im = mod(i + 220.0, 22.0);
+      float perp = abs(u - i * stepA) * dist / sqrt(1.0 + wind * wind * d * d);
+      // Some reach far and some fade soon, and that changes slowly.
+      float k = (d - 1.12) / (1.4 + 3.2 * n1(im * 3.7 + uTime * 0.03));
+      if (k < 1.0 && perp < cw * 0.55) {
+        o = over(ink(lineIdx(er - et * wind * d), f, mix(INK_LIMB, ORBIT, k), (1.0 - k * k) * 0.72 * uField), o);
+      }
+      // The solar wind riding them out.
+      if (k < 1.0 && perp < cw * 0.9) {
+        float s = fract(d * 0.9 - uTime * 0.12 + hash(vec2(im, 3.0)));
+        if (s < 0.035) o = over(ink(s < 0.012 ? 16.0 : 15.0, f, INK_CORE, (1.0 - k) * 0.9 * uField), o);
+      }
+    }
+    if (d > 1.0 && d < 1.9) {
+      // Closed loops: nested arches between pairs of feet on the surface, a few families round the limb, drifting.
+      for (int L = 0; L < 6; L++) {
+        float fl = float(L);
+        float c = fl * 1.047 + 0.4 + spin + 0.25 * sin(uTime * 0.05 + fl);
+        vec2 dc = vec2(cos(c), sin(c));
+        float w0 = 0.12 + 0.08 * hash(vec2(fl, 9.0));
+        for (int n = 0; n < 3; n++) {
+          float fn = float(n);
+          float w = w0 * (0.55 + 0.25 * fn), H = uRad * w * (1.1 + 0.25 * fn);
+          // The circle through both feet that rises H above the surface between them.
+          float a = uRad * sin(w), rad = (a * a + H * H) / (2.0 * H);
+          vec2 q = pc - (uC + dc * uRad * cos(w) + dc * (H - rad));
+          if (abs(length(q) - rad) < cw * 0.6) {
+            float pulse = 0.75 + 0.25 * sin(uTime * 0.4 + fl * 2.0 + fn);
+            o = over(ink(lineIdx(vec2(-q.y, q.x)), f, mod(fl, 2.0) < 0.5 ? INK_LIMB : INK_MID, 0.9 * pulse * uField), o);
+          }
+        }
+      }
     }
   }
   if (uPaper > 0.01) {
@@ -789,11 +825,11 @@ export class HeroPrinter {
     });
   }
 
-  /** The sky behind everything; the strengths pick what shows (night: milky, nebula; day: beams, paper). */
+  /** The sky behind everything; the strengths pick what shows (night: milky, nebula; day: field, paper). */
   backdrop(b: BackdropLayer) {
     const screen = (u: Uniforms) => this.gl.uniform2f(u.uScreen, b.w, b.h);
     const night = b.milky + b.nebula > 0.01;
-    // Covers the whole page, since the band and the beams cross it.
+    // Covers the whole page, since the band and the field cross it.
     this.layer(4, b, Math.hypot(b.w, b.h) * 1.1, !night ? null : (u) => {
       this.gl.uniform1f(u.uMilky, b.milky);
       this.gl.uniform1f(u.uNebula, b.nebula);
@@ -802,7 +838,7 @@ export class HeroPrinter {
       const gl = this.gl;
       gl.uniform1f(u.uMilky, b.milky);
       gl.uniform1f(u.uNebula, b.nebula);
-      gl.uniform1f(u.uBeams, b.beams);
+      gl.uniform1f(u.uField, b.field);
       gl.uniform1f(u.uPaper, b.paper);
       const masks = new Float32Array(MAX_MASKS * 4);
       b.masks.slice(0, MAX_MASKS).forEach((m, i) => masks.set([m.x, m.y, m.r, 0], i * 4));
@@ -913,7 +949,7 @@ export class HeroPrinter {
     gl.uniform2f(u.uPtr, this.pointer.x, this.pointer.y);
     gl.uniform1f(u.uShimmer, this.shimmer);
     // A layer that doesn't set these leaves no trace of the last one's.
-    for (const name of ["uGlowLit", "uHov", "uHovAng", "uInk", "uRays", "uRings", "uFlash", "uBoil", "uStrength", "uHaloK", "uMilky", "uNebula", "uBeams", "uPaper"]) gl.uniform1f(u[name], 0);
+    for (const name of ["uGlowLit", "uHov", "uHovAng", "uInk", "uRays", "uRings", "uFlash", "uBoil", "uStrength", "uHaloK", "uMilky", "uNebula", "uField", "uPaper"]) gl.uniform1f(u[name], 0);
     printSet(u);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);

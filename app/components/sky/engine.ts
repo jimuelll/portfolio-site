@@ -849,7 +849,7 @@ export class SkyEngine {
   }
 
   /**
-   * The sky behind everything, on the home page: the Milky Way and a nebula by night, sunbeams and the plate by day.
+   * The sky behind everything, on the home page: the Milky Way and a nebula by night, the magnetic field and the plate by day.
    * masks: the discs in front of it this frame (the moon, sun or Earth, wherever a transition has moved them).
    */
   private printBackdrop(scene: Scene, masks: { x: number; y: number; r: number }[]) {
@@ -858,7 +858,7 @@ export class SkyEngine {
     if (!night && !day) return;
     const pl = this.hero;
     // It comes in with the printer, rather than appearing all at once.
-    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks, milky: night, nebula: night, beams: day, paper: day }));
+    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks, milky: night, nebula: night, field: day, paper: day }));
   }
 
   /** occ: the moon's disc during an eclipse. rays scales the light round it; rings, the almanac's (home sky only). */
