@@ -600,9 +600,13 @@ export class HeroPrinter {
   lost = false;
   /** Sized at least once. Before that its cell target has nothing to draw into. */
   sized = false;
+  /** The shaders have finished compiling and linked (check() finds out); until then the engine draws the hero itself. */
+  ready = false;
   private gl: WebGLRenderingContext;
   private shade: { p: WebGLProgram; u: Uniforms };
   private print: { p: WebGLProgram; u: Uniforms };
+  /** Lets check() ask whether compiling is done without waiting for it. Without it, the first check waits. */
+  private parallel: { COMPLETION_STATUS_KHR: number } | null;
   private shadeTex: WebGLTexture;
   private atlas: WebGLTexture;
   private land: WebGLTexture;
@@ -631,6 +635,9 @@ export class HeroPrinter {
       e.preventDefault();
       this.lost = true;
     });
+    // Compiling these takes a phone's GPU a good part of a second. Started here and not waited on, so the page's first
+    // frames don't wait for it.
+    this.parallel = gl.getExtension("KHR_parallel_shader_compile");
     this.shade = this.program(SHADE);
     this.print = this.program(PRINT);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
@@ -646,24 +653,20 @@ export class HeroPrinter {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 128, 64, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, px);
     this.fbo = gl.createFramebuffer()!;
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    // The land map lives on unit 2 for good. Left at its default (unit 0) the shade pass's sampler would point at its
-    // own target, which WebGL refuses to draw.
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.land);
     gl.activeTexture(gl.TEXTURE0);
-    gl.useProgram(this.shade.p);
-    gl.uniform1i(this.shade.u.uLand, 2);
     // Whichever font is ready now will do; if the real one comes later, the atlas is drawn again.
     document.fonts?.ready.then(() => { if (!this.lost) this.drawAtlas(); });
   }
 
+  /** Compiles and links, without asking how it went: check() does that once it's done. */
   private program(frag: string) {
     const gl = this.gl;
     const make = (type: number, src: string) => {
       const s = gl.createShader(type)!;
       gl.shaderSource(s, src);
       gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) ?? "shader");
       return s;
     };
     const p = gl.createProgram()!;
@@ -671,15 +674,37 @@ export class HeroPrinter {
     gl.attachShader(p, make(gl.FRAGMENT_SHADER, frag));
     gl.bindAttribLocation(p, 0, "p");
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) ?? "link");
-    const u: Uniforms = {};
-    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS) as number;
-    for (let i = 0; i < n; i++) {
-      // Arrays report as "name[0]"; set them through the bare name.
-      const name = gl.getActiveUniform(p, i)!.name.replace("[0]", "");
-      u[name] = gl.getUniformLocation(p, name)!;
+    return { p, u: {} as Uniforms };
+  }
+
+  /**
+   * Whether the printer can draw yet. With parallel compiling this never waits: false until the GPU is done. Without
+   * it the first call waits for the compile. A shader that failed counts as lost, and the engine keeps drawing the hero.
+   */
+  check() {
+    if (this.ready || this.lost) return this.ready;
+    const gl = this.gl;
+    const done = (p: WebGLProgram) => !this.parallel || gl.getProgramParameter(p, this.parallel.COMPLETION_STATUS_KHR);
+    if (!done(this.shade.p) || !done(this.print.p)) return false;
+    for (const prog of [this.shade, this.print]) {
+      if (!gl.getProgramParameter(prog.p, gl.LINK_STATUS)) {
+        console.warn("sky: hero shaders failed, drawing on the canvas instead", gl.getProgramInfoLog(prog.p));
+        this.lost = true;
+        return false;
+      }
+      const n = gl.getProgramParameter(prog.p, gl.ACTIVE_UNIFORMS) as number;
+      for (let i = 0; i < n; i++) {
+        // Arrays report as "name[0]"; set them through the bare name.
+        const name = gl.getActiveUniform(prog.p, i)!.name.replace("[0]", "");
+        prog.u[name] = gl.getUniformLocation(prog.p, name)!;
+      }
     }
-    return { p, u };
+    // The land map is on unit 2 for good. Left at its default (unit 0) the shade pass's sampler would point at its own
+    // target, which WebGL refuses to draw.
+    gl.useProgram(this.shade.p);
+    gl.uniform1i(this.shade.u.uLand, 2);
+    this.ready = true;
+    return true;
   }
 
   private texture(filter: number) {

@@ -184,6 +184,9 @@ const HALO_FIRST = 50;
 /** The space station over Earth: how long a pass takes, and the wait between passes. */
 const STATION_SECONDS = 12;
 const STATION_GAP: [number, number] = [45, 75];
+/** The canvas draws the hero for this many frames before the printer is asked; then it cross-fades over this long. */
+const PRINT_AFTER_FRAMES = 3;
+const PRINT_IN_SECONDS = 0.6;
 /** The printed glyph's font size against its cell's width (hero-gl.ts: a cell 1.74 wide-to-tall, the font 1.18 × that). */
 const PRINT_FONT = 1.74 * 1.18;
 export const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -395,6 +398,8 @@ export class SkyEngine {
   private spots: Spot[] = [];
   /** The hero and the light round it in fine glyphs on the GPU (hero-gl.ts); null draws them on this canvas instead. */
   private printer: HeroPrinter | null = null;
+  /** How far the hero has cross-faded from this canvas onto the printer (0 to 1). */
+  private printIn = 0;
   /** How close the cursor is to the moon or sun (eased, 0 to 1), and from which side. */
   private hov = 0;
   private hovAngle = 0;
@@ -457,6 +462,9 @@ export class SkyEngine {
   private reported = "";
   private reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   private resizeObserver = new ResizeObserver(() => this.resize());
+  /** The page content the sky dims under, watched for changes in size. */
+  private avoidObserver = new ResizeObserver(() => this.measure());
+  private avoided: Element[] = [];
   private intersectionObserver = new IntersectionObserver(([entry]) => {
     this.visible = entry.isIntersecting;
     this.schedule();
@@ -512,6 +520,7 @@ export class SkyEngine {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
+    this.avoidObserver.disconnect();
     this.intersectionObserver.disconnect();
     this.themeObserver.disconnect();
     this.reduced.removeEventListener("change", this.schedule);
@@ -668,9 +677,19 @@ export class SkyEngine {
     this.origin = { left: origin.left, top: origin.top };
     // The canvas can be taller than the window (phones scroll the home page), so centre on what's visible.
     this.view = this.variant === "emblem" ? { x: this.hero.x, y: this.hero.y } : { x: window.innerWidth / 2 - origin.left, y: window.innerHeight / 2 - origin.top };
-    this.boxes = Array.from(document.querySelectorAll(AVOID), (el) => el.getBoundingClientRect())
+    const els = Array.from(document.querySelectorAll(AVOID));
+    // Watched, so content that grows or shrinks (the label's "more") moves the calm round it at once, not on the next
+    // periodic measure. Re-watched only when the set of elements changes, so this can't call itself in a loop.
+    if (els.length !== this.avoided.length || els.some((el, i) => el !== this.avoided[i])) {
+      this.avoidObserver.disconnect();
+      for (const el of els) this.avoidObserver.observe(el);
+      this.avoided = els;
+    }
+    this.boxes = els.map((el) => el.getBoundingClientRect())
       .filter((b) => b.width > 0 && b.height > 0)
       .map((b) => ({ left: b.left - origin.left - 14, top: b.top - origin.top - 10, right: b.right - origin.left + 14, bottom: b.bottom - origin.top + 10 }));
+    // At rest (reduced motion, or a paused sky) nothing else would redraw with the new boxes.
+    if (!this.raf && !this.disposed && this.started) this.render();
   }
 
   private dim(x: number, y: number) {
@@ -763,10 +782,34 @@ export class SkyEngine {
     return norm([base[0] + (toward[0] - base[0]) * hv, base[1] + (toward[1] - base[1]) * hv, base[2] + (toward[2] - base[2]) * hv]);
   }
 
-  /** The GPU printer while it's working (and sized, once the canvas has laid out); without it the canvas draws the hero. */
+  /**
+   * The GPU printer while it's working (sized, compiled, not lost); without it the canvas draws the hero. The first
+   * frames always go to the canvas, so the hero is up at once while the shaders compile (and, where the browser can't
+   * compile them in the background, the one wait for them comes after the page is already showing).
+   */
   private gpu() {
     const p = this.printer;
-    return p && p.sized && !p.lost ? p : null;
+    if (!p || p.lost || !p.sized) return null;
+    if (!p.ready && (this.frames < PRINT_AFTER_FRAMES || !p.check())) return null;
+    return p;
+  }
+
+  /**
+   * One hero piece: printed on the GPU, drawn on this canvas, or while the printer takes over, both, the canvas one
+   * fading out as the printed one fades in.
+   */
+  private both(printed: (p: HeroPrinter) => void, drawn: () => void) {
+    const k = this.gpu() ? this.printIn : 0;
+    const fade = this.fade;
+    if (k < 0.999) {
+      this.fade = fade * (1 - k);
+      drawn();
+    }
+    if (k > 0.001) {
+      this.fade = fade * k;
+      this.printed(printed);
+    }
+    this.fade = fade;
   }
 
   /** Print layers on the GPU, then lay them onto this canvas where the CPU drawing would have gone. */
@@ -784,7 +827,7 @@ export class SkyEngine {
    * weight, and k (against the size they were drawn at) to pack them as closely, so trails stay solid. Otherwise as before.
    */
   private grain(size = 12) {
-    if (!this.gpu()) return { font: `${size}px ${this.family}`, k: 1 };
+    if (!this.gpu() || this.printIn < 0.5) return { font: `${size}px ${this.family}`, k: 1 };
     const px = PRINT_CELL * SKY_GLYPH[skyQuality] * PRINT_FONT;
     return { font: `600 ${px.toFixed(1)}px ${this.family}`, k: px / size };
   }
@@ -814,7 +857,8 @@ export class SkyEngine {
     const night = scene === "night" ? 1 : 0, day = scene === "day" ? 1 : 0;
     if (!night && !day) return;
     const pl = this.hero;
-    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha(), w: this.w, h: this.h, masks, milky: night, nebula: night, beams: day, paper: day }));
+    // It comes in with the printer, rather than appearing all at once.
+    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks, milky: night, nebula: night, beams: day, paper: day }));
   }
 
   /** occ: the moon's disc during an eclipse. rays scales the light round it; rings, the almanac's (home sky only). */
@@ -902,6 +946,8 @@ export class SkyEngine {
     this.sunFlash = Math.max(0, this.sunFlash - dt * 1.4);
     // Eases rather than switches, so the disc doesn't jump in weight as an eclipse begins or ends.
     this.inked += ((this.turn ? 0 : 1) - this.inked) * Math.min(1, dt * 4);
+    // Once the printer is ready the hero cross-fades onto it.
+    if (this.printer?.ready && !this.printer.lost) this.printIn = Math.min(1, this.printIn + dt / PRINT_IN_SECONDS);
     for (let i = this.shocks.length - 1; i >= 0; i--) if ((this.shocks[i].age += dt) > SHOCK_LIFE) this.shocks.splice(i, 1);
     for (let i = this.flares.length - 1; i >= 0; i--) {
       const f = this.flares[i];
@@ -1077,11 +1123,10 @@ export class SkyEngine {
       this.drawStars("night");
       if (full) this.drawPlanets();
       if (hero) {
-        if (this.gpu()) this.printed((p) => this.printMoon(p, this.moonAt.x, this.moonAt.y, 1));
-        else {
+        this.both((p) => this.printMoon(p, this.moonAt.x, this.moonAt.y, 1), () => {
           this.drawMoonGlow(1);
           this.drawMoon(this.moonAt.x, this.moonAt.y, 1, DARK.orbit);
-        }
+        });
         this.drawImpacts();
       }
       if (full) this.drawWisps();
@@ -1094,13 +1139,11 @@ export class SkyEngine {
       if (!hero) this.drawPlateCorner();
       this.printBackdrop("day", hero ? [{ x: this.hero.x, y: this.hero.y, r: this.hero.r }] : []);
       this.drawStars("day");
-      const gpu = hero && this.gpu();
-      // Printed, the rings come with the sun.
-      if (full && !gpu) this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked);
+      // Printed, the rings come with the sun; drawn, they go under the solar wind as they always have.
+      if (full) this.both(() => {}, () => this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked));
       if (full) this.drawSolarWind();
       if (hero) {
-        if (gpu) this.printed((p) => this.printSun(p, null, 1, full ? this.inked : 0));
-        else this.drawSun(null, 1);
+        this.both((p) => this.printSun(p, null, 1, full ? this.inked : 0), () => this.drawSun(null, 1));
         this.drawFlares();
       }
       if (full) this.drawDayComet();
@@ -1315,32 +1358,29 @@ export class SkyEngine {
     if (!hero) return;
     // The sun is only ever partly hidden while the moon is off-centre, and fully hidden once it's on.
     const sunShows = st.mx !== 0 || st.my !== 0;
-    if (this.gpu()) {
-      this.printed((p) => {
-        this.use(DARK, 1);
-        p.corona({ x: this.hero.x, y: this.hero.y, r: this.hero.r, alpha: this.layerAlpha(), strength: st.corona });
-        if (sunShows) {
-          this.use(LIGHT, 1);
-          this.printSun(p, this.moonAt, clamp(st.s * 1.4, 0, 1), 0);
-        }
-        this.use(DARK, 1);
-        this.printMoon(p, this.moonAt.x, this.moonAt.y, st.lit);
-      });
+    this.both((p) => {
+      this.use(DARK, 1);
+      p.corona({ x: this.hero.x, y: this.hero.y, r: this.hero.r, alpha: this.layerAlpha(), strength: st.corona });
       if (sunShows) {
         this.use(LIGHT, 1);
-        this.drawFlares();
+        this.printSun(p, this.moonAt, clamp(st.s * 1.4, 0, 1), 0);
       }
-    } else {
+      this.use(DARK, 1);
+      this.printMoon(p, this.moonAt.x, this.moonAt.y, st.lit);
+    }, () => {
       this.use(DARK, 1);
       this.drawCorona(st.corona);
       if (sunShows) {
         this.use(LIGHT, 1);
         this.drawSun(this.moonAt, clamp(st.s * 1.4, 0, 1));
-        this.drawFlares();
       }
       this.use(DARK, 1);
       this.drawMoonGlow(st.lit);
       this.drawMoon(this.moonAt.x, this.moonAt.y, st.lit, mix(DARK.orbit, LIGHT.orbit, st.s));
+    });
+    if (sunShows) {
+      this.use(LIGHT, 1);
+      this.drawFlares();
     }
     this.use(DARK, 1);
     this.drawBead(st.bead, st.beadDir);
@@ -1802,14 +1842,16 @@ export class SkyEngine {
     ctx.globalAlpha = this.sceneAlpha * this.fade;
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
-    if (this.gpu()) {
-      // The same sun's light as the home page prints, faint enough to read a page over; the disc itself is off the page.
-      this.printed((p) => p.sun({
-        x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil, flash: 0, foot: 0,
-        ink: 1, rays: 1, rings: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
-      }));
-      return;
-    }
+    // Printed: the same sun's light as the home page, faint enough to read a page over; the disc itself is off the page.
+    this.both((p) => p.sun({
+      x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil, flash: 0, foot: 0,
+      ink: 1, rays: 1, rings: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
+    }), () => this.drawPlateLight(cx, cy, r));
+  }
+
+  /** The plate corner's rays, rim and rings, drawn on the canvas. */
+  private drawPlateLight(cx: number, cy: number, r: number) {
+    const { ctx, h } = this;
     ctx.font = `10px ${this.family}`;
     for (let i = 0; i < 40; i++) {
       const a = (i / 40) * TAU + this.time * 0.012;
@@ -1858,7 +1900,7 @@ export class SkyEngine {
     const gr = this.grain(pl.font);
     this.ctx.font = gr.font;
     // Printed, the rays are as long but in finer, closer marks.
-    const step = this.gpu() ? PRINT_CELL * SKY_GLYPH[skyQuality] * 1.6 : pl.cw * 1.6;
+    const step = this.gpu() && this.printIn >= 0.5 ? PRINT_CELL * SKY_GLYPH[skyQuality] * 1.6 : pl.cw * 1.6;
     const marks = Math.round((4 * pl.cw * 1.6) / step);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU;
@@ -2231,22 +2273,19 @@ export class SkyEngine {
     const moonBehind = !moonFront && Math.hypot(mx - pl.x, my - pl.y) > er;
     this.use(DARK, 1);
     this.drawSats(false);
-    if (this.gpu()) {
-      this.printed((p) => {
-        const alpha = this.layerAlpha();
-        // Lit from where Earth is, as drawMiniMoon has it.
-        const mini = () => p.moon({ x: mx, y: my, r: er * 0.17, alpha, light: norm([-0.78, -0.3, 0.55]), lib: [0, 0], lit: 1, glow: 0, hov: 0, bump: 0.6, halo: 0 });
-        if (moonBehind) mini();
-        p.earth({ x: pl.x, y: pl.y, r: er, alpha });
-        if (moonFront) mini();
-      });
-      this.drawSats(true);
-    } else {
+    this.both((p) => {
+      const alpha = this.layerAlpha();
+      // Lit from where Earth is, as drawMiniMoon has it.
+      const mini = () => p.moon({ x: mx, y: my, r: er * 0.17, alpha, light: norm([-0.78, -0.3, 0.55]), lib: [0, 0], lit: 1, glow: 0, hov: 0, bump: 0.6, halo: 0 });
+      if (moonBehind) mini();
+      p.earth({ x: pl.x, y: pl.y, r: er, alpha });
+      if (moonFront) mini();
+    }, () => {
       if (moonBehind) this.drawMiniMoon(mx, my, er * 0.17);
       this.drawEarth(er);
-      this.drawSats(true);
       if (moonFront) this.drawMiniMoon(mx, my, er * 0.17);
-    }
+    });
+    this.drawSats(true);
     this.drawStation();
     this.drawPings();
   }
@@ -2434,15 +2473,13 @@ export class SkyEngine {
   private drawHero(scene: Scene) {
     if (scene === "night") {
       this.use(DARK, 1);
-      if (this.gpu()) this.printed((p) => this.printMoon(p, this.hero.x, this.hero.y, 1));
-      else {
+      this.both((p) => this.printMoon(p, this.hero.x, this.hero.y, 1), () => {
         this.drawMoonGlow(1);
         this.drawMoon(this.hero.x, this.hero.y, 1, DARK.orbit);
-      }
+      });
     } else if (scene === "day") {
       this.use(LIGHT, 1);
-      if (this.gpu()) this.printed((p) => this.printSun(p, null, 1, 0));
-      else this.drawSun(null, 1);
+      this.both((p) => this.printSun(p, null, 1, 0), () => this.drawSun(null, 1));
     } else {
       this.use(DARK, 1);
       this.drawEarthScene();
