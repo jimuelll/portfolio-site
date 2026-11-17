@@ -50,6 +50,7 @@ type Vec = [number, number, number];
 
 import { projects } from "../../lib/portfolio";
 import { DRIFTERS, paintDrifter, type Saying, type SecretId, type Sprite } from "./drifters";
+import { HeroPrinter } from "./hero-gl";
 
 const TAU = Math.PI * 2;
 const STEP = 1 / 120;
@@ -163,16 +164,30 @@ let skyQuality = 0;
 const SLOW_FRAME_MS = 28;
 const SKY_STARS = [1, 0.7, 0.45, 0.3];
 const SKY_GLYPH = [1, 1.2, 1.45, 1.7];
+/** The land bitmap, decoded once. */
+function landMap() {
+  if (!landBits) landBits = Uint8Array.from(atob(LAND), (c) => c.charCodeAt(0));
+  return landBits;
+}
 export function isLand(lon: number, lat: number) {
-  if (!landBits) {
-    const raw = atob(LAND);
-    landBits = Uint8Array.from(raw, (c) => c.charCodeAt(0));
-  }
   const x = Math.floor((((lon / TAU + 0.5) % 1) + 1) % 1 * 128) % 128;
   const y = Math.min(63, Math.max(0, Math.floor((0.5 - lat / Math.PI) * 64)));
   const i = y * 128 + x;
-  return (landBits[i >> 3] >> (7 - (i & 7))) & 1;
+  return (landMap()[i >> 3] >> (7 - (i & 7))) & 1;
 }
+/**
+ * The hero's glyph cell on the GPU, in CSS px. Quality steps coarsen it (SKY_GLYPH) rather than handing the hero back
+ * to the canvas, which costs the CPU far more.
+ */
+const PRINT_CELL = 4;
+/** The moon's ring of ice light: how often it comes round (s), and when it first shows on a visit. */
+const HALO_CYCLE = 160;
+const HALO_FIRST = 50;
+/** The space station over Earth: how long a pass takes, and the wait between passes. */
+const STATION_SECONDS = 12;
+const STATION_GAP: [number, number] = [45, 75];
+/** The printed glyph's font size against its cell's width (hero-gl.ts: a cell 1.74 wide-to-tall, the font 1.18 × that). */
+const PRINT_FONT = 1.74 * 1.18;
 export const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const zooms = (s: Scene) => s === "earth" || s === "deep";
 
@@ -380,6 +395,8 @@ export class SkyEngine {
   private moonAt = { x: 0, y: 0 };
   private craters: Crater[] = [];
   private spots: Spot[] = [];
+  /** The hero and the light round it in fine glyphs on the GPU (hero-gl.ts); null draws them on this canvas instead. */
+  private printer: HeroPrinter | null = null;
   /** How close the cursor is to the moon or sun (eased, 0 to 1), and from which side. */
   private hov = 0;
   private hovAngle = 0;
@@ -389,6 +406,9 @@ export class SkyEngine {
   private pings: Ping[] = [];
   private dayComet: DayComet | null = null;
   private nextDayComet = rand(4, 9);
+  /** The space station crossing Earth's sky now and then, on a long shallow arc (start, then p0 → p2 bent through p1). */
+  private station: { start: number; p0: [number, number]; p1: [number, number]; p2: [number, number] } | null = null;
+  private nextStation = rand(8, 16);
   private drifter: Drifter | null = null;
   private nextDrifter = rand(3, 7);
   /** Which secret went by last, so the next one is a different one. */
@@ -453,6 +473,12 @@ export class SkyEngine {
     this.ctx = canvas.getContext("2d")!;
     // Canvas text can't read CSS variables, so take the resolved family from the page.
     this.family = getComputedStyle(canvas).fontFamily || "monospace";
+    // No WebGL, or a shader the GPU won't take: the canvas draws the hero as it always has.
+    try {
+      this.printer = new HeroPrinter(`${RAMP}|/-\\~·*`, this.family, landMap());
+    } catch {
+      this.printer = null;
+    }
     this.seedSurfaces();
     this.readTheme();
     this.started = true;
@@ -509,6 +535,7 @@ export class SkyEngine {
     window.clearTimeout(this.charging.timer);
     if (this.overDrifter && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
     this.saying?.remove();
+    this.printer?.destroy();
   }
 
   /** The same craters every visit (seeded), and a few sunspots already on the sun. */
@@ -575,6 +602,7 @@ export class SkyEngine {
     this.canvas.width = Math.round(this.w * ratio);
     this.canvas.height = Math.round(this.h * ratio);
     this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    this.printer?.resize(this.w, this.h, ratio, PRINT_CELL * SKY_GLYPH[skyQuality]);
     this.layoutHero();
     if (first || this.stars.length === 0) this.seedStars();
     else this.topUpStars();
@@ -724,6 +752,84 @@ export class SkyEngine {
     return [Math.cos(s.lat) * Math.sin(lon), Math.sin(s.lat), Math.cos(s.lat) * Math.cos(lon)];
   }
 
+  /** The spots worth drawing this frame: formed enough, and on (or just round) the side facing us. */
+  private visibleSpots() {
+    return this.spots.map((s) => ({ c: this.spotCentre(s), size: s.size, k: this.spotStrength(s) })).filter((s) => s.k > 0.02 && s.c[2] > -0.2);
+  }
+
+  /** Where the moon's light comes from: its phase, turned toward a nearby cursor. */
+  private moonLight(): Vec {
+    const { ph } = this.moonPhase();
+    const base: Vec = norm([-Math.sin(ph), -0.3 * Math.sin(ph), Math.cos(ph)]);
+    const toward: Vec = norm([Math.cos(this.hovAngle) * 0.85, Math.sin(this.hovAngle) * 0.85, 0.5]);
+    const hv = this.hov * 0.85;
+    return norm([base[0] + (toward[0] - base[0]) * hv, base[1] + (toward[1] - base[1]) * hv, base[2] + (toward[2] - base[2]) * hv]);
+  }
+
+  /** The GPU printer while it's working (and sized, once the canvas has laid out); without it the canvas draws the hero. */
+  private gpu() {
+    const p = this.printer;
+    return p && p.sized && !p.lost ? p : null;
+  }
+
+  /** Print layers on the GPU, then lay them onto this canvas where the CPU drawing would have gone. */
+  private printed(layers: (p: HeroPrinter) => void) {
+    const p = this.printer!;
+    // The backdrop keeps calm round the card even mid-turn; the bodies dim under it only at rest, as glyph() does.
+    p.begin(this.time, this.boxes, !this.turn, this.pointer, this.shimmer);
+    layers(p);
+    this.ctx.globalAlpha = 1;
+    this.ctx.drawImage(p.canvas, 0, 0, this.w, this.h);
+  }
+
+  /**
+   * The glyph for the moving bits (comets, flares, satellites…). With the printed hero on, they match it: its size and
+   * weight, and k (against the size they were drawn at) to pack them as closely, so trails stay solid. Otherwise as before.
+   */
+  private grain(size = 12) {
+    if (!this.gpu()) return { font: `${size}px ${this.family}`, k: 1 };
+    const px = PRINT_CELL * SKY_GLYPH[skyQuality] * PRINT_FONT;
+    return { font: `600 ${px.toFixed(1)}px ${this.family}`, k: px / size };
+  }
+
+  /** What glyph() multiplies every glyph by, for a layer drawn now. */
+  private layerAlpha() {
+    return this.palette.alpha * this.sceneAlpha * this.fade;
+  }
+
+  private printMoon(p: HeroPrinter, x: number, y: number, lit: number) {
+    const lib: [number, number] = [0.3 * Math.sin((this.time * TAU) / 110), 0.1 * Math.sin((this.time * TAU) / 170)];
+    p.moon({ x, y, r: this.hero.r, alpha: this.layerAlpha(), light: this.moonLight(), lib, lit, glow: lit, hov: this.hov, bump: 1.1, halo: this.haloK() });
+  }
+
+  /** The ring round the moon comes and goes: about 45 s out of every HALO_CYCLE, eased in and out. */
+  private haloK() {
+    const ph = ((this.time + HALO_CYCLE - HALO_FIRST) % HALO_CYCLE) / HALO_CYCLE;
+    return smoothstep(0, 0.08, ph) * (1 - smoothstep(0.22, 0.3, ph));
+  }
+
+  /**
+   * The sky behind everything, on the home page: the Milky Way and a nebula by night, sunbeams and the plate by day.
+   * masks: the discs in front of it this frame (the moon, sun or Earth, wherever a transition has moved them).
+   */
+  private printBackdrop(scene: Scene, masks: { x: number; y: number; r: number }[]) {
+    if (this.variant !== "full" || !this.gpu() || this.sceneAlpha < 0.02) return;
+    const night = scene === "night" ? 1 : 0, day = scene === "day" ? 1 : 0;
+    if (!night && !day) return;
+    const pl = this.hero;
+    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha(), w: this.w, h: this.h, masks, milky: night, nebula: night, beams: day, paper: day }));
+  }
+
+  /** occ: the moon's disc during an eclipse. rays scales the light round it; rings, the almanac's (home sky only). */
+  private printSun(p: HeroPrinter, occ: { x: number; y: number } | null, rays: number, rings: number) {
+    const pl = this.hero;
+    p.sun({
+      x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha(), disc: true, spin: this.sunSpin(), boil: this.boil, flash: this.sunFlash,
+      foot: this.flares.length ? this.flares[this.flares.length - 1].foot : 0, ink: this.inked, rays, rings,
+      hov: this.hov, hovAngle: this.hovAngle, occ, spots: this.visibleSpots(), warm: this.palette.warm,
+    });
+  }
+
   private report() {
     const hero = this.variant !== "quiet";
     let detail = "";
@@ -835,6 +941,18 @@ export class SkyEngine {
     if (this.dayComet && this.time - this.dayComet.start > this.dayComet.dur) {
       this.dayComet = null;
       this.nextDayComet = rand(12, 24);
+    }
+    if (this.scene === "earth" && this.variant === "full" && !this.station && (this.nextStation -= dt) <= 0) {
+      // High across the top of the sky, left to right or back, arching a little.
+      const { w, h } = this;
+      const ya = h * rand(0.08, 0.26), yb = h * rand(0.08, 0.26);
+      const p0: [number, number] = [-30, ya], p2: [number, number] = [w + 30, yb];
+      const ltr = Math.random() < 0.5;
+      this.station = { start: this.time, p0: ltr ? p0 : p2, p1: [w * rand(0.4, 0.6), Math.min(ya, yb) - h * 0.1], p2: ltr ? p2 : p0 };
+    }
+    if (this.station && this.time - this.station.start > STATION_SECONDS) {
+      this.station = null;
+      this.nextStation = rand(...STATION_GAP);
     }
     this.stepDrifter(dt);
     if (this.delivery && this.time - this.delivery.start > DELIVER_SECONDS + DELIVER_AFTERGLOW) this.delivery = null;
@@ -958,11 +1076,15 @@ export class SkyEngine {
       if (full) this.drawDrifter();
     } else if (this.scene === "night") {
       this.use(DARK, 1);
+      this.printBackdrop("night", hero ? [{ ...this.moonAt, r: this.hero.r }] : []);
       this.drawStars("night");
       if (full) this.drawPlanets();
       if (hero) {
-        this.drawMoonGlow(1);
-        this.drawMoon(this.moonAt.x, this.moonAt.y, 1, DARK.orbit);
+        if (this.gpu()) this.printed((p) => this.printMoon(p, this.moonAt.x, this.moonAt.y, 1));
+        else {
+          this.drawMoonGlow(1);
+          this.drawMoon(this.moonAt.x, this.moonAt.y, 1, DARK.orbit);
+        }
         this.drawImpacts();
       }
       if (full) this.drawWisps();
@@ -973,11 +1095,15 @@ export class SkyEngine {
       if (full) this.drawDaySky(1);
       this.use(LIGHT, 1);
       if (!hero) this.drawPlateCorner();
+      this.printBackdrop("day", hero ? [{ x: this.hero.x, y: this.hero.y, r: this.hero.r }] : []);
       this.drawStars("day");
-      if (full) this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked);
+      const gpu = hero && this.gpu();
+      // Printed, the rings come with the sun.
+      if (full && !gpu) this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked);
       if (full) this.drawSolarWind();
       if (hero) {
-        this.drawSun(null, 1);
+        if (gpu) this.printed((p) => this.printSun(p, null, 1, full ? this.inked : 0));
+        else this.drawSun(null, 1);
         this.drawFlares();
       }
       if (full) this.drawDayComet();
@@ -1181,22 +1307,45 @@ export class SkyEngine {
       ctx.fillRect(0, 0, w, h);
       this.matchSurfaces(sky);
     }
+    // Both discs hide the backdrop: the sun where it sits, the moon wherever it has slid to.
+    const discs = hero ? [{ x: this.hero.x, y: this.hero.y, r: this.hero.r }, { ...this.moonAt, r: this.hero.r }] : [];
     this.use(LIGHT, st.s);
+    this.printBackdrop("day", discs);
     this.drawStars("day");
     this.use(DARK, 1 - st.s);
+    this.printBackdrop("night", discs);
     this.drawStars("night");
     if (!hero) return;
-    this.use(DARK, 1);
-    this.drawCorona(st.corona);
     // The sun is only ever partly hidden while the moon is off-centre, and fully hidden once it's on.
-    if (st.mx || st.my) {
-      this.use(LIGHT, 1);
-      this.drawSun(this.moonAt, clamp(st.s * 1.4, 0, 1));
-      this.drawFlares();
+    const sunShows = st.mx !== 0 || st.my !== 0;
+    if (this.gpu()) {
+      this.printed((p) => {
+        this.use(DARK, 1);
+        p.corona({ x: this.hero.x, y: this.hero.y, r: this.hero.r, alpha: this.layerAlpha(), strength: st.corona });
+        if (sunShows) {
+          this.use(LIGHT, 1);
+          this.printSun(p, this.moonAt, clamp(st.s * 1.4, 0, 1), 0);
+        }
+        this.use(DARK, 1);
+        this.printMoon(p, this.moonAt.x, this.moonAt.y, st.lit);
+      });
+      if (sunShows) {
+        this.use(LIGHT, 1);
+        this.drawFlares();
+      }
+    } else {
+      this.use(DARK, 1);
+      this.drawCorona(st.corona);
+      if (sunShows) {
+        this.use(LIGHT, 1);
+        this.drawSun(this.moonAt, clamp(st.s * 1.4, 0, 1));
+        this.drawFlares();
+      }
+      this.use(DARK, 1);
+      this.drawMoonGlow(st.lit);
+      this.drawMoon(this.moonAt.x, this.moonAt.y, st.lit, mix(DARK.orbit, LIGHT.orbit, st.s));
     }
     this.use(DARK, 1);
-    this.drawMoonGlow(st.lit);
-    this.drawMoon(this.moonAt.x, this.moonAt.y, st.lit, mix(DARK.orbit, LIGHT.orbit, st.s));
     this.drawBead(st.bead, st.beadDir);
     this.use(DARK, 1 - st.s);
     this.drawComets();
@@ -1366,12 +1515,8 @@ export class SkyEngine {
     const pl = this.hero;
     const pal = this.palette;
     const { cw, ch, r } = pl;
-    const { ph } = this.moonPhase();
-    const base: Vec = norm([-Math.sin(ph), -0.3 * Math.sin(ph), Math.cos(ph)]);
     // Bring the cursor near and the moon turns its lit side toward it.
-    const toward: Vec = norm([Math.cos(this.hovAngle) * 0.85, Math.sin(this.hovAngle) * 0.85, 0.5]);
-    const hv = this.hov * 0.85;
-    const L = norm([base[0] + (toward[0] - base[0]) * hv, base[1] + (toward[1] - base[1]) * hv, base[2] + (toward[2] - base[2]) * hv]);
+    const L = this.moonLight();
     // Libration: the moon rocks a little, side to side and up and down, so its face slowly shifts.
     const lx = 0.3 * Math.sin((this.time * TAU) / 110), ly = 0.1 * Math.sin((this.time * TAU) / 170);
     const cx1 = Math.cos(lx), sx1 = Math.sin(lx), cy1 = Math.cos(ly), sy1 = Math.sin(ly);
@@ -1439,12 +1584,14 @@ export class SkyEngine {
   private drawImpacts() {
     const pal = this.palette;
     const pl = this.hero;
-    this.ctx.font = `${pl.font}px ${this.family}`;
+    const gr = this.grain(pl.font);
+    this.ctx.font = gr.font;
+    const n = Math.round(10 / gr.k);
     for (const f of this.flashes) {
       const k = f.age / 1.1;
-      const r = 6 + k * pl.r * 0.4;
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * TAU + f.age;
+      const r = 6 * gr.k + k * pl.r * 0.4;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU + f.age;
         this.glyph(i % 2 ? "*" : "+", f.x + Math.cos(a) * r, f.y + Math.sin(a) * r * 0.8, pal.warm, (1 - k) * 0.95);
       }
       this.glyph("@", f.x, f.y, pal.comet, (1 - k) * (1 - k));
@@ -1453,15 +1600,17 @@ export class SkyEngine {
 
   private drawMeteors() {
     const pal = this.palette;
-    this.ctx.font = `12px ${this.family}`;
+    const gr = this.grain();
+    this.ctx.font = gr.font;
+    const n = Math.round(14 / gr.k);
     for (const m of this.meteors) {
       const life = 1 - m.age / m.life;
       const g = lineGlyph(m.vx, m.vy);
       const sp = Math.hypot(m.vx, m.vy);
-      for (let i = 0; i < 14; i++) {
-        const back = i * 9;
+      for (let i = 0; i < n; i++) {
+        const back = i * 9 * gr.k;
         const x = m.x - (m.vx / sp) * back, y = m.y - (m.vy / sp) * back;
-        this.glyph(i === 0 ? "*" : g, x, y, i < 3 ? pal.comet : pal.star, life * (1 - i / 14) * 0.9);
+        this.glyph(i === 0 ? "*" : g, x, y, i < 3 / gr.k ? pal.comet : pal.star, life * (1 - i / n) * 0.9);
       }
     }
   }
@@ -1469,13 +1618,15 @@ export class SkyEngine {
   private drawComets() {
     if (this.sceneAlpha < 0.02) return;
     const pal = this.palette;
-    this.ctx.font = `12px ${this.family}`;
+    const gr = this.grain();
+    this.ctx.font = gr.font;
+    const every = Math.max(1, Math.round(4 * gr.k));
     for (const c of this.comets) {
       const tr = c.trail;
       const n = tr.length / 2;
       const fade = c.dying > 0 ? 1 - c.dying / 1.2 : 1;
       // Every few points is enough for a tail that reads as a line of glyphs.
-      for (let i = n - 1; i >= 1; i -= 4) {
+      for (let i = n - 1; i >= 1; i -= every) {
         const x = tr[i * 2], y = tr[i * 2 + 1];
         const px = tr[(i - 1) * 2], py = tr[(i - 1) * 2 + 1];
         const k = i / n;
@@ -1500,7 +1651,7 @@ export class SkyEngine {
     const hidden = (x: number, y: number) => occ !== null && Math.hypot(x - occ.x, y - occ.y) < r;
     const spin = this.sunSpin();
     const cs = Math.cos(spin), sn = Math.sin(spin);
-    const spots = this.spots.map((s) => ({ c: this.spotCentre(s), size: s.size, k: this.spotStrength(s) })).filter((s) => s.k > 0.02 && s.c[2] > -0.2);
+    const spots = this.visibleSpots();
     // By day the sun is printed: a solid warm body (gold core, vermilion limb) with dark ink over it, so it holds its
     // own against the paper. The body stays light enough for the name to read where it overlaps on phones. The
     // eclipse keeps its original, softer look.
@@ -1654,6 +1805,14 @@ export class SkyEngine {
     ctx.globalAlpha = this.sceneAlpha * this.fade;
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
+    if (this.gpu()) {
+      // The same sun's light as the home page prints, faint enough to read a page over; the disc itself is off the page.
+      this.printed((p) => p.sun({
+        x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil, flash: 0, foot: 0,
+        ink: 1, rays: 1, rings: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
+      }));
+      return;
+    }
     ctx.font = `10px ${this.family}`;
     for (let i = 0; i < 40; i++) {
       const a = (i / 40) * TAU + this.time * 0.012;
@@ -1699,12 +1858,16 @@ export class SkyEngine {
     const x = pl.x + Math.cos(dir) * pl.r * 1.02, y = pl.y + Math.sin(dir) * pl.r * 1.02;
     this.ctx.font = `${Math.round(pl.font * 2.4)}px ${this.family}`;
     this.glyph("✦", x, y, DARK.comet, strength);
-    this.ctx.font = `${pl.font}px ${this.family}`;
+    const gr = this.grain(pl.font);
+    this.ctx.font = gr.font;
+    // Printed, the rays are as long but in finer, closer marks.
+    const step = this.gpu() ? PRINT_CELL * SKY_GLYPH[skyQuality] * 1.6 : pl.cw * 1.6;
+    const marks = Math.round((4 * pl.cw * 1.6) / step);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU;
-      for (let j = 1; j <= 4; j++) {
-        const q = j * pl.cw * 1.6 * (i % 2 ? 0.7 : 1);
-        this.glyph(lineGlyph(Math.cos(a), Math.sin(a)), x + Math.cos(a) * q, y + Math.sin(a) * q, DARK.comet, strength * (1 - j / 5));
+      for (let j = 1; j <= marks; j++) {
+        const q = j * step * (i % 2 ? 0.7 : 1);
+        this.glyph(lineGlyph(Math.cos(a), Math.sin(a)), x + Math.cos(a) * q, y + Math.sin(a) * q, DARK.comet, strength * (1 - j / (marks + 1)));
       }
     }
   }
@@ -1851,16 +2014,19 @@ export class SkyEngine {
     const dx = x - pl.x, dy = y - pl.y;
     const dist = Math.hypot(dx, dy) || 1;
     const heat = 1 - smoothstep(pl.r * 1.6, pl.r * 5, dist);
-    this.ctx.font = `12px ${this.family}`;
+    const gr = this.grain();
+    this.ctx.font = gr.font;
     // The dust tail trails along the path; the ion tail points straight away from the sun and grows near it.
-    for (let j = 1; j <= 10; j++) {
-      const [tx, ty] = at(u - j * 0.007);
-      this.glyph(".", tx, ty, pal.warm, (1 - j / 11) * 0.5);
+    const dust = Math.round(10 / gr.k);
+    for (let j = 1; j <= dust; j++) {
+      const [tx, ty] = at(u - j * 0.007 * gr.k);
+      this.glyph(".", tx, ty, pal.warm, (1 - j / (dust + 1)) * 0.5);
     }
-    const len = 14 + Math.round(heat * 16);
+    const len = Math.round((14 + heat * 16) / gr.k);
     const g = lineGlyph(dx, dy);
     for (let j = 1; j <= len; j++) {
-      this.glyph(g, x + (dx / dist) * j * 7, y + (dy / dist) * j * 7, mix(pal.cool, pal.orbit, j / len), (1 - j / (len + 1)) * (0.45 + heat * 0.4));
+      const q = j * 7 * gr.k;
+      this.glyph(g, x + (dx / dist) * q, y + (dy / dist) * q, mix(pal.cool, pal.orbit, j / len), (1 - j / (len + 1)) * (0.45 + heat * 0.4));
     }
     this.glyph("@", x, y, pal.star, 0.9);
   }
@@ -2064,12 +2230,27 @@ export class SkyEngine {
     const mlx = Math.cos(ma) * er * 2.45, mly = Math.sin(ma) * er * 2.45 * mk;
     const mx = pl.x + mlx * Math.cos(mt) - mly * Math.sin(mt), my = pl.y + mlx * Math.sin(mt) + mly * Math.cos(mt);
     const moonFront = Math.sin(ma) > 0;
+    // Behind Earth the moon is left out where they overlap, rather than showing through between Earth's glyphs.
+    const moonBehind = !moonFront && Math.hypot(mx - pl.x, my - pl.y) > er;
     this.use(DARK, 1);
     this.drawSats(false);
-    if (!moonFront && Math.hypot(mx - pl.x, my - pl.y) > er) this.drawMiniMoon(mx, my, er * 0.17);
-    this.drawEarth(er);
-    this.drawSats(true);
-    if (moonFront) this.drawMiniMoon(mx, my, er * 0.17);
+    if (this.gpu()) {
+      this.printed((p) => {
+        const alpha = this.layerAlpha();
+        // Lit from where Earth is, as drawMiniMoon has it.
+        const mini = () => p.moon({ x: mx, y: my, r: er * 0.17, alpha, light: norm([-0.78, -0.3, 0.55]), lib: [0, 0], lit: 1, glow: 0, hov: 0, bump: 0.6, halo: 0 });
+        if (moonBehind) mini();
+        p.earth({ x: pl.x, y: pl.y, r: er, alpha });
+        if (moonFront) mini();
+      });
+      this.drawSats(true);
+    } else {
+      if (moonBehind) this.drawMiniMoon(mx, my, er * 0.17);
+      this.drawEarth(er);
+      this.drawSats(true);
+      if (moonFront) this.drawMiniMoon(mx, my, er * 0.17);
+    }
+    this.drawStation();
     this.drawPings();
   }
 
@@ -2178,31 +2359,57 @@ export class SkyEngine {
 
   private drawSats(front: boolean) {
     const er = this.hero.r * 0.9;
-    this.ctx.font = `10px ${this.family}`;
+    const gr = this.grain(10);
+    const k = gr.k;
+    this.ctx.font = gr.font;
+    const wake = Math.round(6 / k);
     for (const s of this.sats) {
       const at = this.satPos(s);
       if (at.front !== front) continue;
       if (!front && Math.hypot(at.x - this.hero.x, at.y - this.hero.y) < er) continue;
       // A short dotted wake along its orbit.
-      for (let j = 1; j <= 6; j++) {
-        const p = this.satPos({ ...s, theta: s.theta - Math.sign(s.w) * j * 0.07 });
+      for (let j = 1; j <= wake; j++) {
+        const p = this.satPos({ ...s, theta: s.theta - Math.sign(s.w) * j * 0.07 * k });
         if (!p.front && Math.hypot(p.x - this.hero.x, p.y - this.hero.y) < er) continue;
-        this.glyph("·", p.x, p.y, EARTH_ATMO, 0.4 * (1 - j / 7));
+        this.glyph("·", p.x, p.y, EARTH_ATMO, 0.4 * (1 - j / (wake + 1)));
       }
-      this.glyph("-", at.x - 6, at.y, EARTH_SAT, 0.75);
-      this.glyph("-", at.x + 6, at.y, EARTH_SAT, 0.75);
+      this.glyph("-", at.x - 6 * k, at.y, EARTH_SAT, 0.75);
+      this.glyph("-", at.x + 6 * k, at.y, EARTH_SAT, 0.75);
       this.glyph("+", at.x, at.y, EARTH_SAT, 1);
       // A blinking beacon.
-      if ((this.time + s.seed) % 1.4 < 0.15) this.glyph(".", at.x, at.y - 7, [255, 96, 96], 1);
+      if ((this.time + s.seed) % 1.4 < 0.15) this.glyph(".", at.x, at.y - 7 * k, [255, 96, 96], 1);
     }
   }
 
+  /** The station: a steady bright point with a short dotted wake, fading in and out at the ends of its pass. */
+  private drawStation() {
+    const s = this.station;
+    if (!s) return;
+    const at = (u: number): [number, number] => {
+      const q = 1 - u;
+      return [q * q * s.p0[0] + 2 * q * u * s.p1[0] + u * u * s.p2[0], q * q * s.p0[1] + 2 * q * u * s.p1[1] + u * u * s.p2[1]];
+    };
+    const u = (this.time - s.start) / STATION_SECONDS;
+    const fade = smoothstep(0, 0.08, u) * (1 - smoothstep(0.92, 1, u));
+    const gr = this.grain();
+    this.ctx.font = gr.font;
+    const wake = Math.round(10 / gr.k);
+    for (let j = 1; j <= wake; j++) {
+      const [x, y] = at(u - j * 0.006 * gr.k);
+      this.glyph("·", x, y, EARTH_SAT, 0.5 * (1 - j / (wake + 1)) * fade);
+    }
+    const [x, y] = at(u);
+    this.glyph("+", x, y, [255, 246, 214], fade);
+  }
+
   private drawPings() {
-    this.ctx.font = `10px ${this.family}`;
+    const gr = this.grain(10);
+    this.ctx.font = gr.font;
+    const n = Math.round(14 / gr.k);
     for (const p of this.pings) {
       const r = 4 + p.age * 34;
-      for (let i = 0; i < 14; i++) {
-        const a = (i / 14) * TAU;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU;
         this.glyph("·", p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, EARTH_ATMO, (1 - p.age) * 0.9);
       }
     }
@@ -2230,11 +2437,15 @@ export class SkyEngine {
   private drawHero(scene: Scene) {
     if (scene === "night") {
       this.use(DARK, 1);
-      this.drawMoonGlow(1);
-      this.drawMoon(this.hero.x, this.hero.y, 1, DARK.orbit);
+      if (this.gpu()) this.printed((p) => this.printMoon(p, this.hero.x, this.hero.y, 1));
+      else {
+        this.drawMoonGlow(1);
+        this.drawMoon(this.hero.x, this.hero.y, 1, DARK.orbit);
+      }
     } else if (scene === "day") {
       this.use(LIGHT, 1);
-      this.drawSun(null, 1);
+      if (this.gpu()) this.printed((p) => this.printSun(p, null, 1, 0));
+      else this.drawSun(null, 1);
     } else {
       this.use(DARK, 1);
       this.drawEarthScene();
@@ -2272,11 +2483,21 @@ export class SkyEngine {
       ctx.fillRect(0, 0, w, h);
       this.matchSurfaces(sky);
     }
+    // Where the two discs are this moment, as the around() calls below move them: the backdrop hides behind both.
+    const { x: hx, y: hy, r: hr } = this.hero;
+    const discs = this.variant === "quiet" ? [] : [
+      { x: hx - 1.9 * hr * p, y: hy - 0.8 * hr * p, r: hr * (1 - 0.8 * p) },
+      { x: hx, y: hy + 1.1 * hr * (1 - p), r: hr * 0.9 * (0.35 + 0.65 * p) },
+    ];
     if (other === "day") {
       this.use(LIGHT, 1 - p);
+      this.printBackdrop("day", discs);
       this.drawStars("day");
       this.use(DARK, p * 0.75);
     } else {
+      // The Milky Way belongs to the night sky, so it goes as Earth comes up.
+      this.use(DARK, 1 - p);
+      this.printBackdrop("night", discs);
       this.use(DARK, 1 - p * 0.25);
     }
     this.drawStars("night");
@@ -2535,16 +2756,17 @@ export class SkyEngine {
     const day = this.scene === "day";
     this.use(day ? LIGHT : DARK, 1);
     const col = day ? LIGHT.warm : this.scene === "earth" ? EARTH_ATMO : DARK.warm;
-    this.ctx.font = `${clamp(pl.font + 2, 8, 13)}px ${this.family}`;
+    const gr = this.grain(clamp(pl.font + 2, 8, 13));
+    this.ctx.font = gr.font;
     const r = pl.r * (1.14 + 0.02 * Math.sin(this.time * 24) * k);
-    const n = Math.round((pl.r * TAU) / 9);
+    const n = Math.round((pl.r * TAU) / (9 * gr.k));
     for (let i = 0; i < n && i / n <= k; i++) {
       const a = -Math.PI / 2 + (i / n) * TAU;
       this.glyph(i % 4 === 0 ? "+" : "·", pl.x + Math.cos(a) * r, pl.y + Math.sin(a) * r, col, 0.4 + 0.6 * k);
     }
     if (k > 0.5) {
       const beat = Math.floor(this.time * 12);
-      for (let j = 0; j < Math.round((k - 0.5) * 20); j++) {
+      for (let j = 0; j < Math.round(((k - 0.5) * 20) / gr.k); j++) {
         const a = hash(j, beat, 5) * TAU, rr = pl.r * (1.02 + hash(j, beat, 6) * 0.3 * k);
         this.glyph(hash(j, beat, 7) < 0.5 ? "'" : "*", pl.x + Math.cos(a) * rr, pl.y + Math.sin(a) * rr, col, k);
       }
@@ -2668,7 +2890,9 @@ export class SkyEngine {
     const pal = this.palette;
     const pl = this.hero;
     const tick = Math.floor(this.time * 14);
-    this.ctx.font = `${FLARE_FONT}px ${this.family}`;
+    const gr = this.grain(FLARE_FONT);
+    this.ctx.font = gr.font;
+    const glyphW = FLARE_FONT * gr.k * 0.62;
     for (const f of this.flares) {
       const grow = ease(clamp(f.age / FLARE_GROW, 0, 1));
       // After it peaks the loop keeps lifting a little as it fades, as if breaking away from the sun.
@@ -2677,7 +2901,7 @@ export class SkyEngine {
       const crown = this.flarePoint(f, 0.5, lift);
       const len = Math.hypot(crown.x - pl.x, crown.y - pl.y) * 2.6;
       // Solid even at full stretch, with a limit so mashed clicks can't draw thousands of glyphs.
-      const n = clamp(Math.round(len / (FLARE_FONT * 0.62)), 18, 120);
+      const n = clamp(Math.round(len / glyphW), 18, Math.round(120 / gr.k));
       for (let i = 0; i <= n; i++) {
         const t = i / n;
         // Both legs rise from the surface together and meet at the crown.
@@ -2695,7 +2919,7 @@ export class SkyEngine {
         const ox = nx / nl, oy = ny / nl;
         this.glyph(g, a.x, a.y, mix(INK_LIMB, pal.warm, 0.35 + heat * 0.65), fade);
         // Strands either side give the loop its body: one hot and gold, one dark. They swell toward the crown.
-        const wide = (5 + heat * 5) * f.thick * (0.7 + 0.6 * noise(t * 7, f.seed % 79, 74));
+        const wide = (5 + heat * 5) * gr.k * f.thick * (0.7 + 0.6 * noise(t * 7, f.seed % 79, 74));
         this.glyph(roll > 0.5 ? "*" : "~", a.x + ox * wide, a.y + oy * wide, mix(pal.warm, INK_CORE, heat), 0.9 * fade);
         if (i % 2 === 0) this.glyph(roll > 0.5 ? "~" : "'", a.x - ox * wide, a.y - oy * wide, INK_LIMB, 0.85 * fade);
       }
@@ -2714,10 +2938,11 @@ export class SkyEngine {
           dir = Math.atan2(next.y - y, next.x - x) + (td.side * Math.PI) / 2;
         }
         const out = Math.min(1, f.age / (td.ray !== undefined ? FLARE_GROW : 0.9));
-        const stride = Math.max(9, td.len / 45);
+        const stride = Math.max(9, td.len / 45) * gr.k;
         const steps = Math.ceil((td.len * out) / stride);
         for (let j = 0; j < steps; j++) {
-          dir += td.curl + (noise(j * 0.5 + td.len, this.time * f.churn + f.seed % 71, 75) - 0.5) * (td.ray !== undefined ? 0.34 : 0.7);
+          // Shorter strides bend less each, so the tendril keeps its shape.
+          dir += (td.curl + (noise(j * 0.5 * gr.k + td.len, this.time * f.churn + f.seed % 71, 75) - 0.5) * (td.ray !== undefined ? 0.34 : 0.7)) * gr.k;
           x += Math.cos(dir) * stride;
           y += Math.sin(dir) * stride;
           this.glyph(j % 3 === 2 ? "*" : lineGlyph(Math.cos(dir), Math.sin(dir)), x, y, mix(pal.warm, INK_LIMB, j / (steps + 1)), (1 - j / (steps + 1)) * 0.9 * fade);
@@ -2727,7 +2952,7 @@ export class SkyEngine {
     for (const s of this.shocks) {
       const k = s.age / SHOCK_LIFE;
       const rad = s.reach * (1 - (1 - k) ** 3);
-      const dots = clamp(Math.round((TAU * rad) / 12), 10, 70);
+      const dots = clamp(Math.round((TAU * rad) / (12 * gr.k)), 10, Math.round(70 / gr.k));
       const a0 = (1 - k) ** 1.1;
       for (let i = 0; i < dots; i++) {
         const a = (i / dots) * TAU;
