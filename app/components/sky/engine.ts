@@ -1171,11 +1171,13 @@ export class SkyEngine {
       this.use(DARK, 0.75);
       this.drawStars("earth");
       if (hero) this.drawEarthScene();
+      else this.drawCornerBody("earth");
       if (full) this.drawDrifter();
     } else if (this.scene === "night") {
       this.use(DARK, 1);
       this.printBackdrop("night", hero ? [{ ...this.moonAt, r: this.hero.r }] : []);
       this.drawStars("night");
+      if (!hero) this.drawCornerBody("moon");
       if (full) this.drawPlanets();
       if (hero) {
         this.both((p) => this.printMoon(p, this.moonAt.x, this.moonAt.y, 1), () => {
@@ -1902,6 +1904,31 @@ export class SkyEngine {
       x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil, flash: 0, foot: 0,
       ink: 1, rays: 1, rings: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
     }), () => this.drawPlateLight(cx, cy, r));
+  }
+
+  /**
+   * Inner pages by night and at twilight: the moon or Earth looks in from the top right, as the sun's light does by
+   * day. Smaller than the sun's corner, mostly off the page and faint, so it never competes with what's written.
+   */
+  private drawCornerBody(kind: "moon" | "earth") {
+    // Phones and tablets keep the guestbook light in the top right (globals.css), so the body takes the top left there,
+    // a little smaller to stay clear of the nav.
+    const left = this.w < 1024;
+    const r = Math.min(this.w, this.h) * (left ? 0.17 : 0.22);
+    const cx = left ? r * 0.2 : this.w - r * 0.2, cy = -r * 0.2;
+    this.both((p) => {
+      const alpha = this.layerAlpha() * 0.4;
+      if (kind === "moon") p.moon({ x: cx, y: cy, r, alpha, light: this.moonLight(), lib: [0, 0], lit: 1, glow: 0.4, hov: 0, bump: 1.1, halo: 0 });
+      else p.earth({ x: cx, y: cy, r, alpha });
+    }, () => {
+      // Without the GPU, only its edge in dots: drawing the whole body would cost a CPU more than a corner is worth.
+      this.ctx.font = `10px ${this.family}`;
+      for (let i = 0; i <= 14; i++) {
+        // The quarter of its edge that faces into the page.
+        const a = (left ? 0 : Math.PI / 2) + (i / 14) * (Math.PI / 2);
+        this.glyph("·", cx + Math.cos(a) * r, cy + Math.sin(a) * r, this.palette.orbit, 0.4);
+      }
+    });
   }
 
   /** The plate corner's rays, rim and rings, drawn on the canvas. */

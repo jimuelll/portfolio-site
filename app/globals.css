@@ -318,7 +318,8 @@ button { font: inherit; color: inherit; }
   height: 100%;
   display: flex;
   align-items: flex-end;
-  padding: 0 clamp(32px, 7vw - 40px, 120px) clamp(104px, 12vh, 140px);
+  /* Lower now the guestbook light lives bottom right, not beneath the label. */
+  padding: 0 clamp(32px, 7vw - 40px, 120px) clamp(48px, 7vh, 88px);
   pointer-events: none;
 }
 .wall-label {
@@ -384,8 +385,9 @@ button { font: inherit; color: inherit; }
 .sky-stats {
   position: absolute;
   z-index: 20;
+  /* Top right, level with the nav: the foot's right corner belongs to the guestbook light. */
   right: 32px;
-  bottom: 32px;
+  top: 28px;
   font-size: 13px;
   line-height: 1.6;
   text-align: right;
@@ -663,14 +665,14 @@ button { font: inherit; color: inherit; }
 .visitor-mark { color: var(--accent); opacity: 0.8; }
 .sky-stats .visitor-line { display: block; color: var(--muted); }
 
-/* The guestbook light. Mounted once in the root layout, so it follows every page. Bottom-left on the home sky,
-   beneath the label; bottom-right inside, clear of the about rail; top-right on phone homes, where the label owns the
-   foot. Every colour is a theme token, so it reads in night, day, twilight and deep alike. */
+/* The guestbook light. Mounted once in the root layout, so it follows every page. Bottom-right on every page, where
+   nothing else lives (the home label and the about rail own the bottom left); top-right on phones, where the label
+   owns the foot. Every colour is a theme token, so it reads in night, day, twilight and deep alike. */
 .guest-orb {
   position: fixed;
   z-index: 40;
   bottom: 28px;
-  left: clamp(24px, 7vw - 40px, 120px);
+  right: clamp(24px, 7vw - 40px, 120px);
   font-size: 12px;
   transition: opacity 0.6s ease;
   -webkit-user-select: none;
@@ -681,6 +683,8 @@ button { font: inherit; color: inherit; }
 
 .orb-btn {
   display: flex;
+  /* The invitation slides out to the left of the light, into the page. */
+  flex-direction: row-reverse;
   align-items: center;
   gap: 14px;
   padding: 6px;
@@ -800,8 +804,8 @@ button { font: inherit; color: inherit; }
 .orb-panel {
   position: absolute;
   bottom: calc(100% + 14px);
-  left: -6px;
-  transform-origin: bottom left;
+  right: -6px;
+  transform-origin: bottom right;
   display: flex;
   flex-direction: column;
   width: min(23rem, calc(100vw - 32px));
