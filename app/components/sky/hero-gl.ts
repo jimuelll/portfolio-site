@@ -684,7 +684,9 @@ export class HeroPrinter {
 
   /** glyphs: the engine's ramp, then | / - \ ~ · *. land: its 128 × 64 bitmap, one bit per cell. */
   constructor(private glyphs: string, private family: string, landBits: Uint8Array) {
-    const gl = this.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
+    // Not on a software renderer (no GPU, or acceleration off): there copying each frame out costs ~300 ms, and the
+    // canvas draws the hero far faster.
+    const gl = this.canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false, failIfMajorPerformanceCaveat: true });
     if (!gl) throw new Error("no webgl");
     this.gl = gl;
     this.canvas.addEventListener("webglcontextlost", (e) => {
