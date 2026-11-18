@@ -1,20 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
-import { cv } from "../lib/portfolio";
+import { CvViewer } from "./cv-viewer";
 import { DELIVER_EVENT, DELIVER_SECONDS } from "./sky/sky-canvas";
 
 type Stage = "ready" | "incoming" | "caught";
 
 /**
  * The CV receiver on the home page's label. Pressing it asks the sky to deliver: a shooting star, a
- * sunbeam or a satellite's pod comes down onto it, and on arrival the download starts (or, until
- * there's a PDF, it says the CV is landing soon).
+ * sunbeam or a satellite's pod comes down onto it, and on arrival the CV opens in the viewer.
  */
 export function CvReceiver() {
   const [stage, setStage] = useState<Stage>("ready");
   const timers = useRef<number[]>([]);
-  const download = useRef<HTMLAnchorElement>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const list = timers.current;
@@ -38,7 +37,7 @@ export function CvReceiver() {
       timers.current.push(window.setTimeout(fn, ms));
     at(reduced ? 0 : DELIVER_SECONDS * 1000, () => {
       setStage("caught");
-      download.current?.click();
+      setOpen(true);
     });
     at((reduced ? 0 : DELIVER_SECONDS * 1000) + 3200, () => setStage("ready"));
   }
@@ -47,10 +46,8 @@ export function CvReceiver() {
     stage === "incoming"
       ? "✦ incoming…"
       : stage === "caught"
-        ? cv.href
-          ? "✦ cv received ↓"
-          : "✦ cv landing soon"
-        : "cv ↓";
+        ? "✦ cv received"
+        : "view cv ✦";
   return (
     <>
       <button
@@ -58,20 +55,11 @@ export function CvReceiver() {
         className={`cv-receiver ${stage}`}
         onClick={receive}
         data-sky-ignore
-        aria-label="Receive CV"
+        aria-label="View CV"
       >
         <span aria-live="polite">{label}</span>
       </button>
-      {cv.href && (
-        <a
-          ref={download}
-          href={cv.href}
-          download
-          hidden
-          tabIndex={-1}
-          aria-hidden="true"
-        />
-      )}
+      <CvViewer open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

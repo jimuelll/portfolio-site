@@ -1,28 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { cv } from "../lib/portfolio";
+import { useState } from "react";
+import { CvViewer } from "./cv-viewer";
 
-/** The /about download button, pinned with the contact links. Until there's a PDF it says the CV is landing soon. */
+/** The /about CV button, pinned with the contact links: opens the viewer. */
 export function CvButton() {
-  const [pressed, setPressed] = useState(false);
-  const timer = useRef(0);
-
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-
-  if (cv.href) {
-    return <a className="cv-btn" href={cv.href} download>download cv ↓</a>;
-  }
-
-  function press() {
-    setPressed(true);
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => setPressed(false), 3000);
-  }
-
+  const [open, setOpen] = useState(false);
   return (
-    <button type="button" className={`cv-btn ${pressed ? "sent" : ""}`} onClick={press}>
-      <span aria-live="polite">{pressed ? "✦ cv landing soon" : "download cv ↓"}</span>
-    </button>
+    <>
+      <button type="button" className="cv-btn" onClick={() => setOpen(true)} aria-haspopup="dialog">view cv ✦</button>
+      <CvViewer open={open} onClose={() => setOpen(false)} />
+    </>
   );
 }

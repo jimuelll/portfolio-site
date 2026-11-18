@@ -108,10 +108,11 @@ export const projects: Project[] = [
 ];
 
 /**
- * The CV: the receiver under the moon on the home page, and the download button on /about. With no file yet
- * both say it's landing soon. Put the PDF in public/ and set its path here (e.g. "/jimuel-jean-untalan-cv.pdf").
+ * The CV: the receiver under the moon on the home page, and the button on /about, both open the viewer.
+ * `image` is the page rendered from the PDF (200 dpi), so the viewer reads the same on phones that can't show PDFs inline;
+ * re-render it whenever the PDF changes.
  */
-export const cv: { href: string | null } = { href: null };
+export const cv = { href: "/jimuel-jean-untalan-cv.pdf", image: "/jimuel-jean-untalan-cv.jpg" };
 
 /** The avatar on /about, with an animation that plays when pressed. */
 export const profile = {
