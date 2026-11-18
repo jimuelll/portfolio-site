@@ -46,21 +46,28 @@ export function ProjectDossier() {
               aria-labelledby={`${project.slug}-title`}
               data-open={isOpen || undefined}
             >
-              {/* What it is comes first, in one line, so a skim gets the point before the screenshot. */}
+              {/* What kind of thing it is, its name, what it does in one line, and the way in, all before the screenshots,
+                  so a skim gets the point and the link without scrolling past them. */}
               <div className="project-head">
                 <div className="section-head">
+                  <p className="project-kind">{project.kind}</p>
                   <h2 id={`${project.slug}-title`}>{project.name}</h2>
                 </div>
                 <p className="about-pitch">{project.short}</p>
-                <ul className="project-meta">
-                  <li>{project.kind}</li>
-                  {project.facts?.map((f) => <li key={f}>{f}</li>)}
-                </ul>
+                {project.facts && (
+                  <ul className="project-meta">
+                    {project.facts.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                )}
+                <p className="project-links">
+                  {project.links.map((l) => (
+                    <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer">
+                      {l.label} <span aria-hidden="true">↗</span>
+                    </a>
+                  ))}
+                </p>
               </div>
               {project.gallery && <ProjectGallery shots={project.gallery} />}
-              <p className="project-links">
-                {project.links.map((l) => <a key={l.href} className="ink-link" href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}
-              </p>
               {/* The long parts wait behind "more details"; the first two highlights always show, since they're the best of it. */}
               <p className="about-pitch project-extra" id={`${project.slug}-summary`}>{project.summary}</p>
               {project.highlights && (
@@ -84,7 +91,7 @@ export function ProjectDossier() {
                 aria-controls={`${project.slug}-summary ${project.slug}-highlights ${project.slug}-more`}
                 onClick={() => toggle(project.slug)}
               >
-                {isOpen ? "fewer details ↑" : "more details ↓"}
+                {isOpen ? "view less ↑" : "view more ↓"}
               </button>
             </section>
           );
