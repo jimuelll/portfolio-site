@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
-import { SkyCanvas } from "./sky/sky-canvas";
 import { TopNav } from "./top-nav";
 import { VisitorCount } from "./visitor-count";
 
-/** Interior pages: a quieter, fixed starfield behind ordinary scrolling content. */
+/** Interior pages: ordinary scrolling content over the quieter, fixed starfield (the layout's sky, sky-canvas.tsx). */
 export function PageShell({ children, wide = false, centered = false }: { children: ReactNode; wide?: boolean; centered?: boolean }) {
   const width = `${wide ? "wide" : ""} ${centered ? "centered" : ""}`;
   return (
     <div className="page">
-      <SkyCanvas variant="quiet" className="sky-fixed" />
       <TopNav />
       <main className={`page-main gutter ${width}`}>{children}</main>
       <footer className={`page-footer gutter ${width}`}>

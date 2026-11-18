@@ -18,7 +18,7 @@ export interface MoonLayer extends Layer { light: V3; lib: [number, number]; lit
  * x, y, r: the sun, which the field comes off; w, h: the page; masks: discs in front of it (moon, sun, Earth) where
  * it doesn't show; the rest, how much of each shows.
  */
-export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; field: number; paper: number }
+export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; field: number; paper: number; pan: { x: number; y: number } }
 export interface SunLayer extends Layer {
   /** false: only the light round it, for the corner of the plate the inner pages show. */
   disc: boolean;
@@ -50,7 +50,7 @@ float vnoise(vec3 x) {
   return mix(mix(mix(h1(i), h1(i + vec3(1,0,0)), f.x), mix(h1(i + vec3(0,1,0)), h1(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(h1(i + vec3(0,0,1)), h1(i + vec3(1,0,1)), f.x), mix(h1(i + vec3(0,1,1)), h1(i + vec3(1,1,1)), f.x), f.y), f.z);
 }
-float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { if (i >= uLoop) break; s += a * vnoise(p); p = p * 2.03 + 1.7; a *= 0.5; } return s; }
 `;
 
 const SHADE = `
@@ -65,7 +65,10 @@ uniform vec4 uSpot[${MAX_SPOTS}];
 uniform float uSpotK[${MAX_SPOTS}];
 uniform sampler2D uLand;
 uniform float uMilky, uNebula;
-uniform vec2 uScreen;
+uniform vec2 uScreen, uPan;
+// Always 99: a loop bound the compiler can't see, so it keeps the loop rather than copying its body out each time.
+// On Windows (Direct3D) every copied height() made the moon's shader take seconds to compile.
+uniform int uLoop;
 ${NOISE}
 
 // Craters at one scale: bowl, raised rim, a skirt of ejecta. Only the 2x2x2 cells nearest the point can reach it.
@@ -88,7 +91,13 @@ float craters(vec3 p, float f, float seed, float dens) {
   return h;
 }
 float height(vec3 s, float smoothness) {
-  float h = craters(s, 3.5, 1.0, 0.55) + craters(s, 9.0, 7.0, 0.5) + craters(s, 22.0, 13.0, 0.42) + craters(s, 48.0, 23.0, 0.35) * 0.8;
+  // Four scales (frequency, seed, density, weight), through one craters().
+  float h = 0.0;
+  for (int k = 0; k < 4; k++) {
+    if (k >= uLoop) break;
+    vec4 c = k == 0 ? vec4(3.5, 1.0, 0.55, 1.0) : k == 1 ? vec4(9.0, 7.0, 0.5, 1.0) : k == 2 ? vec4(22.0, 13.0, 0.42, 1.0) : vec4(48.0, 23.0, 0.35, 0.8);
+    h += craters(s, c.x, c.y, c.z) * c.w;
+  }
   return h * (1.0 - 0.55 * smoothness);
 }
 // Libration, as drawMoon's toSurface.
@@ -105,9 +114,27 @@ vec4 moon(vec2 n2) {
   vec3 Ls = lib(uL), Vs = lib(vec3(0.0, 0.0, 1.0));
   float mare = smoothstep(0.47, 0.58, fbm(s * 1.3 + 3.0) * 0.75 + vnoise(s * 3.1) * 0.25);
   vec3 t1 = normalize(cross(s, vec3(0.0, 1.0, 0.001))), t2 = cross(s, t1);
-  float e = 0.0025, h = height(s, mare);
-  float hx = (height(normalize(s + t1 * e), mare) - h) / e;
-  float hy = (height(normalize(s + t2 * e), mare) - h) / e;
+
+  // Cast shadows: walk toward the sun along the ground; any rise steeper than the sun's elevation blocks it.
+  float geo = dot(s, Ls);
+  vec3 Lt = Ls - s * geo;
+  float ltl = length(Lt);
+  float sunUp = geo / max(ltl, 1e-3);
+  bool casts = geo > -0.14 && geo < 0.6 && ltl > 1e-3;
+  Lt /= max(ltl, 1e-3);
+  // Every height this point needs, through one height(): the point and two neighbours for its slope, then the steps
+  // of the shadow walk.
+  float e = 0.0025, h = 0.0, hx = 0.0, hy = 0.0, shadow = 1.0, dist = 0.0, stepLen = 0.008;
+  for (int j = 0; j < 10; j++) {
+    if (j >= uLoop || (j >= 3 && !casts)) break;
+    if (j >= 3) { dist += stepLen; stepLen *= 1.45; }
+    vec3 at = j == 0 ? s : j == 1 ? normalize(s + t1 * e) : j == 2 ? normalize(s + t2 * e) : normalize(s + Lt * dist);
+    float hj = height(at, mare);
+    if (j == 0) h = hj;
+    else if (j == 1) hx = (hj - h) / e;
+    else if (j == 2) hy = (hj - h) / e;
+    else shadow = min(shadow, smoothstep(-0.03, 0.03, sunUp - (hj - h) * uBump / dist));
+  }
   vec3 N = normalize(s - (t1 * hx + t2 * hy) * uBump);
 
   // A young crater's bright rays.
@@ -116,23 +143,6 @@ vec4 moon(vec2 n2) {
   vec3 ta = normalize(cross(T, vec3(0.0, 0.0, 1.0))), tb = cross(T, ta);
   float ang = atan(dot(s, tb), dot(s, ta));
   float rays = smoothstep(0.55, 0.9, vnoise(vec3(cos(ang), sin(ang), 0.0) * 13.0)) * exp(-far * 2.4) * step(0.035, far);
-
-  // Cast shadows: walk toward the sun along the ground; any rise steeper than the sun's elevation blocks it.
-  float geo = dot(s, Ls);
-  vec3 Lt = Ls - s * geo;
-  float ltl = length(Lt);
-  float sunUp = geo / max(ltl, 1e-3);
-  float shadow = 1.0;
-  if (geo > -0.14 && geo < 0.6 && ltl > 1e-3) {
-    Lt /= ltl;
-    float dist = 0.0, stepLen = 0.008;
-    for (int k = 0; k < 7; k++) {
-      dist += stepLen;
-      stepLen *= 1.45;
-      float rise = (height(normalize(s + Lt * dist), mare) - h) * uBump / dist;
-      shadow = min(shadow, smoothstep(-0.03, 0.03, sunUp - rise));
-    }
-  }
 
   float alb = mix(1.0, 0.5, mare) * (0.88 + (fbm(s * 9.0) - 0.5) * 0.4 + (vnoise(s * 40.0) - 0.5) * 0.12) + rays * 0.4;
   float mu0 = dot(N, Ls), mu = max(dot(N, Vs), 0.05);
@@ -302,8 +312,13 @@ void main() {
   // Each texel is a quarter of a glyph cell, so the print pass's linear sample averages four looks per cell.
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) * uCell * 0.5;
   vec2 n2 = (p - uC) / uRad;
-  gl_FragColor = uKind < 0.5 ? moon(n2) : uKind < 1.5 ? sun(n2) : uKind < 2.5 ? earth(n2) : backdrop(p);
+  // A page change pans the backdrop (uPan, CSS px): it's worked out where that part of the sky now is, so it never runs out.
+  // One body per program (SHADE_BODIES fills this in), so each compiles on its own.
+  gl_FragColor = BODY;
 }`;
+
+/** The shade pass's bodies, by layer kind (moon 0, sun 1, Earth 2, backdrop 4): each its own program. */
+const SHADE_BODIES: [number, string][] = [[0, "moon(n2)"], [1, "sun(n2)"], [2, "earth(n2)"], [4, "backdrop(p - uPan)"]];
 
 const PRINT = `
 precision highp float;
@@ -317,7 +332,7 @@ uniform vec4 uDim[${MAX_DIMS}];
 uniform float uDimN, uDimHard, uShimmer;
 uniform vec2 uPtr;
 uniform float uMilky, uNebula, uField, uPaper, uHaloK;
-uniform vec2 uScreen;
+uniform vec2 uScreen, uPan;
 uniform vec4 uMask[${MAX_MASKS}];
 const float TAU = 6.2831853;
 const vec3 INK_LIMB = vec3(108.0, 26.0, 20.0) / 255.0, INK_MID = vec3(176.0, 54.0, 22.0) / 255.0, INK_CORE = vec3(196.0, 104.0, 16.0) / 255.0;
@@ -520,19 +535,21 @@ vec4 backdrop(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
   if (uMilky + uNebula > 0.01) {
     vec4 c = S(ci);
     float L = luma(c.rgb);
+    // Its dots are scattered by sky cell, not screen cell, so they travel with the band while it pans.
+    vec2 sc = ci - floor(uPan * uRatio / uCellD + 0.5);
     // The glow as a scatter of faint dots, thicker where it's brighter: a cloud of stars, not a grid of cells.
-    if (L > 0.008 && hash(ci + 51.0) < clamp(L * 7.0, 0.0, 0.8)) {
+    if (L > 0.008 && hash(sc + 51.0) < clamp(L * 7.0, 0.0, 0.8)) {
       float gi = L > 0.08 ? 2.0 : L > 0.04 ? 15.0 : 1.0;
       vec3 tint = clamp(c.rgb / max(L, 0.001) * 0.55, 0.0, 1.0);
-      float tw = 0.75 + 0.25 * sin(uTime * (0.5 + hash(ci + 52.0) * 2.0) + hash(ci + 53.0) * TAU);
+      float tw = 0.75 + 0.25 * sin(uTime * (0.5 + hash(sc + 52.0) * 2.0) + hash(sc + 53.0) * TAU);
       o = ink(gi, f, tint, clamp(0.25 + L * 4.0, 0.0, 0.7) * tw);
     }
     // The band's own stars, thick where it is, each twinkling on its own.
-    float h = hash(ci + 31.0);
+    float h = hash(sc + 31.0);
     if (h < c.a * 0.22) {
       float tw = 0.55 + 0.45 * sin(uTime * (0.7 + h * 9.0) + h * 80.0);
       float si = h < c.a * 0.012 ? 16.0 : h < c.a * 0.06 ? 15.0 : 1.0;
-      o = over(ink(si, f, mix(vec3(0.72, 0.8, 1.0), vec3(1.0, 0.95, 0.85), hash(ci + 32.0)), (0.35 + 0.5 * tw) * (0.4 + 0.6 * c.a)), o);
+      o = over(ink(si, f, mix(vec3(0.72, 0.8, 1.0), vec3(1.0, 0.95, 0.85), hash(sc + 32.0)), (0.35 + 0.5 * tw) * (0.4 + 0.6 * c.a)), o);
     }
   }
   if (uField > 0.01) {
@@ -639,7 +656,10 @@ export class HeroPrinter {
   /** The shaders have finished compiling and linked (check() finds out); until then the engine draws the hero itself. */
   ready = false;
   private gl: WebGLRenderingContext;
-  private shade: { p: WebGLProgram; u: Uniforms };
+  /** The shade pass, one program per body (by layer kind), so each compiles alone and in parallel. */
+  private shades = new Map<number, { p: WebGLProgram; u: Uniforms }>();
+  /** Bodies not finished yet: not started till the first ones are in, then not checked till they're used. */
+  private pending = new Set<number>();
   private print: { p: WebGLProgram; u: Uniforms };
   /** Lets check() ask whether compiling is done without waiting for it. Without it, the first check waits. */
   private parallel: { COMPLETION_STATUS_KHR: number } | null;
@@ -674,7 +694,14 @@ export class HeroPrinter {
     // Compiling these takes a phone's GPU a good part of a second. Started here and not waited on, so the page's first
     // frames don't wait for it.
     this.parallel = gl.getExtension("KHR_parallel_shader_compile");
-    this.shade = this.program(SHADE);
+    // First only the bodies the page's sky shows (night: moon and backdrop), so they don't queue behind the others;
+    // check() starts the rest once these are in.
+    const theme = document.documentElement.dataset.theme;
+    const now = theme === "light" ? [1, 4] : theme === "twilight" ? [2] : theme === "deep" ? [] : [0, 4];
+    for (const [kind, body] of SHADE_BODIES) {
+      if (now.includes(kind)) this.shades.set(kind, this.program(SHADE.replace("BODY", body)));
+      else this.pending.add(kind);
+    }
     this.print = this.program(PRINT);
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -719,28 +746,52 @@ export class HeroPrinter {
    */
   check() {
     if (this.ready || this.lost) return this.ready;
+    const first = [this.print, ...[...this.shades].filter(([k]) => !this.pending.has(k)).map(([, s]) => s)];
+    if (!first.every((prog) => this.done(prog.p))) return false;
+    if (!first.every((prog) => this.finish(prog))) return false;
+    this.ready = true;
+    // Now the bodies this sky doesn't show yet, so a later change of sky finds them ready.
+    for (const k of this.pending) this.shades.set(k, this.program(SHADE.replace("BODY", SHADE_BODIES.find(([kind]) => kind === k)![1])));
+    return true;
+  }
+
+  private done(p: WebGLProgram) {
+    return !this.parallel || this.gl.getProgramParameter(p, this.parallel.COMPLETION_STATUS_KHR);
+  }
+
+  /** Once compiled: whether it linked (if not, the printer is lost), and where its uniforms are. Waits if it isn't done. */
+  private finish(prog: { p: WebGLProgram; u: Uniforms }) {
     const gl = this.gl;
-    const done = (p: WebGLProgram) => !this.parallel || gl.getProgramParameter(p, this.parallel.COMPLETION_STATUS_KHR);
-    if (!done(this.shade.p) || !done(this.print.p)) return false;
-    for (const prog of [this.shade, this.print]) {
-      if (!gl.getProgramParameter(prog.p, gl.LINK_STATUS)) {
-        console.warn("sky: hero shaders failed, drawing on the canvas instead", gl.getProgramInfoLog(prog.p));
-        this.lost = true;
-        return false;
-      }
-      const n = gl.getProgramParameter(prog.p, gl.ACTIVE_UNIFORMS) as number;
-      for (let i = 0; i < n; i++) {
-        // Arrays report as "name[0]"; set them through the bare name.
-        const name = gl.getActiveUniform(prog.p, i)!.name.replace("[0]", "");
-        prog.u[name] = gl.getUniformLocation(prog.p, name)!;
-      }
+    if (!gl.getProgramParameter(prog.p, gl.LINK_STATUS)) {
+      console.warn("sky: hero shaders failed, drawing on the canvas instead", gl.getProgramInfoLog(prog.p));
+      this.lost = true;
+      return false;
     }
+    const n = gl.getProgramParameter(prog.p, gl.ACTIVE_UNIFORMS) as number;
+    for (let i = 0; i < n; i++) {
+      // Arrays report as "name[0]"; set them through the bare name.
+      const name = gl.getActiveUniform(prog.p, i)!.name.replace("[0]", "");
+      prog.u[name] = gl.getUniformLocation(prog.p, name)!;
+    }
+    gl.useProgram(prog.p);
     // The land map is on unit 2 for good. Left at its default (unit 0) the shade pass's sampler would point at its own
     // target, which WebGL refuses to draw.
-    gl.useProgram(this.shade.p);
-    gl.uniform1i(this.shade.u.uLand, 2);
-    this.ready = true;
+    if (prog.u.uLand) gl.uniform1i(prog.u.uLand, 2);
+    if (prog.u.uLoop) gl.uniform1i(prog.u.uLoop, 99);
     return true;
+  }
+
+  /**
+   * A body's program. One compiled after the first ones is finished on first use: by then it's long done, unless the
+   * sky changed within a second or two of loading, when this waits for it once.
+   */
+  private shadeFor(kind: number) {
+    const prog = this.shades.get(kind)!;
+    if (this.pending.has(kind)) {
+      this.pending.delete(kind);
+      if (!this.finish(prog)) return null;
+    }
+    return prog;
   }
 
   private texture(filter: number) {
@@ -757,6 +808,9 @@ export class HeroPrinter {
   /** w × h in CSS px at the engine's pixel ratio; cell is the glyph width in CSS px. */
   resize(w: number, h: number, ratio: number, cell: number) {
     const gl = this.gl;
+    // The same size again (the next page's sky): nothing to rebuild.
+    const W = Math.max(1, Math.round(w * ratio)), H = Math.max(1, Math.round(h * ratio));
+    if (this.sized && W === this.W && H === this.H && ratio === this.ratio && Math.max(2, Math.round(cell * ratio)) === this.cw) return;
     this.ratio = ratio;
     this.W = this.canvas.width = Math.max(1, Math.round(w * ratio));
     this.H = this.canvas.height = Math.max(1, Math.round(h * ratio));
@@ -827,7 +881,10 @@ export class HeroPrinter {
 
   /** The sky behind everything; the strengths pick what shows (night: milky, nebula; day: field, paper). */
   backdrop(b: BackdropLayer) {
-    const screen = (u: Uniforms) => this.gl.uniform2f(u.uScreen, b.w, b.h);
+    const screen = (u: Uniforms) => {
+      this.gl.uniform2f(u.uScreen, b.w, b.h);
+      this.gl.uniform2f(u.uPan, b.pan.x, b.pan.y);
+    };
     const night = b.milky + b.nebula > 0.01;
     // Covers the whole page, since the band and the field cross it.
     this.layer(4, b, Math.hypot(b.w, b.h) * 1.1, !night ? null : (u) => {
@@ -915,8 +972,10 @@ export class HeroPrinter {
       gl.scissor(x0 * 2, (gh - y1) * 2, (x1 - x0) * 2, (y1 - y0) * 2);
       gl.disable(gl.BLEND);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.useProgram(this.shade.p);
-      const u = this.shade.u;
+      const prog = this.shadeFor(kind);
+      if (!prog) return;
+      const { p, u } = prog;
+      gl.useProgram(p);
       common(u);
       gl.uniform2f(u.uRes, gw * 2, gh * 2);
       gl.uniform2f(u.uCell, cw / ratio, ch / ratio);
@@ -961,7 +1020,7 @@ export class HeroPrinter {
     gl.deleteTexture(this.atlas);
     gl.deleteTexture(this.land);
     gl.deleteFramebuffer(this.fbo);
-    gl.deleteProgram(this.shade.p);
+    for (const { p } of this.shades.values()) gl.deleteProgram(p);
     gl.deleteProgram(this.print.p);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }

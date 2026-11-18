@@ -261,8 +261,9 @@ button { font: inherit; color: inherit; }
 
 /* ── sky canvas ──────────────────────────────────── */
 .sky-canvas { display: block; pointer-events: none; }
-.sky-fill { position: absolute; inset: 0; width: 100%; height: 100%; }
 .sky-fixed { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 0; }
+/* The home page is one screen tall (.home, 100dvh), and its sky matches it. */
+.sky-home { height: 100dvh; }
 
 /* What a clicked drifter is saying (sky/engine.ts places it each frame, sky/drifters.ts writes it). A solid card kin to
    the nav's pill, above the page's text, so it can always be read: the character's voice in the serif, then exactly
@@ -284,6 +285,26 @@ button { font: inherit; color: inherit; }
 .drifter-say .voice { display: block; font-family: var(--serif); font-size: 17px; line-height: 1.25; }
 .drifter-say .how { display: block; margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--accent); text-wrap: pretty; }
 .drifter-say .rest { visibility: hidden; }
+
+/* ── the loader (cold first visit to the sky) ─────── */
+/* Covers the home page while the hero's shaders compile; steps aside once sky/engine.ts sets data-sky-ready. Its words
+   only fade up after a beat, so a fast load sees nothing but the night easing open. Gone by itself after 4s, whatever. */
+.sky-loader {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-content: center; justify-items: center; gap: 14px;
+  background: var(--bg); color: var(--muted); font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em;
+  animation: loader-out 0.6s ease 4s forwards;
+}
+:root[data-sky-ready] .sky-loader { opacity: 0; visibility: hidden; transition: opacity 0.6s ease, visibility 0s 0.6s; }
+.sky-loader > * { margin: 0; animation: loader-in 0.4s ease 0.3s both; }
+.sky-loader-ramp { color: var(--accent); font-size: 18px; letter-spacing: 0.35em; white-space: pre; }
+.sky-loader-ramp span { animation: loader-scan 1.4s ease-in-out calc(var(--i) * 0.09s) infinite; opacity: 0.15; }
+@keyframes loader-in { from { opacity: 0; } }
+@keyframes loader-out { to { opacity: 0; visibility: hidden; } }
+@keyframes loader-scan { 30% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .sky-loader-ramp span { animation: none; opacity: 0.7; }
+}
 
 /* ── home ────────────────────────────────────────── */
 /* One screen at every size: the disc is the exhibit, and everything else is on a small label hung beside it. */

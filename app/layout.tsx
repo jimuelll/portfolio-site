@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Young_Serif } from "next/font/google";
 import localFont from "next/font/local";
 import { GuestOrb } from "./components/guest-orb";
+import { SkyCanvas } from "./components/sky/sky-canvas";
 import { SITE_NAME, siteOrigin, socialImage } from "./lib/seo";
 import "./globals.css";
 
@@ -101,12 +102,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         {/* Set the theme before first paint so the sky never flashes the wrong colour. Night is the default. */}
         <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem('sky-theme');document.documentElement.dataset.theme=t==='light'?'light':'dark'}catch(e){document.documentElement.dataset.theme='dark'}` }} />
+        {/* Without scripts the sky never loads, so its loader doesn't wait for it. */}
+        <noscript><style>{`.sky-loader{display:none}`}</style></noscript>
       </head>
       <body>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
+        <SkyCanvas />
         {children}
         <GuestOrb />
       </body>

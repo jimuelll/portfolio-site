@@ -167,6 +167,29 @@ function landMap() {
   if (!landBits) landBits = Uint8Array.from(atob(LAND), (c) => c.charCodeAt(0));
   return landBits;
 }
+/**
+ * One GPU printer for the whole visit: making one (a WebGL context and its shaders) costs a frozen moment, so pages
+ * borrow this one rather than each building their own. null: no WebGL here, and the canvas draws the hero.
+ */
+let shared: HeroPrinter | null | undefined;
+/** When the shared printer was made (ms), so a hero still waiting on its shaders can give up and draw on the canvas. */
+let sharedAt = 0;
+/** How long the hero waits, unseen, for the shaders before the canvas draws it instead. */
+// The shaders' compile on a desktop GPU through Direct3D (Windows) is about a second, and not every part is cached.
+const PRINT_WAIT_MS = 3000;
+function sharedPrinter(family: string) {
+  if (shared === undefined || shared?.lost) {
+    sharedAt = performance.now();
+    try {
+      shared = new HeroPrinter(`${RAMP}|/-\\~·*`, family, landMap());
+    } catch {
+      shared = null;
+    }
+  }
+  return shared;
+}
+// Start compiling as soon as this loads, alongside hydration, so the shaders are usually done before the first frame.
+if (typeof document !== "undefined" && document.body) sharedPrinter(getComputedStyle(document.body).fontFamily || "monospace");
 export function isLand(lon: number, lat: number) {
   const x = Math.floor((((lon / TAU + 0.5) % 1) + 1) % 1 * 128) % 128;
   const y = Math.min(63, Math.max(0, Math.floor((0.5 - lat / Math.PI) * 64)));
@@ -391,8 +414,7 @@ export class SkyEngine {
   private boxes: Box[] = [];
   private pointer = { x: -1e4, y: -1e4, active: false, sx: 0, sy: 0, lens: 0 };
   /** The moon by night and the sun by day share one place and one size, so one can eclipse the other. */
-  private hero = { x: 0, y: 0, r: 100, gm: 1, font: 12, cw: 7, ch: 12 };
-  /** Where the moon's disc is right now: on the hero, except while it slides during an eclipse. */
+  private hero = { x: 0, y: 0, r: 100, gm: 1, font: 12, cw: 7, ch: 12 };  /** Where the moon's disc is right now: on the hero, except while it slides during an eclipse. */
   private moonAt = { x: 0, y: 0 };
   private craters: Crater[] = [];
   private spots: Spot[] = [];
@@ -461,7 +483,11 @@ export class SkyEngine {
   private swallowUntil = 0;
   private reported = "";
   private reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-  private resizeObserver = new ResizeObserver(() => this.resize());
+  // It also fires once on observe, at the size resize() just took: redrawing then would cost a frame for nothing.
+  private resizeObserver = new ResizeObserver(() => {
+    const r = this.canvas.getBoundingClientRect();
+    if (r.width !== this.w || r.height !== this.h) this.resize();
+  });
   /** The page content the sky dims under, watched for changes in size. */
   private avoidObserver = new ResizeObserver(() => this.measure());
   private avoided: Element[] = [];
@@ -480,14 +506,11 @@ export class SkyEngine {
     // Canvas text can't read CSS variables, so take the resolved family from the page.
     this.family = getComputedStyle(canvas).fontFamily || "monospace";
     // No WebGL, or a shader the GPU won't take: the canvas draws the hero as it always has.
-    try {
-      this.printer = new HeroPrinter(`${RAMP}|/-\\~·*`, this.family, landMap());
-    } catch {
-      this.printer = null;
-    }
+    this.printer = sharedPrinter(this.family);
+    // Already compiled on an earlier page: printed from the first frame, with no fade in.
+    if (this.printer?.ready && !this.printer.lost) this.printIn = 1;
     this.seedSurfaces();
     this.readTheme();
-    this.started = true;
     this.resizeObserver.observe(canvas);
     this.intersectionObserver.observe(canvas);
     this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -512,7 +535,10 @@ export class SkyEngine {
       // top-nav.tsx clears the flag once the new page is in.
       if (document.documentElement.dataset.skyArrive && !this.reduced.matches) this.pass = { dir: "in", start: performance.now() / 1000 };
     }
-    this.resize();
+    // The first frame waits for the next animation frame (schedule), outside the page change's commit, so the two
+    // don't add up to one long stall. Not started till after, so measure() doesn't draw it here either.
+    this.resize(false);
+    this.started = true;
     this.schedule();
   }
 
@@ -540,9 +566,15 @@ export class SkyEngine {
     window.removeEventListener(DEPART_EVENT, this.onDepart);
     window.removeEventListener(DEPART_CANCEL_EVENT, this.onDepartCancel);
     window.clearTimeout(this.charging.timer);
-    if (this.overDrifter && this.canvas.parentElement) this.canvas.parentElement.style.cursor = "";
+    const host = this.host();
+    if (this.overDrifter && host) host.style.cursor = "";
     this.saying?.remove();
-    this.printer?.destroy();
+    // The printer is shared (sharedPrinter) and outlives this page.
+  }
+
+  /** The page this sky is behind (its cursor, charging flag and drifter card live there); the canvas itself sits in the layout. */
+  private host() {
+    return document.querySelector<HTMLElement>(".home, .page");
   }
 
   /** The same craters every visit (seeded), and a few sunspots already on the sun. */
@@ -599,22 +631,25 @@ export class SkyEngine {
     if (sunrise || this.reduced.matches || !this.raf) this.render();
   }
 
-  private resize() {
+  /** paint: draw at once. The constructor doesn't: the canvas outlives pages, so the last page's frame holds until the next. */
+  private resize(paint = true) {
     const rect = this.canvas.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return;
     const ratio = skyQuality >= 3 ? 1 : Math.min(window.devicePixelRatio || 1, 2);
     const first = this.w === 1;
     this.w = rect.width;
     this.h = rect.height;
-    this.canvas.width = Math.round(this.w * ratio);
-    this.canvas.height = Math.round(this.h * ratio);
+    // Only when the size really changes: setting it reallocates the canvas, which a page change shouldn't pay for.
+    const cw = Math.round(this.w * ratio), ch = Math.round(this.h * ratio);
+    if (this.canvas.width !== cw) this.canvas.width = cw;
+    if (this.canvas.height !== ch) this.canvas.height = ch;
     this.ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     this.printer?.resize(this.w, this.h, ratio, PRINT_CELL * SKY_GLYPH[skyQuality]);
     this.layoutHero();
     if (first || this.stars.length === 0) this.seedStars();
     else this.topUpStars();
     this.measure();
-    this.render();
+    if (paint) this.render();
   }
 
   private layoutHero() {
@@ -801,7 +836,8 @@ export class SkyEngine {
   private both(printed: (p: HeroPrinter) => void, drawn: () => void) {
     const k = this.gpu() ? this.printIn : 0;
     const fade = this.fade;
-    if (k < 0.999) {
+    // Shaders still compiling: show nothing rather than the canvas version, so the printed hero fades in from empty.
+    if (k < 0.999 && !this.waiting()) {
       this.fade = fade * (1 - k);
       drawn();
     }
@@ -812,14 +848,23 @@ export class SkyEngine {
     this.fade = fade;
   }
 
+  /**
+   * The hero is held back while the shaders compile, up to PRINT_WAIT_MS; after that the canvas draws it. Not with
+   * reduced motion: that sky is drawn once and never again, so it can't wait.
+   */
+  private waiting() {
+    const p = this.printer;
+    return Boolean(p && !p.lost && !p.ready && !this.reduced.matches && performance.now() - sharedAt < PRINT_WAIT_MS);
+  }
+
   /** Print layers on the GPU, then lay them onto this canvas where the CPU drawing would have gone. */
-  private printed(layers: (p: HeroPrinter) => void) {
+  private printed(layers: (p: HeroPrinter) => void, unshift = { x: 0, y: 0 }) {
     const p = this.printer!;
     // The backdrop keeps calm round the card even mid-turn; the bodies dim under it only at rest, as glyph() does.
     p.begin(this.time, this.boxes, !this.turn, this.pointer, this.shimmer);
     layers(p);
     this.ctx.globalAlpha = 1;
-    this.ctx.drawImage(p.canvas, 0, 0, this.w, this.h);
+    this.ctx.drawImage(p.canvas, -unshift.x, -unshift.y, this.w, this.h);
   }
 
   /**
@@ -857,8 +902,15 @@ export class SkyEngine {
     const night = scene === "night" ? 1 : 0, day = scene === "day" ? 1 : 0;
     if (!night && !day) return;
     const pl = this.hero;
+    // A page change slides the canvas; the backdrop is drawn back in place and pans in the shader instead, at the depth
+    // of the farthest stars (drawStars), so it streams with them and never leaves an empty edge.
+    const s = this.passShift;
+    const shown = masks.map((m) => ({ ...m, x: m.x + s.x, y: m.y + s.y }));
     // It comes in with the printer, rather than appearing all at once.
-    this.printed((p) => p.backdrop({ x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks, milky: night, nebula: night, field: day, paper: day }));
+    this.printed((p) => p.backdrop({
+      x: pl.x + s.x, y: pl.y + s.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks: shown,
+      milky: night, nebula: night, field: day, paper: day, pan: { x: s.x * 0.5, y: s.y * 0.5 },
+    }), s);
   }
 
   /** occ: the moon's disc during an eclipse. rays scales the light round it; rings, the almanac's (home sky only). */
@@ -1076,6 +1128,9 @@ export class SkyEngine {
   }
 
   render() {
+    // The hero can show now (printed, or on the canvas after the wait): the home loader (home-sky.tsx) steps aside.
+    const root = document.documentElement;
+    if (!root.dataset.skyReady && !this.waiting()) root.dataset.skyReady = "1";
     const { ctx, w, h } = this;
     this.hits = [];
     this.labelBoxes = [];
@@ -1395,7 +1450,7 @@ export class SkyEngine {
   private matchSurfaces(sky: string | null) {
     if (this.variant !== "full" || sky === this.surface) return;
     this.surface = sky;
-    const home = this.canvas.parentElement;
+    const home = this.host();
     if (sky) home?.style.setProperty("--surface", sky);
     else home?.style.removeProperty("--surface");
   }
@@ -2175,7 +2230,8 @@ export class SkyEngine {
     const over = this.pointer.active && this.drifterHit(this.pointer.x, this.pointer.y);
     if (over !== this.overDrifter) {
       this.overDrifter = over;
-      if (this.canvas.parentElement) this.canvas.parentElement.style.cursor = over ? "pointer" : "";
+      const host = this.host();
+      if (host) host.style.cursor = over ? "pointer" : "";
     }
   }
 
@@ -2233,7 +2289,7 @@ export class SkyEngine {
       el.className = "drifter-say";
       el.setAttribute("aria-hidden", "true");
       el.innerHTML = '<span class="voice"></span> <span class="how"><span class="typed"></span><span class="rest"></span></span>';
-      this.canvas.parentElement?.append(el);
+      this.host()?.append(el);
     }
     if (this.said !== a.line) {
       this.said = a.line;
@@ -3060,7 +3116,7 @@ export class SkyEngine {
     if (Math.hypot(e.clientX - rect.left - this.hero.x, e.clientY - rect.top - this.hero.y) > this.hero.r) return;
     // Timed, so the jump lands at three seconds even if frames are dropped.
     this.charging = { id: e.pointerId, start: performance.now(), timer: window.setTimeout(this.fire, CHARGE_MS) };
-    this.canvas.parentElement?.setAttribute("data-charging", "");
+    this.host()?.setAttribute("data-charging", "");
   };
 
   private onLetGo = (e: PointerEvent) => {
@@ -3083,7 +3139,7 @@ export class SkyEngine {
   private endCharge() {
     window.clearTimeout(this.charging.timer);
     this.charging = { id: -1, start: 0, timer: 0 };
-    this.canvas.parentElement?.removeAttribute("data-charging");
+    this.host()?.removeAttribute("data-charging");
     if (this.reduced.matches || !this.raf) this.render();
   }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { SkyCanvas, type SkyStats } from "./sky/sky-canvas";
+import { useEffect, useState, type CSSProperties } from "react";
+import { useSkyStats } from "./sky/sky-canvas";
 import { CvReceiver } from "./cv-receiver";
 import { SecretCount } from "./secret-count";
 import { Socials } from "./socials";
@@ -9,16 +9,11 @@ import { TopNav } from "./top-nav";
 import { VisitorCount } from "./visitor-count";
 
 export function HomeSky() {
-  const [stats, setStats] = useState<SkyStats>({
-    scene: "night",
-    detail: "",
-    comets: 0,
-    flares: 0,
-    sats: 0,
-    launched: 0,
-    flared: 0,
-  });
+  // The sky itself is in the layout (sky-canvas.tsx), so it carries on across page changes.
+  const stats = useSkyStats();
   const [more, setMore] = useState(false);
+  // Only while the sky's shaders are still compiling (a cold first visit); sky/engine.ts sets skyReady once the hero can show.
+  const [cold] = useState(() => typeof document === "undefined" || !document.documentElement.dataset.skyReady);
 
   // The home page is a single screen at every size: no scrolling and no overscroll bounce. Restored when leaving.
   useEffect(() => {
@@ -37,7 +32,14 @@ export function HomeSky() {
 
   return (
     <div className="home">
-      <SkyCanvas variant="full" onStats={setStats} className="sky-fill" />
+      {cold && (
+        <div className="sky-loader" role="status" aria-label="loading the sky">
+          <div className="sky-loader-ramp" aria-hidden="true">
+            {[..." .:-=+*#%@"].map((g, i) => <span key={i} style={{ "--i": i } as CSSProperties}>{g}</span>)}
+          </div>
+          <p aria-hidden="true">focusing the lens</p>
+        </div>
+      )}
       <TopNav />
       {stats.detail && (
         <div
