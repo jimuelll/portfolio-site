@@ -6,10 +6,10 @@
  * like light around a gravitational lens. Clicking empty sky launches a comet that falls under the moon's
  * gravity, so it orbits, slingshots away, or crashes. Now and then a shooting star crosses the sky.
  *
- * Day (light theme): a sun of the same size in the same place, printed like an old almanac plate: an inked disc
- * with a boiling surface and sunspots that turn with it, straight and wavy rays, and ruled rings round it. Dust
- * motes drift and glint. Clicking erupts a flare that reaches the cursor, then bursts with a shockwave. The inner
- * pages show a corner of the same plate.
+ * Day (light theme): a sun of the same size in the same place, lighting the reflection nebula it sits in. The dust
+ * glows warm near it and blue further out, and throws long shadows where it's thick; a few young stars light patches of
+ * their own. Clicking empty sky gathers the dust there into a new star: it lights, and a light echo rolls out through
+ * the nebula. The inner pages show a corner of the same light.
  *
  * Switching theme is an eclipse. Going to night, the moon slides across the sun and the sky darkens as it
  * covers it; at totality the corona flares out and the stars come in. Going to day, the moon goes dark, the
@@ -41,7 +41,7 @@
 
 export type Scene = "night" | "day" | "earth" | "deep";
 /** detail: the moon's phase by night, the sunspot count by day. Empty when there's no moon or sun on screen. */
-export type SkyStats = { scene: Scene; detail: string; comets: number; flares: number; sats: number; launched: number; flared: number };
+export type SkyStats = { scene: Scene; detail: string; comets: number; born: number; sats: number; launched: number; starsLit: number };
 /** full: the home page sky. quiet: a faint starfield behind interior pages. emblem: a small framed sky. */
 export type SkyVariant = "full" | "quiet" | "emblem";
 export type Rgb = [number, number, number];
@@ -50,7 +50,7 @@ type Vec = [number, number, number];
 
 import { projects } from "../../lib/portfolio";
 import { DRIFTERS, paintDrifter, type Saying, type SecretId, type Sprite } from "./drifters";
-import { HeroPrinter } from "./hero-gl";
+import { HeroPrinter, type NebulaStar } from "./hero-gl";
 
 const TAU = Math.PI * 2;
 const STEP = 1 / 120;
@@ -64,7 +64,7 @@ export const RAMP = " .:-=+*#%@";
 export const TURN_SECONDS = 2.8;
 /** Set on <html> while an inner page's theme fades over (see top-nav.tsx): the sky switches at once, no eclipse. */
 export const SUNRISE_CLASS = "theme-sunrise";
-/** Dispatch on window with detail {x, y} in client coordinates to fire a comet (night) or flare (day) from there. */
+/** Dispatch on window with detail {x, y} in client coordinates to fire a comet (night) or light a star (day) there. */
 export const LAUNCH_EVENT = "sky-launch";
 /** The home page's CV receiver asks the sky to deliver: `{x, y}` is where it lands, in viewport px. */
 export const DELIVER_EVENT = "sky-deliver";
@@ -73,16 +73,12 @@ export const DELIVER_SECONDS = 1.6;
 const DELIVER_AFTERGLOW = 0.8;
 /** How far round the cursor the day's heat shimmer reaches. */
 const SHIMMER_R = 150;
-const MAX_FLARES = 4;
-const FLARE_GROW = 0.45;
-const FLARE_LIFE = 2.6;
-/** How long a flare holds before it fades, and how long the shockwave off its crown takes to spread and go. */
-const FLARE_HOLD = 1.5;
-const SHOCK_LIFE = 0.9;
-/** Flares are big events, so they get bigger glyphs than the fine surface of the sun. */
-const FLARE_FONT = 12;
-/** Enough to fill a screen with sparks when clicks are mashed, and no more. */
-const MAX_SPARKS = 180;
+/** Stars clicked into the day's nebula at once; how long one takes to gather out of the dust, and how long it shines. */
+const MAX_BORN = 4;
+const BORN_GATHER = 1.6;
+const BORN_LIFE = 45;
+/** The day nebula's own young stars, as fractions of the page, and how bright each is. */
+const NEBULA_STARS: [number, number, number][] = [[0.12, 0.16, 1], [0.34, 0.08, 0.7], [0.93, 0.12, 0.85], [0.95, 0.86, 0.75], [0.44, 0.42, 0.55], [0.22, 0.4, 0.5]];
 /** The sun turns once in about two minutes, carrying its spots round. */
 const SUN_SPIN = TAU / 130;
 const PHASE_PERIOD = 150;
@@ -112,7 +108,7 @@ export const DEPART_SECONDS = 0.8;
 export const DEPART_CANCEL_EVENT = "sky-depart-cancel";
 /** How long the next page's sky takes to settle from the motion it arrives with. */
 const SETTLE_SECONDS = 0.9;
-/** The colour the day's glare washes everything to: the paper of the day pages, a touch brighter. */
+/** The colour the day's glare washes everything to: the sun's light, near white. */
 const GLARE: Rgb = [255, 248, 234];
 /** How long the galaxy's answers take to put themselves away, and how the star systems light up one by one. */
 const NAV_FADE = 0.6;
@@ -247,10 +243,14 @@ const MOON_DUSK: Rgb = [92, 122, 186];
 const SUN_LIMB: Rgb = [150, 44, 34];
 const SUN_MID: Rgb = [206, 92, 40];
 const SUN_CORE: Rgb = [222, 150, 40];
-/** The same sun as printing ink, for the day sky at rest. Ink only reads on paper when it's dark. */
-const INK_LIMB: Rgb = [108, 26, 20];
-const INK_MID: Rgb = [176, 54, 22];
-const INK_CORE: Rgb = [196, 104, 16];
+/** The same sun by day, its granules printed in warm glyphs over a bright body. */
+const INK_LIMB: Rgb = [178, 64, 30];
+const INK_MID: Rgb = [206, 110, 48];
+const INK_CORE: Rgb = [226, 150, 60];
+/** The fine streamers off the day sun's limb. */
+const STREAMER: Rgb = [214, 128, 50];
+/** The nebula's young stars: their glints, and the dust gathering into a new one. */
+const STAR_INK: Rgb = [40, 84, 178];
 const EARTH_SEA: Rgb = [84, 156, 228];
 const EARTH_DEEP: Rgb = [36, 78, 160];
 const EARTH_GREEN: Rgb = [96, 170, 98];
@@ -261,7 +261,7 @@ const EARTH_ATMO: Rgb = [126, 196, 255];
 const EARTH_NIGHT: Rgb = [70, 92, 150];
 const EARTH_CITY: Rgb = [255, 206, 122];
 const EARTH_SAT: Rgb = [228, 236, 255];
-const LIGHT_BG: Rgb = [243, 239, 228];
+const LIGHT_BG: Rgb = [234, 240, 248];
 const bgOf = (s: Scene) => (s === "day" ? LIGHT_BG : s === "earth" ? TWILIGHT_BG : s === "deep" ? DEEP_BG : DARK_BG);
 
 const LIGHT: Palette = {
@@ -270,7 +270,7 @@ const LIGHT: Palette = {
   cool: [38, 86, 140],
   bright: [214, 120, 52],
   deep: [74, 36, 30],
-  orbit: [108, 84, 62],
+  orbit: [74, 88, 132],
   comet: [176, 58, 30],
   ink: true,
   alpha: 0.92,
@@ -345,16 +345,8 @@ interface Flash { x: number; y: number; age: number }
 /** The CV on its way down to the receiver; how it travels depends on the scene it started in. */
 interface Delivery { scene: Scene; start: number; x: number; y: number; bend: number }
 interface Meteor { x: number; y: number; vx: number; vy: number; age: number; life: number }
-/** A looping prominence from two feet on the sun's surface out toward where the click landed. */
-/** A curl of plasma peeling off a flare: where along the loop it leaves, which way it bends, and how far it gets. */
-interface Tendril { at: number; side: number; curl: number; len: number; ray?: number }
-/**
- * No two flares alike: how far apart its feet are (a jet's nearly touch), how lopsided its arch is, how much its path
- * wanders and churns, how torn it is, how thick, and what peels off it.
- */
-interface Flare { foot: number; reach: number; age: number; struck: boolean; seed: number; spreadA: number; spreadB: number; lean: number; bulge: number; wander: number; freq: number; churn: number; torn: number; thick: number; tendrils: Tendril[] }
-interface Spark { x: number; y: number; vx: number; vy: number; age: number; life: number; glyph: string }
-interface Shock { x: number; y: number; age: number; reach: number; seed: number }
+/** A star clicked into the day's nebula: where, and when (engine time) the dust began to gather. */
+interface Born { x: number; y: number; at: number }
 /** A crater on the moon: centre as a unit vector on the sphere, and angular radius. */
 interface Crater { c: Vec; r: number }
 /** A sunspot: where it sits on the turning surface, how big, and when it formed and fades. */
@@ -391,15 +383,13 @@ export class SkyEngine {
   private sceneAlpha = 1;
   /** An extra fade, for drawing a whole scene see-through during the zoom. */
   private fade = 1;
-  private flares: Flare[] = [];
-  private sparks: Spark[] = [];
-  private shocks: Shock[] = [];
+  private born: Born[] = [];
   /** How far the day sky has settled into its printed look (1) from the eclipse's softer one (0). */
   private inked = 1;
   /** The sky's colour that the nav and the label are wearing through a theme change (see matchSurfaces). */
   private surface: string | null = null;
-  private sunFlash = 0;
-  private flared = 0;
+  /** Stars clicked into being so far, for the readout. */
+  private starsLit = 0;
   private started = false;
   private family = "monospace";
   private stars: Star[] = [];
@@ -868,7 +858,7 @@ export class SkyEngine {
   }
 
   /**
-   * The glyph for the moving bits (comets, flares, satellites…). With the printed hero on, they match it: its size and
+   * The glyph for the moving bits (comets, satellites…). With the printed hero on, they match it: its size and
    * weight, and k (against the size they were drawn at) to pack them as closely, so trails stay solid. Otherwise as before.
    */
   private grain(size = 12) {
@@ -894,7 +884,7 @@ export class SkyEngine {
   }
 
   /**
-   * The sky behind everything, on the home page: the Milky Way and a nebula by night, the magnetic field and the plate by day.
+   * The sky behind everything, on the home page: the Milky Way and a nebula by night, the sunlit nebula by day.
    * masks: the discs in front of it this frame (the moon, sun or Earth, wherever a transition has moved them).
    */
   private printBackdrop(scene: Scene, masks: { x: number; y: number; r: number }[]) {
@@ -909,16 +899,15 @@ export class SkyEngine {
     // It comes in with the printer, rather than appearing all at once.
     this.printed((p) => p.backdrop({
       x: pl.x + s.x, y: pl.y + s.y, r: pl.r, alpha: this.layerAlpha() * this.printIn, w: this.w, h: this.h, masks: shown,
-      milky: night, nebula: night, field: day, paper: day, pan: { x: s.x * 0.5, y: s.y * 0.5 },
+      milky: night, nebula: night, day, stars: day ? this.nebulaStars(s) : [], pan: { x: s.x * 0.5, y: s.y * 0.5 },
     }), s);
   }
 
-  /** occ: the moon's disc during an eclipse. rays scales the light round it; rings, the almanac's (home sky only). */
-  private printSun(p: HeroPrinter, occ: { x: number; y: number } | null, rays: number, rings: number) {
+  /** occ: the moon's disc during an eclipse. rays scales the light round it. */
+  private printSun(p: HeroPrinter, occ: { x: number; y: number } | null, rays: number) {
     const pl = this.hero;
     p.sun({
-      x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha(), disc: true, spin: this.sunSpin(), boil: this.boil, flash: this.sunFlash,
-      foot: this.flares.length ? this.flares[this.flares.length - 1].foot : 0, ink: this.inked, rays, rings,
+      x: pl.x, y: pl.y, r: pl.r, alpha: this.layerAlpha(), disc: true, spin: this.sunSpin(), boil: this.boil, ink: this.inked, rays,
       hov: this.hov, hovAngle: this.hovAngle, occ, spots: this.visibleSpots(), warm: this.palette.warm,
     });
   }
@@ -939,7 +928,7 @@ export class SkyEngine {
       const n = this.spots.filter((s) => this.spotStrength(s) > 0.3 && this.spotCentre(s)[2] > 0.1).length;
       detail = `${n} ${n === 1 ? "sunspot" : "sunspots"}`;
     }
-    const stats: SkyStats = { scene: this.scene, detail, comets: this.comets.length, flares: this.flares.length, sats: this.sats.length, launched: this.launched, flared: this.flared };
+    const stats: SkyStats = { scene: this.scene, detail, comets: this.comets.length, born: this.born.length, sats: this.sats.length, launched: this.launched, starsLit: this.starsLit };
     const key = Object.values(stats).join("/");
     if (key === this.reported) return;
     this.reported = key;
@@ -995,27 +984,11 @@ export class SkyEngine {
     for (let i = this.spots.length - 1; i >= 0; i--) if (this.time - this.spots[i].born > this.spots[i].life) this.spots.splice(i, 1);
     if (this.spots.length < SPOTS && Math.random() < dt / 6) this.spots.push(this.makeSpot(this.time));
 
-    this.sunFlash = Math.max(0, this.sunFlash - dt * 1.4);
     // Eases rather than switches, so the disc doesn't jump in weight as an eclipse begins or ends.
     this.inked += ((this.turn ? 0 : 1) - this.inked) * Math.min(1, dt * 4);
     // Once the printer is ready the hero cross-fades onto it.
     if (this.printer?.ready && !this.printer.lost) this.printIn = Math.min(1, this.printIn + dt / PRINT_IN_SECONDS);
-    for (let i = this.shocks.length - 1; i >= 0; i--) if ((this.shocks[i].age += dt) > SHOCK_LIFE) this.shocks.splice(i, 1);
-    for (let i = this.flares.length - 1; i >= 0; i--) {
-      const f = this.flares[i];
-      f.age += dt;
-      if (!f.struck && f.age >= FLARE_GROW) this.strike(f);
-      if (f.age > FLARE_LIFE) this.flares.splice(i, 1);
-    }
-    for (let i = this.sparks.length - 1; i >= 0; i--) {
-      const sp = this.sparks[i];
-      sp.age += dt;
-      sp.x += sp.vx * dt;
-      sp.y += sp.vy * dt;
-      sp.vx *= Math.exp(-1.8 * dt);
-      sp.vy *= Math.exp(-1.8 * dt);
-      if (sp.age > sp.life) this.sparks.splice(i, 1);
-    }
+    this.born = this.born.filter((b) => this.time - b.at < BORN_LIFE);
     const p = this.pointer;
     // The parallax and the lens ease toward the pointer so the sky never jumps.
     const tx = p.active ? (p.x / this.w - 0.5) : 0;
@@ -1196,13 +1169,8 @@ export class SkyEngine {
       if (!hero) this.drawPlateCorner();
       this.printBackdrop("day", hero ? [{ x: this.hero.x, y: this.hero.y, r: this.hero.r }] : []);
       this.drawStars("day");
-      // Printed, the rings come with the sun; drawn, they go under the solar wind as they always have.
-      if (full) this.both(() => {}, () => this.drawAlmanacRings(this.hero.x, this.hero.y, this.hero.r, this.inked));
-      if (full) this.drawSolarWind();
-      if (hero) {
-        this.both((p) => this.printSun(p, null, 1, full ? this.inked : 0), () => this.drawSun(null, 1));
-        this.drawFlares();
-      }
+      if (full) this.drawNebulaStars();
+      if (hero) this.both((p) => this.printSun(p, null, 1), () => this.drawSun(null, 1));
       if (full) this.drawDayComet();
       if (full) this.drawDrifter();
     }
@@ -1409,6 +1377,7 @@ export class SkyEngine {
     this.use(LIGHT, st.s);
     this.printBackdrop("day", discs);
     this.drawStars("day");
+    if (this.variant === "full") this.drawNebulaStars();
     this.use(DARK, 1 - st.s);
     this.printBackdrop("night", discs);
     this.drawStars("night");
@@ -1420,7 +1389,7 @@ export class SkyEngine {
       p.corona({ x: this.hero.x, y: this.hero.y, r: this.hero.r, alpha: this.layerAlpha(), strength: st.corona });
       if (sunShows) {
         this.use(LIGHT, 1);
-        this.printSun(p, this.moonAt, clamp(st.s * 1.4, 0, 1), 0);
+        this.printSun(p, this.moonAt, clamp(st.s * 1.4, 0, 1));
       }
       this.use(DARK, 1);
       this.printMoon(p, this.moonAt.x, this.moonAt.y, st.lit);
@@ -1435,10 +1404,6 @@ export class SkyEngine {
       this.drawMoonGlow(st.lit);
       this.drawMoon(this.moonAt.x, this.moonAt.y, st.lit, mix(DARK.orbit, LIGHT.orbit, st.s));
     });
-    if (sunShows) {
-      this.use(LIGHT, 1);
-      this.drawFlares();
-    }
     this.use(DARK, 1);
     this.drawBead(st.bead, st.beadDir);
     this.use(DARK, 1 - st.s);
@@ -1739,23 +1704,20 @@ export class SkyEngine {
     const pal = this.palette;
     const pl = this.hero;
     const t = this.time;
-    const flash = this.sunFlash;
-    const foot = this.flares.length ? this.flares[this.flares.length - 1].foot : 0;
     const { cw, ch, r } = pl;
     const hidden = (x: number, y: number) => occ !== null && Math.hypot(x - occ.x, y - occ.y) < r;
     const spin = this.sunSpin();
     const cs = Math.cos(spin), sn = Math.sin(spin);
     const spots = this.visibleSpots();
-    // By day the sun is printed: a solid warm body (gold core, vermilion limb) with dark ink over it, so it holds its
-    // own against the paper. The body stays light enough for the name to read where it overlaps on phones. The
-    // eclipse keeps its original, softer look.
+    // By day the sun is a bright body, white-gold at the core and partly see-through, with its granules printed over
+    // it in warm glyphs that carry its shape. The eclipse keeps its original, softer look.
     const ink = this.inked;
     if (ink > 0.01) {
       const ctx = this.ctx;
       const body = ctx.createRadialGradient(pl.x - r * 0.25, pl.y - r * 0.25, r * 0.1, pl.x, pl.y, r);
-      body.addColorStop(0, "rgba(255, 214, 110, 0.96)");
-      body.addColorStop(0.6, "rgba(244, 150, 58, 0.94)");
-      body.addColorStop(1, "rgba(206, 74, 36, 0.92)");
+      body.addColorStop(0, "rgba(255, 252, 236, 0.85)");
+      body.addColorStop(0.6, "rgba(255, 236, 186, 0.7)");
+      body.addColorStop(1, "rgba(246, 164, 84, 0.55)");
       ctx.globalAlpha = this.sceneAlpha * this.fade * ink;
       ctx.fillStyle = body;
       ctx.beginPath();
@@ -1785,10 +1747,9 @@ export class SkyEngine {
         const sx = nx * cs + nz * sn, sz = -nx * sn + nz * cs;
         const bt = this.boil;
         const gran = noise(sx * 8 + bt * 0.35, ny * 8 + sz * 3 - bt * 0.25, 5) * 0.6 + noise(sx * 18 - bt * 0.5, ny * 18 + sz * 5, 6) * 0.4;
-        const toward = Math.max(0, Math.cos(Math.atan2(ny, nx) - foot)) * Math.sqrt(d2);
-        // In ink the limb is drawn heavier, the way an engraver darkens the edge of a sphere; a flare lights the side it left from.
+        // By day the limb is printed heavier, so the bright disc still reads as a sphere.
         const depth = Math.sqrt(nz);
-        const b = clamp(0.12 + 0.62 * depth + (gran - 0.5) * 0.45 + (1 - depth) * 0.42 * ink + flash * (0.12 + ink * 0.1 + toward * (0.45 + ink * 0.3)), 0, 1);
+        const b = clamp(0.12 + 0.62 * depth + (gran - 0.5) * 0.45 + (1 - depth) * 0.42 * ink, 0, 1);
         const g = RAMP[clamp(Math.round(b * (RAMP.length - 1)), 1, RAMP.length - 1)];
         // Gold at the core, orange through the disc, deep red at the limb; bright granules lean gold.
         const edge = smoothstep(0, 0.55, depth);
@@ -1800,15 +1761,14 @@ export class SkyEngine {
     }
     if (rays < 0.02) return;
     this.drawSunGlow(occ, rays);
-    // A dotted rim, then rays that flicker in and out of length and stretch while the sun flares.
+    // The eclipse's sun: a dotted rim, then rays that flicker in and out of length. By day, fine streamers instead.
     const rimN = Math.round((TAU * r * 1.08) / (cw * 1.3));
     for (let i = 0; i < rimN; i++) {
       const a = (i / rimN) * TAU;
       const x = pl.x + Math.cos(a) * r * 1.08, y = pl.y + Math.sin(a) * r * 1.08;
-      if (!hidden(x, y)) this.glyph("·", x, y, ink > 0.5 ? INK_MID : pal.warm, (0.5 + 0.4 * ink) * rays);
+      if (!hidden(x, y)) this.glyph("·", x, y, pal.warm, 0.5 * rays * (1 - ink));
     }
-    // The printed rays fade in as the eclipse's plain ones fade out.
-    if (ink > 0.01) this.drawSplendour(ink * rays);
+    if (ink > 0.01) this.drawStreamers(pl.x, pl.y, r, occ, ink * rays);
     if (ink > 0.99) return;
     const n = 28;
     for (let i = 0; i < n; i++) {
@@ -1816,7 +1776,7 @@ export class SkyEngine {
       const long = i % 2 === 0;
       // Rays stretch toward a nearby cursor.
       const reachOut = 1 + this.hov * 0.9 * Math.max(0, Math.cos(a - this.hovAngle)) ** 4;
-      const len = r * (long ? 0.42 : 0.22) * (0.6 + 0.4 * noise(i * 1.7, this.boil * 0.9, 8)) * (1 + flash * 0.7) * reachOut;
+      const len = r * (long ? 0.42 : 0.22) * (0.6 + 0.4 * noise(i * 1.7, this.boil * 0.9, 8)) * reachOut;
       const g = lineGlyph(Math.cos(a), Math.sin(a));
       for (let q = r * 1.18; q < r * 1.18 + len; q += cw * 1.25) {
         const k = (q - r * 1.18) / len;
@@ -1827,83 +1787,41 @@ export class SkyEngine {
   }
 
   /**
-   * The sun in splendour, as old engravings draw it: tapered straight rays turn and turn about with wavy ones. They
-   * still flicker in length, stretch toward a nearby cursor, and leap when the sun flares.
+   * By day: fine streamers combed out from the sun's limb, each flickering slowly in length. cx, cy, r: the sun, which
+   * on the inner pages sits mostly off the page.
    */
-  private drawSplendour(alpha: number) {
-    const pl = this.hero;
-    const { cw, r } = pl;
-    const n = 12;
-    const start = r * 1.16;
-    const step = cw * 1.8;
-    for (let i = 0; i < n * 2; i++) {
-      const a = (i / (n * 2)) * TAU + this.time * 0.03;
-      const dx = Math.cos(a), dy = Math.sin(a);
-      const wavy = i % 2 === 1;
-      const reachOut = 1 + this.hov * 0.9 * Math.max(0, Math.cos(a - this.hovAngle)) ** 4;
-      const len = r * (wavy ? 0.38 : 0.68) * (0.72 + 0.28 * noise(i * 1.7, this.boil * 0.9, 8)) * (1 + this.sunFlash * 1.1) * reachOut;
+  private drawStreamers(cx: number, cy: number, r: number, occ: { x: number; y: number } | null, alpha: number) {
+    const step = this.hero.cw * 1.8;
+    for (let i = 0; i < 72; i++) {
+      const a = (i / 72) * TAU, dx = Math.cos(a), dy = Math.sin(a);
+      const len = r * (0.25 + hash(i, 7, 91) ** 2 * 1.1) * (0.85 + 0.15 * noise(i * 1.3, this.time * 0.2, 9));
+      const k0 = 0.25 + 0.75 * hash(i, 3, 91);
       const g = lineGlyph(dx, dy);
       for (let q = 0; q < len; q += step) {
-        const k = q / len;
-        const x = pl.x + dx * (start + q), y = pl.y + dy * (start + q);
-        const col = mix(INK_CORE, INK_LIMB, k);
-        if (wavy) {
-          const sway = Math.sin(q * 0.16 + this.boil * 1.2 + i) * cw * 1.1;
-          this.glyph("~", x - dy * sway, y + dx * sway, col, (1 - k * 0.8) * 0.85 * alpha);
-          continue;
-        }
-        this.glyph(g, x, y, col, (1 - k * 0.7) * alpha);
-        // Two flanking strands make the root of the ray thick, and run out to leave it a point.
-        if (k < 0.34) {
-          const side = cw * 1.1 * (1 - k / 0.34);
-          this.glyph(g, x - dy * side, y + dx * side, col, 0.8 * alpha);
-          this.glyph(g, x + dy * side, y - dx * side, col, 0.8 * alpha);
-        }
+        const k = q / len, x = cx + dx * (r * 1.02 + q), y = cy + dy * (r * 1.02 + q);
+        if (x < -10 || y < -10 || x > this.w + 10 || y > this.h + 10) continue;
+        if (occ && Math.hypot(x - occ.x, y - occ.y) < r) continue;
+        this.glyph(k < 0.33 ? g : "·", x, y, STREAMER, (1 - k) ** 1.6 * k0 * 0.6 * alpha);
       }
     }
   }
 
-  /** Ruled rings round the sun, with ticks every 30°, like the scales on an almanac's plate. */
-  private drawAlmanacRings(cx: number, cy: number, r: number, alpha: number) {
-    if (alpha < 0.02) return;
-    const { w, h } = this;
-    const turn = this.time * -0.006;
-    this.ctx.font = `9px ${this.family}`;
-    const seen = (x: number, y: number) => x > -10 && y > -10 && x < w + 10 && y < h + 10;
-    for (const [ring, gap] of [[1.98, 24], [2.86, 32]]) {
-      const rad = r * ring;
-      const dots = Math.round((TAU * rad) / gap);
-      for (let i = 0; i < dots; i++) {
-        const a = (i / dots) * TAU + turn;
-        const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
-        if (seen(x, y)) this.glyph("·", x, y, this.palette.orbit, 0.62 * alpha);
-      }
-    }
-    const rad = r * 1.98;
-    for (let d = 0; d < 360; d += 30) {
-      const a = (d / 360) * TAU + turn;
-      const dx = Math.cos(a), dy = Math.sin(a);
-      if (!seen(cx + dx * rad, cy + dy * rad)) continue;
-      this.glyph(lineGlyph(dx, dy), cx + dx * (rad + 6), cy + dy * (rad + 6), INK_MID, 0.8 * alpha);
-    }
-  }
-
-  /** Inner pages: a corner of the same plate looks in from the top right, faint enough to read a page over. */
+  /** Inner pages: the sun's light looks in from the top right, faint enough to read a page over. */
   private drawPlateCorner() {
     const { ctx, w, h } = this;
     const r = Math.min(w, h) * 0.3;
     const cx = w - r * 0.28, cy = -r * 0.28;
     const glow = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 2.8);
-    glow.addColorStop(0, "rgba(244, 164, 78, 0.3)");
-    glow.addColorStop(1, "rgba(244, 164, 78, 0)");
+    glow.addColorStop(0, "rgba(255, 214, 140, 0.4)");
+    glow.addColorStop(1, "rgba(255, 214, 140, 0)");
     ctx.globalAlpha = this.sceneAlpha * this.fade;
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
-    // Printed: the same sun's light as the home page, faint enough to read a page over; the disc itself is off the page.
+    // The same streamers as the home page's sun, faint; the disc itself is off the page.
     this.both((p) => p.sun({
-      x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil, flash: 0, foot: 0,
-      ink: 1, rays: 1, rings: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
-    }), () => this.drawPlateLight(cx, cy, r));
+      x: cx, y: cy, r, alpha: this.layerAlpha() * 0.5, disc: false, spin: 0, boil: this.boil,
+      ink: 1, rays: 1, hov: 0, hovAngle: 0, occ: null, spots: [], warm: this.palette.warm,
+    }), () => this.drawStreamers(cx, cy, r, null, 0.5));
   }
 
   /**
@@ -1929,29 +1847,6 @@ export class SkyEngine {
         this.glyph("·", cx + Math.cos(a) * r, cy + Math.sin(a) * r, this.palette.orbit, 0.4);
       }
     });
-  }
-
-  /** The plate corner's rays, rim and rings, drawn on the canvas. */
-  private drawPlateLight(cx: number, cy: number, r: number) {
-    const { ctx, h } = this;
-    ctx.font = `10px ${this.family}`;
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * TAU + this.time * 0.012;
-      const dx = Math.cos(a), dy = Math.sin(a);
-      if (cx + dx * r * 1.1 < -10 || cy + dy * r * 1.1 > h + 10 || cy + dy * r * 1.8 < 0) continue;
-      const wavy = i % 2 === 1;
-      const len = r * (wavy ? 0.34 : 0.62);
-      const g = wavy ? "~" : lineGlyph(dx, dy);
-      for (let q = 0; q < len; q += 15) {
-        this.glyph(g, cx + dx * (r * 1.12 + q), cy + dy * (r * 1.12 + q), INK_MID, (1 - q / len) * 0.42);
-      }
-    }
-    // Only the quarter that's on the page.
-    for (let i = 0; i <= 12; i++) {
-      const a = Math.PI / 2 + (i / 12) * (Math.PI / 2);
-      this.glyph("·", cx + Math.cos(a) * r, cy + Math.sin(a) * r, INK_MID, 0.5);
-    }
-    this.drawAlmanacRings(cx, cy, r, 0.5);
   }
 
   /** The corona at totality: pale streamers all round the hidden sun. */
@@ -1994,31 +1889,30 @@ export class SkyEngine {
   }
 
   /**
-   * Day on the home page is a golden afternoon: a pale warm-blue sky high up melting into the paper, and a
-   * golden glow round the sun. Soft washes only, so the ink text on top keeps its contrast.
+   * Day on the home page: the nebula's light, warm white round the sun cooling to pale blue toward the edges, under
+   * the dust itself (hero-gl.ts). Soft washes only, so the text on top keeps its contrast.
    */
   private drawDaySky(alpha: number) {
     if (alpha < 0.02) return;
     const { ctx, w, h } = this;
     const pl = this.hero;
     ctx.globalAlpha = alpha;
-    // The paper tones toward its edges, as an old page does. Text sits on this too, so it stays slight (globals.css
-    // sets the day's inks to hold their contrast at this depth).
-    const edges = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.hypot(w, h) * 0.56);
-    edges.addColorStop(0, "rgba(150, 104, 58, 0)");
-    edges.addColorStop(1, "rgba(150, 104, 58, 0.08)");
-    ctx.fillStyle = edges;
+    const sky = ctx.createRadialGradient(pl.x, pl.y, pl.r * 0.8, pl.x, pl.y, Math.hypot(w, h) * 0.75);
+    sky.addColorStop(0, "rgba(255, 248, 232, 1)");
+    sky.addColorStop(0.25, "rgba(240, 240, 238, 0.7)");
+    sky.addColorStop(1, "rgba(214, 226, 242, 0.9)");
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, h);
-    const glow = ctx.createRadialGradient(pl.x, pl.y, pl.r * 0.6, pl.x, pl.y, pl.r * 3.4);
-    glow.addColorStop(0, "rgba(244, 164, 78, 0.55)");
-    glow.addColorStop(0.35, "rgba(244, 170, 88, 0.2)");
-    glow.addColorStop(1, "rgba(246, 186, 96, 0)");
+    const glow = ctx.createRadialGradient(pl.x, pl.y, pl.r * 0.95, pl.x, pl.y, pl.r * 2.8);
+    glow.addColorStop(0, "rgba(255, 244, 214, 0.5)");
+    glow.addColorStop(0.3, "rgba(255, 232, 186, 0.14)");
+    glow.addColorStop(1, "rgba(255, 228, 180, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1;
   }
 
-  /** The sun's glow: scattered warm marks that thin with distance and shimmer like heat haze; in ink, radial hatching. */
+  /** The eclipse sun's glow: scattered warm marks that thin with distance and shimmer like heat haze. */
   private drawSunGlow(occ: { x: number; y: number } | null, rays: number) {
     const pl = this.hero;
     const { cw, ch, r } = pl;
@@ -2034,10 +1928,8 @@ export class SkyEngine {
         if (occ && Math.hypot(gx - occ.x, gy - occ.y) < r) continue;
         const fall = Math.exp(-(d - 1) * 3.4);
         if (hash(ix, iy, 12) > 0.14 + fall * 0.5) continue;
-        const hatched = this.inked > 0.5;
-        const g = hatched ? (fall > 0.16 ? lineGlyph(gx - pl.x, gy - pl.y) : "·") : fall > 0.6 ? ":" : fall > 0.3 ? "·" : ".";
-        const col = hatched ? mix(INK_LIMB, INK_MID, fall) : mix(SUN_MID, SUN_CORE, fall);
-        this.glyph(g, gx, gy, col, (0.34 + 0.56 * this.inked) * fall * rays * (1 + this.hov * 0.5));
+        const g = fall > 0.6 ? ":" : fall > 0.3 ? "·" : ".";
+        this.glyph(g, gx, gy, mix(SUN_MID, SUN_CORE, fall), 0.34 * fall * rays * (1 + this.hov * 0.5) * (1 - this.inked));
       }
     }
   }
@@ -2088,19 +1980,69 @@ export class SkyEngine {
     }
   }
 
-  /** Day: the solar wind, particles streaming out from the sun and curling as it turns. */
-  private drawSolarWind() {
+  /** The stars lighting the day's nebula: its own, then any clicked into being, each with how far along it is. */
+  private nebulaStars(shift = { x: 0, y: 0 }): NebulaStar[] {
+    const { w, h, time: t } = this;
+    const pl = this.hero;
+    const out: NebulaStar[] = [];
+    for (const [u, v, b] of NEBULA_STARS) {
+      const x = u * w, y = v * h;
+      // Not behind the sun, and not on the page's text (the readout, the label), where its glints would cross the words.
+      if (Math.hypot(x - pl.x, y - pl.y) < pl.r * 1.2) continue;
+      if (this.boxes.some((b) => x > b.left - 60 && x < b.right + 60 && y > b.top - 60 && y < b.bottom + 60)) continue;
+      out.push({ x: x + shift.x, y: y + shift.y, lit: b * (0.85 + 0.15 * Math.sin(t * 0.7 + x)), pull: 0, echo: 0, echoK: 0 });
+    }
+    for (const s of this.born) {
+      const age = t - s.at;
+      // The dust spirals in, then lets go as the star lights with a flash and settles; late in its life it dims away.
+      const pull = age < BORN_GATHER ? smoothstep(0, BORN_GATHER, age) : 1 - smoothstep(BORN_GATHER, BORN_GATHER + 2.5, age);
+      const lit = age < BORN_GATHER ? 0 : (1 + 2.2 * Math.exp(-(age - BORN_GATHER) * 1.6)) * (1 - smoothstep(BORN_LIFE - 6, BORN_LIFE, age));
+      // Its first light reaches the dust further out as time goes on: the echo, fading as it spreads.
+      const echo = age > BORN_GATHER ? (age - BORN_GATHER) * pl.r * 0.32 : 0;
+      out.push({ x: s.x + shift.x, y: s.y + shift.y, lit, pull, echo, echoK: echo > 0 ? 1 - smoothstep(0, pl.r * 4.5, echo) : 0 });
+    }
+    return out;
+  }
+
+  /**
+   * The nebula's stars on the canvas, over the dust the printer lit for them: a soft halo and cross-shaped glints, and
+   * while one is still gathering, dust spiralling in to its point.
+   */
+  private drawNebulaStars() {
+    const { ctx } = this;
     const pl = this.hero;
     const t = this.time;
-    this.ctx.font = `${pl.font}px ${this.family}`;
-    for (let i = 0; i < 90; i++) {
-      const a0 = hash(i, 1, 61) * TAU;
-      const ph = (t * (0.035 + hash(i, 2, 61) * 0.05) + hash(i, 3, 61)) % 1;
-      const rad = pl.r * (1.25 + ph * 2.6);
-      const ang = a0 + ph * 0.75;
-      const x = pl.x + Math.cos(ang) * rad, y = pl.y + Math.sin(ang) * rad;
-      const g = i % 3 === 0 ? lineGlyph(Math.cos(ang + 0.3), Math.sin(ang + 0.3)) : i % 3 === 1 ? "·" : ".";
-      this.glyph(g, x, y, mix(INK_MID, this.palette.orbit, ph), 0.68 * Math.sin(Math.PI * ph) ** 1.2);
+    for (const s of this.nebulaStars()) {
+      if (s.lit < 0.02) {
+        if (s.pull < 0.01) continue;
+        ctx.font = `${pl.font}px ${this.family}`;
+        for (let i = 0; i < 14; i++) {
+          const a = (i / 14) * TAU + s.pull * 5 + hash(i, 5, 17);
+          const rad = (1 - s.pull) * pl.r * (0.3 + 0.4 * hash(i, 6, 17)) + 3;
+          this.glyph(i % 3 ? "·" : ".", s.x + Math.cos(a) * rad, s.y + Math.sin(a) * rad * 0.8, STAR_INK, s.pull * 0.7);
+        }
+        this.glyph("·", s.x, s.y, STAR_INK, s.pull);
+        continue;
+      }
+      const b = Math.min(s.lit, 1.6), k = Math.min(1, b);
+      const halo = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 46 * b);
+      halo.addColorStop(0, `rgba(255, 255, 255, ${0.6 * k})`);
+      halo.addColorStop(0.25, `rgba(214, 232, 255, ${0.25 * k})`);
+      halo.addColorStop(1, "rgba(214, 232, 255, 0)");
+      ctx.globalAlpha = this.sceneAlpha * this.fade * this.dim(s.x, s.y);
+      ctx.fillStyle = halo;
+      ctx.fillRect(s.x - 50 * b, s.y - 50 * b, 100 * b, 100 * b);
+      ctx.font = `${Math.round(pl.font * 1.1)}px ${this.family}`;
+      const n = Math.round(4 + 7 * b);
+      for (let j = 1; j <= n; j++) {
+        const a = k * (1 - j / (n + 1)) ** 1.5 * 0.85;
+        this.glyph("-", s.x + j * pl.cw, s.y, STAR_INK, a);
+        this.glyph("-", s.x - j * pl.cw, s.y, STAR_INK, a);
+        this.glyph("|", s.x, s.y + j * pl.ch * 0.8, STAR_INK, a);
+        this.glyph("|", s.x, s.y - j * pl.ch * 0.8, STAR_INK, a);
+      }
+      ctx.font = `${Math.round(pl.font * 1.8)}px ${this.family}`;
+      this.glyph("✦", s.x, s.y, STAR_INK, k * (0.9 + 0.1 * Math.sin(t * 2 + s.x)));
     }
   }
 
@@ -2562,7 +2504,7 @@ export class SkyEngine {
       });
     } else if (scene === "day") {
       this.use(LIGHT, 1);
-      this.both((p) => this.printSun(p, null, 1, 0), () => this.drawSun(null, 1));
+      this.both((p) => this.printSun(p, null, 1), () => this.drawSun(null, 1));
     } else {
       this.use(DARK, 1);
       this.drawEarthScene();
@@ -2941,186 +2883,15 @@ export class SkyEngine {
     this.sceneAlpha = 1;
   }
 
-  /** A point on a flare's loop: t runs 0 → 1 from one foot, out round the apex, and back to the other. */
-  private flarePoint(f: Flare, t: number, lift: number) {
+  /** Clicking the day's sky: the dust there gathers into a new star. Not on the sun itself. */
+  private lightStar(x: number, y: number) {
     const pl = this.hero;
-    const rs = pl.r;
-    const a1 = f.foot - f.spreadA, a2 = f.foot + f.spreadB;
-    const x1 = pl.x + Math.cos(a1) * rs, y1 = pl.y + Math.sin(a1) * rs;
-    const x2 = pl.x + Math.cos(a2) * rs, y2 = pl.y + Math.sin(a2) * rs;
-    const dx = Math.cos(f.foot), dy = Math.sin(f.foot);
-    const nx = -dy, ny = dx;
-    const L = (f.reach - rs) * lift;
-    // The loop bulges wider toward its top, like a real prominence; a long reach stays a tight arch, not a balloon.
-    const bw = Math.min(L * f.bulge, rs * f.bulge * 1.3);
-    // One leg climbs higher than the other, by as much as the other gives up, so the crown still lands on the click.
-    const c1x = x1 + dx * L * (1.3 + f.lean) - nx * bw, c1y = y1 + dy * L * (1.3 + f.lean) - ny * bw;
-    const c2x = x2 + dx * L * (1.3 - f.lean) + nx * bw, c2y = y2 + dy * L * (1.3 - f.lean) + ny * bw;
-    const u = 1 - t;
-    const x = u * u * u * x1 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x2;
-    const y = u * u * u * y1 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y2;
-    return { x, y };
-  }
-
-  /** A point on the flare as it's drawn: its path wanders and churns, pinned only at the feet and the crown. */
-  private flareAt(f: Flare, t: number, lift: number) {
-    const p = this.flarePoint(f, t, lift);
-    const q = this.flarePoint(f, Math.min(1, t + 0.01), lift);
-    const px = -(q.y - p.y), py = q.x - p.x;
-    const pl = Math.hypot(px, py) || 1;
-    const size = Math.min(f.reach - this.hero.r, this.hero.r * 1.6);
-    const big = noise(t * f.freq + f.seed % 97, this.time * f.churn, 71) - 0.5;
-    const fine = noise(t * f.freq * 3.7, this.time * f.churn * 2.3 + f.seed % 89, 72) - 0.5;
-    const off = (big + fine * 0.35) * 2 * f.wander * size * Math.abs(Math.sin(TAU * t));
-    return { x: p.x + (px / pl) * off, y: p.y + (py / pl) * off };
-  }
-
-  /**
-   * The moment a flare reaches full height it bursts: a shockwave runs out from its crown, sparks scatter, and heavy
-   * clumps of the sun carry on past the click, slowing as they go.
-   */
-  private strike(f: Flare) {
-    f.struck = true;
-    const crown = this.flarePoint(f, 0.5, 1);
-    this.shocks.push({ x: crown.x, y: crown.y, age: 0, reach: this.hero.r * rand(0.9, 1.9), seed: f.seed % 101 });
-    if (this.shocks.length > MAX_FLARES) this.shocks.shift();
-    this.sunFlash = Math.max(this.sunFlash, 0.8);
-    // Every burst has its own lean and its own mix: a wide scatter one time, a tight spray thrown off to one side the next.
-    const fan = rand(0.7, 2.2);
-    const lean = rand(-0.7, 0.7);
-    const sparks = Math.round(rand(20, 44));
-    for (let i = 0; i < sparks; i++) {
-      const a = f.foot + lean + rand(-fan, fan);
-      const v = rand(40, 200) * rand(1, 2.2);
-      this.sparks.push({ x: crown.x, y: crown.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, life: rand(0.5, 1.9), glyph: "*+.'"[i % 4] });
-    }
-    const clumps = Math.round(rand(2, 10));
-    for (let i = 0; i < clumps; i++) {
-      const a = f.foot + lean * rand(0.4, 1.2) + rand(-0.5, 0.5);
-      const v = rand(180, 560);
-      this.sparks.push({ x: crown.x, y: crown.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, life: rand(1.1, 2.3), glyph: "@%*"[i % 3] });
-    }
-    if (this.sparks.length > MAX_SPARKS) this.sparks.splice(0, this.sparks.length - MAX_SPARKS);
-  }
-
-  private drawFlares() {
-    const pal = this.palette;
-    const pl = this.hero;
-    const tick = Math.floor(this.time * 14);
-    const gr = this.grain(FLARE_FONT);
-    this.ctx.font = gr.font;
-    const glyphW = FLARE_FONT * gr.k * 0.62;
-    for (const f of this.flares) {
-      const grow = ease(clamp(f.age / FLARE_GROW, 0, 1));
-      // After it peaks the loop keeps lifting a little as it fades, as if breaking away from the sun.
-      const lift = 1 + Math.max(0, f.age - FLARE_GROW) * 0.14;
-      const fade = f.age < FLARE_HOLD ? 1 : 1 - (f.age - FLARE_HOLD) / (FLARE_LIFE - FLARE_HOLD);
-      const crown = this.flarePoint(f, 0.5, lift);
-      const len = Math.hypot(crown.x - pl.x, crown.y - pl.y) * 2.6;
-      // Solid even at full stretch, with a limit so mashed clicks can't draw thousands of glyphs.
-      const n = clamp(Math.round(len / glyphW), 18, Math.round(120 / gr.k));
-      for (let i = 0; i <= n; i++) {
-        const t = i / n;
-        // Both legs rise from the surface together and meet at the crown.
-        if (t > grow / 2 && t < 1 - grow / 2) continue;
-        // A torn flare has gaps in it that open and close as it churns.
-        if (f.torn > 0 && noise(t * 11 + f.seed % 83, this.time * 0.7, 73) < f.torn) continue;
-        const a = this.flareAt(f, t, lift);
-        const b = this.flareAt(f, Math.min(1, t + 0.01), lift);
-        const heat = 1 - Math.abs(t - 0.5) * 2;
-        const roll = hash(i, tick, f.seed);
-        // The crown is the thick of it: heavier marks as the loop climbs.
-        const g = roll < 0.3 * heat ? "#" : roll < 0.5 ? "*" : roll < 0.62 ? "~" : lineGlyph(b.x - a.x, b.y - a.y);
-        const nx = -(b.y - a.y), ny = b.x - a.x;
-        const nl = Math.hypot(nx, ny) || 1;
-        const ox = nx / nl, oy = ny / nl;
-        this.glyph(g, a.x, a.y, mix(INK_LIMB, pal.warm, 0.35 + heat * 0.65), fade);
-        // Strands either side give the loop its body: one hot and gold, one dark. They swell toward the crown.
-        const wide = (5 + heat * 5) * gr.k * f.thick * (0.7 + 0.6 * noise(t * 7, f.seed % 79, 74));
-        this.glyph(roll > 0.5 ? "*" : "~", a.x + ox * wide, a.y + oy * wide, mix(pal.warm, INK_CORE, heat), 0.9 * fade);
-        if (i % 2 === 0) this.glyph(roll > 0.5 ? "~" : "'", a.x - ox * wide, a.y - oy * wide, INK_LIMB, 0.85 * fade);
-      }
-      // Tendrils peel away once the loop has grown past where they leave it, bending as they go.
-      for (const td of f.tendrils) {
-        if (Math.abs(td.at - 0.5) * 2 < 1 - grow) continue;
-        // A spray's streamers leave the sun itself; other tendrils leave the loop.
-        let x: number, y: number, dir: number;
-        if (td.ray !== undefined) {
-          x = pl.x + Math.cos(f.foot + td.ray) * pl.r;
-          y = pl.y + Math.sin(f.foot + td.ray) * pl.r;
-          dir = f.foot + td.ray * 0.6;
-        } else {
-          ({ x, y } = this.flareAt(f, td.at, lift));
-          const next = this.flareAt(f, Math.min(1, td.at + 0.01), lift);
-          dir = Math.atan2(next.y - y, next.x - x) + (td.side * Math.PI) / 2;
-        }
-        const out = Math.min(1, f.age / (td.ray !== undefined ? FLARE_GROW : 0.9));
-        const stride = Math.max(9, td.len / 45) * gr.k;
-        const steps = Math.ceil((td.len * out) / stride);
-        for (let j = 0; j < steps; j++) {
-          // Shorter strides bend less each, so the tendril keeps its shape.
-          dir += (td.curl + (noise(j * 0.5 * gr.k + td.len, this.time * f.churn + f.seed % 71, 75) - 0.5) * (td.ray !== undefined ? 0.34 : 0.7)) * gr.k;
-          x += Math.cos(dir) * stride;
-          y += Math.sin(dir) * stride;
-          this.glyph(j % 3 === 2 ? "*" : lineGlyph(Math.cos(dir), Math.sin(dir)), x, y, mix(pal.warm, INK_LIMB, j / (steps + 1)), (1 - j / (steps + 1)) * 0.9 * fade);
-        }
-      }
-    }
-    for (const s of this.shocks) {
-      const k = s.age / SHOCK_LIFE;
-      const rad = s.reach * (1 - (1 - k) ** 3);
-      const dots = clamp(Math.round((TAU * rad) / (12 * gr.k)), 10, Math.round(70 / gr.k));
-      const a0 = (1 - k) ** 1.1;
-      for (let i = 0; i < dots; i++) {
-        const a = (i / dots) * TAU;
-        const dx = Math.cos(a), dy = Math.sin(a);
-        // The wave front is ragged and has holes in it: no two the same, and never a neat circle.
-        const rag = noise(dx * 1.6 + s.seed, dy * 1.6, 76);
-        if (rag < 0.3) continue;
-        const front = rad * (0.62 + rag * 0.75);
-        // Marks point outward, the way the wave is going, with a thinner echo trailing inside it.
-        this.glyph(i % 4 === 0 ? "*" : lineGlyph(-dy, dx), s.x + dx * front, s.y + dy * front, mix(INK_LIMB, INK_MID, k), a0);
-        if (i % 2 === 0) this.glyph("·", s.x + dx * front * 0.82, s.y + dy * front * 0.82, INK_MID, a0 * 0.75);
-      }
-    }
-    for (const sp of this.sparks) {
-      const k = sp.age / sp.life;
-      this.glyph(sp.glyph, sp.x, sp.y, mix(INK_MID, pal.warm, k), (1 - k) * 0.95);
-    }
-  }
-
-  private launchFlare(x: number, y: number) {
-    const pl = this.hero;
-    const foot = Math.atan2(y - pl.y, x - pl.x);
-    // The crown lands on the click, wherever it is; only a click right by the sun gets a minimum stub.
-    const reach = Math.max(Math.hypot(x - pl.x, y - pl.y), pl.r * 1.6);
-    // Four broad kinds, each rolled fresh: a lopsided arch, a narrow jet with its feet almost together, a torn loop,
-    // or a spray of separate streamers with no loop at all.
-    const roll = Math.random();
-    const jet = roll < 0.25, torn = !jet && roll < 0.5, spray = roll >= 0.72;
-    const spread = jet ? rand(0.03, 0.08) : rand(0.14, 0.42);
-    const tendrils: Tendril[] = [];
-    if (spray) {
-      const fan = rand(0.18, 0.75);
-      const dist = reach - pl.r;
-      for (let i = Math.round(rand(3, 7)); i > 0; i--) {
-        tendrils.push({ at: 0, side: 1, curl: rand(-0.035, 0.035), len: dist * rand(0.45, 1.1), ray: rand(-fan, fan) });
-      }
-    }
-    for (let i = spray ? 0 : Math.round(rand(jet ? 2 : 1, 5)); i > 0; i--) {
-      tendrils.push({ at: rand(0.12, 0.88), side: Math.random() < 0.5 ? -1 : 1, curl: rand(-0.28, 0.28), len: pl.r * rand(0.25, 0.9) });
-    }
-    this.flares.push({
-      foot, reach, age: 0, struck: false, seed: Math.floor(Math.random() * 1e6),
-      spreadA: spread * rand(0.6, 1.4), spreadB: spread * rand(0.6, 1.4),
-      lean: rand(-0.55, 0.55), bulge: jet ? rand(0.04, 0.12) : rand(0.18, 0.5),
-      wander: jet ? rand(0.16, 0.34) : rand(0.08, 0.26), freq: rand(1.6, 4.5), churn: rand(0.5, 1.6),
-      torn: spray ? 2 : torn ? rand(0.32, 0.46) : 0, thick: rand(0.6, 1.5), tendrils,
-    });
-    if (this.flares.length > MAX_FLARES) this.flares.shift();
-    this.sunFlash = 1;
-    this.flared++;
+    if (Math.hypot(x - pl.x, y - pl.y) < pl.r * 1.05) return;
+    this.born.push({ x, y, at: this.time });
+    if (this.born.length > MAX_BORN) this.born.shift();
+    this.starsLit++;
     this.report();
+    if (this.reduced.matches || !this.raf) this.render();
   }
 
   /**
@@ -3233,7 +3004,7 @@ export class SkyEngine {
     this.pointer.active = false;
   };
 
-  // Clicks on empty sky launch a comet or a flare; links, buttons and text selection are left alone.
+  // Clicks on empty sky launch a comet or light a star; links, buttons and text selection are left alone.
   private onClick = (e: MouseEvent) => {
     if (this.reduced.matches || this.pass?.dir === "out") return;
     if (e.composedPath().some((n) => n instanceof Element && n.matches(INTERACTIVE))) return;
@@ -3246,7 +3017,7 @@ export class SkyEngine {
       this.stopDrifter(this.drifter!);
       return;
     }
-    if (this.scene === "day") this.launchFlare(x, y);
+    if (this.scene === "day") this.lightStar(x, y);
     else if (this.scene === "earth") this.launchSat(x, y);
     else this.launchComet(x, y, rand(0.72, 1.08));
   };
@@ -3259,13 +3030,13 @@ export class SkyEngine {
     this.delivery = { scene: this.scene, start: this.time, x: cx - rect.left, y: cy - rect.top, bend: Math.random() < 0.5 ? -1 : 1 };
   };
 
-  /** From the emblem's launch event: the CV button sends a comet into orbit, or makes the sun flare toward it. */
+  /** From the emblem's launch event: the CV button sends a comet into orbit, or lights a star by it. */
   private onLaunch = (e: Event) => {
     if (this.turn) return;
     const { x: cx, y: cy } = (e as CustomEvent<{ x: number; y: number }>).detail;
     const rect = this.canvas.getBoundingClientRect();
     const x = cx - rect.left, y = cy - rect.top;
-    if (this.scene === "day") this.launchFlare(x, y);
+    if (this.scene === "day") this.lightStar(x, y);
     else if (this.scene === "earth") this.launchSat(x, y);
     // A touch under orbital speed, so it's caught and loops round rather than flying off.
     else this.launchComet(x, y, 0.9);

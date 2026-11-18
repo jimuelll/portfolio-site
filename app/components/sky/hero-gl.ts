@@ -15,14 +15,19 @@ interface Layer { x: number; y: number; r: number; alpha: number }
 /** halo: how much of the ring round the moon shows now (0 to 1). */
 export interface MoonLayer extends Layer { light: V3; lib: [number, number]; lit: number; glow: number; hov: number; bump: number; halo: number }
 /**
- * x, y, r: the sun, which the field comes off; w, h: the page; masks: discs in front of it (moon, sun, Earth) where
- * it doesn't show; the rest, how much of each shows.
+ * A star in the day's nebula, lighting the dust round it. lit: how bright (0 while it's still forming); pull: how hard
+ * the dust is swirling in to make it; echo: how far its light echo has spread (CSS px, 0 for none) and how strong it is.
  */
-export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; field: number; paper: number; pan: { x: number; y: number } }
+export interface NebulaStar { x: number; y: number; lit: number; pull: number; echo: number; echoK: number }
+/**
+ * x, y, r: the sun, which lights the day's nebula; w, h: the page; masks: discs in front of it (moon, sun, Earth)
+ * where it doesn't show; the rest, how much of each shows.
+ */
+export interface BackdropLayer extends Layer { w: number; h: number; masks: { x: number; y: number; r: number }[]; milky: number; nebula: number; day: number; stars: NebulaStar[]; pan: { x: number; y: number } }
 export interface SunLayer extends Layer {
   /** false: only the light round it, for the corner of the plate the inner pages show. */
   disc: boolean;
-  spin: number; boil: number; flash: number; foot: number; ink: number; rays: number; rings: number;
+  spin: number; boil: number; ink: number; rays: number;
   hov: number; hovAngle: number; occ: { x: number; y: number } | null; spots: { c: V3; size: number; k: number }[]; warm: Rgb;
 }
 export interface CoronaLayer extends Layer { strength: number }
@@ -39,6 +44,8 @@ const DIM = 0.12;
 const CALM = 160;
 /** Bodies the backdrop hides behind at once (the zoom has two). */
 const MAX_MASKS = 3;
+/** Stars lighting the day's nebula at once: the fixed ones and the ones clicked into being (engine.ts). */
+export const MAX_NEBULA_STARS = 12;
 
 const VERT = "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }";
 
@@ -60,12 +67,13 @@ uniform float uRad, uKind, uTime;
 uniform vec3 uL;
 uniform vec2 uLib;
 uniform float uLit, uBump;
-uniform float uSpin, uBoil, uFlash, uFoot;
+uniform float uSpin, uBoil;
 uniform vec4 uSpot[${MAX_SPOTS}];
 uniform float uSpotK[${MAX_SPOTS}];
 uniform sampler2D uLand;
-uniform float uMilky, uNebula;
+uniform float uMilky, uNebula, uDay;
 uniform vec2 uScreen, uPan;
+uniform vec4 uStar[${MAX_NEBULA_STARS}], uStarB[${MAX_NEBULA_STARS}];
 // Always 99: a loop bound the compiler can't see, so it keeps the loop rather than copying its body out each time.
 // On Windows (Direct3D) every copied height() made the moon's shader take seconds to compile.
 uniform int uLoop;
@@ -197,9 +205,7 @@ vec4 sun(vec2 n2) {
   for (int i = 0; i < ${MAX_SPOTS}; i++) spots *= spot(n, uSpot[i].xyz, uSpot[i].w, uSpotK[i]);
   // Faculae: bright patches that only show near the limb.
   float fac = smoothstep(0.62, 0.8, fbm(s * 6.0 + 5.0)) * smoothstep(0.55, 0.15, mu) * 0.35;
-  // A flare lights the side it left from.
-  float toward = max(0.0, cos(atan(n2.y, n2.x) - uFoot)) * sqrt(d2);
-  float b = clamp(limb * (0.62 + 0.45 * g) * spots + fac + uFlash * (0.12 + toward * 0.45), 0.0, 1.0);
+  float b = clamp(limb * (0.62 + 0.45 * g) * spots + fac, 0.0, 1.0);
   return vec4(b, g, 1.0 - spots, 1.0);
 }
 
@@ -308,6 +314,59 @@ vec4 backdrop(vec2 p) {
   return vec4(col, stars);
 }
 
+// The day's nebula: billowing dust that drifts and folds over itself, with fine filaments. q in units of the sun's
+// radius; oct: how many octaves (the shadow walk only needs the broad shapes).
+float dust(vec2 q, int oct) {
+  q /= 1.1;
+  vec2 w = vec2(vnoise(vec3(q * 0.6 + vec2(uTime * 0.018, 0.0), 1.0)), vnoise(vec3(q * 0.6 + vec2(3.1, -uTime * 0.014), 2.0))) - 0.5;
+  q += w * 1.8 + vec2(uTime * 0.01, 0.0);
+  float a = 0.55, f = 0.0;
+  vec3 p = vec3(q, 5.0);
+  for (int i = 0; i < 3; i++) { if (i >= uLoop || i >= oct) break; f += a * vnoise(p); p = p * 2.03 + 1.7; a *= i == 0 ? 0.545 : 0.5; }
+  if (oct < 3) f += 0.075;
+  float ridge = 1.0 - abs(2.0 * vnoise(vec3(q * 1.4 + vec2(7.0, -2.0), 3.0)) - 1.0);
+  return clamp(smoothstep(0.3, 0.74, f) * 0.85 + pow(ridge, 6.0) * 0.45 * smoothstep(0.3, 0.6, f), 0.0, 1.0);
+}
+// r: sunlight reaching this bit of dust (after the dust between it and the sun), g: the stars' light, b: a light echo
+// passing through, all /3; a: how thick the dust is.
+vec4 dayNebula(vec2 p) {
+  vec2 sp = p, rel = p - uC;
+  float boost = 0.0;
+  // A star being born: the dust round it spirals in.
+  for (int i = 0; i < ${MAX_NEBULA_STARS}; i++) {
+    if (i >= uLoop) break;
+    float pull = uStarB[i].x;
+    if (pull <= 0.0) continue;
+    vec2 d = p - uStar[i].xy;
+    float R = uRad * 0.7, dl = length(d);
+    if (dl > R) continue;
+    float f = (1.0 - dl / R) * (1.0 - dl / R) * pull, a = f * 2.4, sc = 1.0 + f * 1.6;
+    sp = uStar[i].xy + mat2(cos(a), sin(a), -sin(a), cos(a)) * d * sc;
+    boost += f * 0.5;
+  }
+  float q = length(rel) / uRad;
+  // The walk toward the sun: step 0 is the point itself, the rest add up the dust in the way.
+  float d = 0.0, tau = 0.0;
+  for (int j = 0; j < 7; j++) {
+    if (j >= uLoop || (j > 0 && q <= 1.0)) break;
+    float u = float(j) / 6.0;
+    vec2 at = j == 0 ? sp : uC + rel * mix(1.0, 1.0 / q, u);
+    float dj = dust(at / uRad, j == 0 ? 3 : 2);
+    if (j == 0) d = clamp(dj + boost, 0.0, 1.0);
+    else tau += dj * (q - 1.0) / 6.0 * 1.25;
+  }
+  d *= smoothstep(0.9, 1.02, q);
+  float sunL = exp(-tau) * 1.5 / (0.5 + 0.22 * q * q);
+  float starL = 0.0, echoL = 0.0;
+  for (int i = 0; i < ${MAX_NEBULA_STARS}; i++) {
+    if (i >= uLoop) break;
+    float ds = length(p - uStar[i].xy);
+    starL += uStar[i].z * 0.9 * exp(-ds / (uRad * 0.42));
+    if (uStar[i].w > 0.0) echoL += uStarB[i].y * 3.0 * exp(-pow((ds - uStar[i].w) / (uRad * 0.16), 2.0));
+  }
+  return vec4(clamp(vec3(sunL, starL, echoL) / 3.0, 0.0, 1.0), d);
+}
+
 void main() {
   // Each texel is a quarter of a glyph cell, so the print pass's linear sample averages four looks per cell.
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) * uCell * 0.5;
@@ -318,7 +377,7 @@ void main() {
 }`;
 
 /** The shade pass's bodies, by layer kind (moon 0, sun 1, Earth 2, backdrop 4): each its own program. */
-const SHADE_BODIES: [number, string][] = [[0, "moon(n2)"], [1, "sun(n2)"], [2, "earth(n2)"], [4, "backdrop(p - uPan)"]];
+const SHADE_BODIES: [number, string][] = [[0, "moon(n2)"], [1, "sun(n2)"], [2, "earth(n2)"], [4, "uDay > 0.5 ? dayNebula(p - uPan) : backdrop(p - uPan)"]];
 
 const PRINT = `
 precision highp float;
@@ -326,18 +385,17 @@ uniform sampler2D uShade, uAtlas;
 uniform vec2 uRes, uCellD, uGrid, uC;
 uniform float uRatio, uCount, uKind, uTime, uAlpha, uRad, uHov, uHovAng;
 uniform float uGlowLit;
-uniform float uInk, uRays, uRings, uFlash, uBoil, uStrength, uDisc;
+uniform float uInk, uRays, uBoil, uStrength, uDisc;
 uniform vec3 uOcc, uWarm;
 uniform vec4 uDim[${MAX_DIMS}];
 uniform float uDimN, uDimHard, uShimmer;
 uniform vec2 uPtr;
-uniform float uMilky, uNebula, uField, uPaper, uHaloK;
+uniform float uMilky, uNebula, uDay, uHaloK;
 uniform vec2 uScreen, uPan;
 uniform vec4 uMask[${MAX_MASKS}];
 const float TAU = 6.2831853;
-const vec3 INK_LIMB = vec3(108.0, 26.0, 20.0) / 255.0, INK_MID = vec3(176.0, 54.0, 22.0) / 255.0, INK_CORE = vec3(196.0, 104.0, 16.0) / 255.0;
 const vec3 SUN_LIMB = vec3(150.0, 44.0, 34.0) / 255.0, SUN_MID = vec3(206.0, 92.0, 40.0) / 255.0, SUN_CORE = vec3(222.0, 150.0, 40.0) / 255.0;
-const vec3 SPOT = vec3(74.0, 36.0, 30.0) / 255.0, ORBIT = vec3(108.0, 84.0, 62.0) / 255.0;
+const vec3 SPOT = vec3(74.0, 36.0, 30.0) / 255.0;
 const vec3 MOON_BRIGHT = vec3(226.0, 230.0, 238.0) / 255.0, MOON_COOL = vec3(128.0, 182.0, 240.0) / 255.0;
 const vec3 CORONA_IN = vec3(255.0, 240.0, 214.0) / 255.0, CORONA_OUT = vec3(242.0, 186.0, 84.0) / 255.0;
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -355,6 +413,8 @@ float lineIdx(vec2 d) {
   float l = length(d);
   return abs(d.y) < 0.38 * l ? 12.0 : abs(d.x) < 0.38 * l ? 10.0 : d.x * d.y > 0.0 ? 13.0 : 11.0;
 }
+// Glyphs for the day's dust and sun, light to heavy (. · : + * # % @), leaving out - and =, which in rows read as ruled lines.
+float dustIdx(float lv) { return lv < 0.5 ? 0.0 : lv < 1.5 ? 1.0 : lv < 2.5 ? 15.0 : lv < 3.5 ? 2.0 : lv < 4.5 ? 5.0 : lv < 5.5 ? 6.0 : lv < 6.5 ? 7.0 : lv < 7.5 ? 8.0 : 9.0; }
 vec4 over(vec4 src, vec4 dst) { return src + dst * (1.0 - src.a); }
 vec4 ink(float idx, vec2 f, vec3 col, float a) { float g = glyph(idx, f) * clamp(a, 0.0, 1.0); return vec4(col * g, g); }
 
@@ -422,9 +482,9 @@ vec4 sun(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
     vec2 rp = pp - uC;
     float cover = 1.0 - smoothstep(uRad - 0.75, uRad + 0.75, length(rp));
     float k = clamp(length(rp / uRad + vec2(0.25)) / 1.25, 0.0, 1.0);
-    vec3 body = k < 0.6 ? mix(vec3(255.0, 214.0, 110.0), vec3(244.0, 150.0, 58.0), k / 0.6) / 255.0
-                        : mix(vec3(244.0, 150.0, 58.0), vec3(206.0, 74.0, 36.0), (k - 0.6) / 0.4) / 255.0;
-    float a = 0.94 * uInk * cover;
+    vec3 body = k < 0.6 ? mix(vec3(255.0, 252.0, 236.0), vec3(255.0, 236.0, 186.0), k / 0.6) / 255.0
+                        : mix(vec3(255.0, 236.0, 186.0), vec3(246.0, 164.0, 84.0), (k - 0.6) / 0.4) / 255.0;
+    float a = mix(0.85, 0.55, k) * uInk * cover;
     o = vec4(body * a, a);
   }
   vec2 rel = pc - uC;
@@ -442,69 +502,49 @@ vec4 sun(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
     float si = max(1.0, floor(clamp(b + jit, 0.0, 0.999) * 10.0));
     vec3 soft = mix(mix(mix(SUN_LIMB, SUN_MID, edge), SUN_CORE, hot), SPOT, dark * 0.8);
     o = over(ink(si, f, soft, (0.35 + 0.55 * b) * (1.0 - uInk)), o);
-    // Ink, as an engraver lays it: heavier toward the limb, in the lanes between granules and in the spots.
-    float dens = clamp(0.3 + 0.5 * pow(1.0 - depth * depth, 0.8) + (0.5 - g) * 0.7 + dark * 0.75 - uFlash * 0.2 + jit, 0.0, 1.0);
-    float ii = dens < 0.06 ? 0.0 : floor(clamp(dens, 0.0, 0.999) * 10.0);
-    o = over(ink(ii, f, mix(mix(INK_LIMB, INK_MID, edge), INK_CORE, hot), 0.95 * uInk), o);
+    // By day the granules are printed in warm glyphs over the bright body: heavier toward the limb and in the spots.
+    float limb = 1.0 - sqrt(1.0 - d * d);
+    float bb = clamp(0.25 + limb * 0.75 + (g - 0.5) * 0.6 + dark * 0.8 + jit, 0.0, 1.0);
+    vec3 ic = mix(mix(vec3(226.0, 150.0, 60.0) / 255.0, vec3(178.0, 64.0, 30.0) / 255.0, limb), SPOT, dark * 0.9);
+    o = over(ink(dustIdx(0.6 + bb * 6.5), f, ic, (0.12 + 0.5 * bb * bb) * uInk), o);
     return o;
   }
   float idx = -1.0, a = 0.0;
-  vec3 col = INK_MID;
+  vec3 col = SUN_MID;
   if (uRays > 0.02) {
     // The glow round it (drawSunGlow): radial hatching in ink, soft dots otherwise.
     float fall = exp(-(d - 1.0) * 3.4);
-    // In ink it's thinned to half, so the magnetic loops behind it (the backdrop) show through.
-    if (d > 1.03 && d < 1.75 && hash(ci + 12.0) < (0.14 + fall * 0.5) * (uInk > 0.5 ? 0.45 : 1.0)) {
-      bool hatched = uInk > 0.5;
-      idx = hatched ? (fall > 0.16 ? lineIdx(rel) : 15.0) : fall > 0.6 ? 2.0 : fall > 0.3 ? 15.0 : 1.0;
-      col = hatched ? mix(INK_LIMB, INK_MID, fall) : mix(SUN_MID, SUN_CORE, fall);
-      a = (0.34 + 0.56 * uInk) * fall * uRays * (1.0 + uHov * 0.5);
+    // By day the glow is a wash under the nebula (engine.ts); these dots are the eclipse's.
+    if (d > 1.03 && d < 1.75 && hash(ci + 12.0) < 0.14 + fall * 0.5) {
+      idx = fall > 0.6 ? 2.0 : fall > 0.3 ? 15.0 : 1.0;
+      col = mix(SUN_MID, SUN_CORE, fall);
+      a = 0.34 * fall * uRays * (1.0 + uHov * 0.5) * (1.0 - uInk);
     }
     // A dotted rim.
     if (abs(dist - uRad * 1.08) < ch * 0.5 && fract(ang * uRad * 1.08 / (cw * 2.6)) < 0.5) {
-      idx = 15.0; col = uInk > 0.5 ? INK_MID : uWarm; a = (0.5 + 0.4 * uInk) * uRays;
+      idx = 15.0; col = uWarm; a = 0.5 * uRays * (1.0 - uInk);
     }
-    // Rays in splendour (ink): tapered straight rays turn and turn about with wavy ones.
-    float q = dist - uRad * 1.16;
-    if (uInk > 0.01 && q > 0.0) {
-      float stepA = TAU / 24.0, u = ang - uTime * 0.03;
-      float i = floor(u / stepA + 0.5), im = mod(i + 240.0, 24.0);
-      float perp = dist * sin(u - i * stepA);
-      bool wavy = mod(im, 2.0) > 0.5;
-      float reach = 1.0 + uHov * 0.9 * pow(max(0.0, cos(i * stepA + uTime * 0.03 - uHovAng)), 4.0);
-      float len = uRad * (wavy ? 0.38 : 0.68) * (0.72 + 0.28 * n1(im * 1.7 + uBoil * 0.9)) * (1.0 + uFlash * 1.1) * reach;
-      float k = q / len;
-      if (k < 1.0) {
-        if (wavy) {
-          float sway = sin(q * 0.16 + uBoil * 1.2 + im) * cw * 1.1;
-          if (abs(perp - sway) < cw * 0.55) { idx = 14.0; col = mix(INK_CORE, INK_LIMB, k); a = (1.0 - k * 0.8) * 0.85 * uInk * uRays; }
-        } else {
-          float width = cw * 0.55 + (k < 0.34 ? cw * 1.1 * (1.0 - k / 0.34) : 0.0);
-          if (abs(perp) < width) { idx = lineIdx(rel); col = mix(INK_CORE, INK_LIMB, k); a = (1.0 - k * 0.7) * uInk * uRays; }
-        }
+    // By day, fine streamers combed out from the limb, each flickering slowly in length.
+    if (uInk > 0.01 && d > 1.0) {
+      float stepA = TAU / 140.0, i = floor(ang / stepA + 0.5);
+      float len = (0.25 + pow(hash(vec2(i, 7.0)), 2.0) * 1.1) * (0.85 + 0.15 * n1(i * 1.3 + uTime * 0.2));
+      float k = (d - 1.02) / len;
+      if (k > 0.0 && k < 1.0 && abs(dist * sin(ang - i * stepA)) < cw * 0.55) {
+        idx = k < 0.33 ? lineIdx(rel) : 15.0; col = vec3(214.0, 128.0, 50.0) / 255.0;
+        a = pow(1.0 - k, 1.6) * (0.25 + 0.75 * hash(vec2(i, 3.0))) * 0.6 * uInk * uRays;
       }
     }
-    // Plain rays (the eclipse's sun): flickering in length, reaching toward the cursor, leaping when it flares.
+    // Plain rays (the eclipse's sun): flickering in length, reaching toward the cursor.
     float q2 = dist - uRad * 1.18;
     if (uInk < 0.99 && q2 > 0.0) {
       float stepA = TAU / 28.0, u = ang - uTime * 0.03;
       float i = floor(u / stepA + 0.5), im = mod(i + 280.0, 28.0);
       float perp = dist * sin(u - i * stepA);
       float reach = 1.0 + uHov * 0.9 * pow(max(0.0, cos(i * stepA + uTime * 0.03 - uHovAng)), 4.0);
-      float len = uRad * (mod(im, 2.0) < 0.5 ? 0.42 : 0.22) * (0.6 + 0.4 * n1(im * 1.7 + uBoil * 0.9)) * (1.0 + uFlash * 0.7) * reach;
+      float len = uRad * (mod(im, 2.0) < 0.5 ? 0.42 : 0.22) * (0.6 + 0.4 * n1(im * 1.7 + uBoil * 0.9)) * reach;
       float k = q2 / len;
       if (k < 1.0 && abs(perp) < cw * 0.55) { idx = lineIdx(rel); col = uWarm; a = (1.0 - k) * 0.75 * uRays * (1.0 - uInk); }
     }
-  }
-  // Ruled rings like an almanac's scales, dotted, with a tick every 30°.
-  if (uRings > 0.02) {
-    float turn = uTime * -0.006;
-    for (int r = 0; r < 2; r++) {
-      float rr = uRad * (r == 0 ? 1.98 : 2.86), gap = r == 0 ? 24.0 : 32.0;
-      if (abs(dist - rr) < ch * 0.5 && abs(fract((ang - turn) * rr / gap + 0.5) - 0.5) * gap < cw * 0.5) { idx = 15.0; col = ORBIT; a = 0.62 * uRings; }
-    }
-    float tickR = uRad * 1.98 + 6.0, tickA = TAU / 12.0;
-    if (abs(dist - tickR) < ch * 0.6 && abs(fract((ang - turn) / tickA + 0.5) - 0.5) * tickA * tickR < cw * 0.6) { idx = lineIdx(rel); col = INK_MID; a = 0.8 * uRings; }
   }
   if (idx >= 0.0) o = over(ink(idx, f, col, a), o);
   return o;
@@ -522,7 +562,37 @@ float calm(vec2 pp) {
   return k;
 }
 
-// Behind everything: the Milky Way and a nebula by night, the magnetic field and the engraved plate by day.
+// The day's nebula, lit by the sun: warm near it, blue further out, dusky violet where the dust is in shadow.
+const vec3 LIT_WARM = vec3(255.0, 214.0, 140.0) / 255.0, LIT_BLUE = vec3(96.0, 150.0, 236.0) / 255.0, LIT_ECHO = vec3(150.0, 220.0, 255.0) / 255.0;
+const vec3 DUSK = vec3(104.0, 104.0, 188.0) / 255.0;
+const vec3 DUST_WARM = vec3(232.0, 132.0, 36.0) / 255.0, DUST_BLUE = vec3(36.0, 100.0, 228.0) / 255.0, DUST_LANE = vec3(92.0, 72.0, 160.0) / 255.0;
+const vec3 DUST_ECHO = vec3(30.0, 150.0, 210.0) / 255.0;
+vec4 dayNebula(vec2 ci, vec2 pc, vec2 pp, vec2 f) {
+  float q = length(pc - uC) / uRad;
+  // A faint wash of the light under the glyphs, read smoothly between cells so it has no grid in it.
+  vec2 g = pp * uRatio / uCellD;
+  vec4 s = texture2D(uShade, vec2(g.x / uGrid.x, 1.0 - g.y / uGrid.y));
+  vec3 Ls = s.rgb * 3.0;
+  float lum = Ls.r + Ls.g + Ls.b;
+  vec3 litCol = mix(mix(LIT_BLUE, LIT_WARM, (1.0 - smoothstep(1.05, 2.4, q)) * Ls.r / (lum + 1e-4)), LIT_ECHO, (Ls.b + Ls.g * 0.5) / (lum + 1e-4));
+  float b = clamp(s.a * lum * 0.85, 0.0, 1.0), shade = s.a * clamp(1.0 - lum, 0.0, 1.0);
+  float wa = clamp(b * 0.3 + shade * 0.1, 0.0, 0.38);
+  vec4 o = vec4(mix(DUSK, litCol, b / (b + shade * 0.6 + 1e-4)) * wa, wa);
+  // The dust itself, printed: heavier where it's thicker and better lit, flicking between neighbouring glyphs now and then.
+  vec4 c = S(ci);
+  float d = c.a;
+  if (d < 0.06) return o;
+  vec3 L = c.rgb * 3.0;
+  float l = L.r + L.g + L.b;
+  float tick = floor(uTime * 2.0 + hash(ci) * 7.0);
+  float lv = 0.6 + d * 2.0 + clamp(d * l, 0.0, 1.0) * 4.0 + (hash(ci + tick * 17.13) - 0.5) * 0.5;
+  vec3 col = mix(DUST_LANE, mix(DUST_BLUE, DUST_WARM, 1.0 - smoothstep(1.05, 2.2, q)), clamp(l, 0.0, 1.0));
+  col = mix(col, DUST_ECHO, clamp(L.b / (l + 1e-4), 0.0, 1.0) * 0.7);
+  float a = (0.22 + 0.78 * d) * (0.35 + 0.65 * clamp(l, 0.0, 1.2)) * (1.0 + clamp(l - 1.0, 0.0, 1.5) * 0.4);
+  return over(ink(dustIdx(lv), f, col, a), o);
+}
+
+// Behind everything: the Milky Way and a nebula by night, the sunlit nebula by day.
 vec4 backdrop(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
   float quiet = calm(pp);
   // Nothing of it shows through the bodies in front: each masks a disc, wherever it is this frame.
@@ -552,60 +622,7 @@ vec4 backdrop(vec2 ci, vec2 f, vec2 pc, vec2 pp) {
       o = over(ink(si, f, mix(vec3(0.72, 0.8, 1.0), vec3(1.0, 0.95, 0.85), hash(sc + 32.0)), (0.35 + 0.5 * tw) * (0.4 + 0.6 * c.a)), o);
     }
   }
-  if (uField > 0.01) {
-    // The sun's magnetic field, printed: closed loops arching off the surface, and open lines carried out into space.
-    vec2 rel = pc - uC;
-    float dist = length(rel), d = dist / uRad, ang = atan(rel.y, rel.x);
-    float cw = uCellD.x / uRatio;
-    vec2 er = rel / max(dist, 0.001), et = vec2(-er.y, er.x);
-    // It turns with the sun (SUN_SPIN in engine.ts).
-    float spin = uTime * 0.0483;
-    if (d > 1.12) {
-      // Open lines: the Parker spiral. Each leaves the sun straight out and winds back as the sun turns under it.
-      float stepA = TAU / 22.0, wind = 0.32;
-      float u = ang + wind * (d - 1.0) - spin;
-      float i = floor(u / stepA + 0.5), im = mod(i + 220.0, 22.0);
-      float perp = abs(u - i * stepA) * dist / sqrt(1.0 + wind * wind * d * d);
-      // Some reach far and some fade soon, and that changes slowly.
-      float k = (d - 1.12) / (1.4 + 3.2 * n1(im * 3.7 + uTime * 0.03));
-      if (k < 1.0 && perp < cw * 0.55) {
-        o = over(ink(lineIdx(er - et * wind * d), f, mix(INK_LIMB, ORBIT, k), (1.0 - k * k) * 0.72 * uField), o);
-      }
-      // The solar wind riding them out.
-      if (k < 1.0 && perp < cw * 0.9) {
-        float s = fract(d * 0.9 - uTime * 0.12 + hash(vec2(im, 3.0)));
-        if (s < 0.035) o = over(ink(s < 0.012 ? 16.0 : 15.0, f, INK_CORE, (1.0 - k) * 0.9 * uField), o);
-      }
-    }
-    if (d > 1.0 && d < 1.9) {
-      // Closed loops: nested arches between pairs of feet on the surface, a few families round the limb, drifting.
-      for (int L = 0; L < 6; L++) {
-        float fl = float(L);
-        float c = fl * 1.047 + 0.4 + spin + 0.25 * sin(uTime * 0.05 + fl);
-        vec2 dc = vec2(cos(c), sin(c));
-        float w0 = 0.12 + 0.08 * hash(vec2(fl, 9.0));
-        for (int n = 0; n < 3; n++) {
-          float fn = float(n);
-          float w = w0 * (0.55 + 0.25 * fn), H = uRad * w * (1.1 + 0.25 * fn);
-          // The circle through both feet that rises H above the surface between them.
-          float a = uRad * sin(w), rad = (a * a + H * H) / (2.0 * H);
-          vec2 q = pc - (uC + dc * uRad * cos(w) + dc * (H - rad));
-          if (abs(length(q) - rad) < cw * 0.6) {
-            float pulse = 0.75 + 0.25 * sin(uTime * 0.4 + fl * 2.0 + fn);
-            o = over(ink(lineIdx(vec2(-q.y, q.x)), f, mod(fl, 2.0) < 0.5 ? INK_LIMB : INK_MID, 0.9 * pulse * uField), o);
-          }
-        }
-      }
-    }
-  }
-  if (uPaper > 0.01) {
-    // Hairline engraved rules every few rows, wavering a little, and a warm vignette at the edges of the plate.
-    float row = ci.y + floor(sin(ci.x * 0.045 + ci.y * 0.3) * 1.4);
-    if (mod(row, 4.0) < 0.5) o = over(ink(12.0, f, ORBIT, 0.05 * uPaper), o);
-    vec2 v = pp / uScreen - 0.5;
-    float vig = smoothstep(0.32, 0.75, length(v * vec2(1.1, 1.0))) * 0.09 * uPaper;
-    o = over(vec4(vec3(0.55, 0.38, 0.22) * vig, vig), o);
-  }
+  if (uDay > 0.01) o = dayNebula(ci, pc, pp, f);
   return o * quiet;
 }
 
@@ -881,24 +898,31 @@ export class HeroPrinter {
     });
   }
 
-  /** The sky behind everything; the strengths pick what shows (night: milky, nebula; day: field, paper). */
+  /** The sky behind everything; the strengths pick what shows (night: milky, nebula; day: the sunlit nebula). */
   backdrop(b: BackdropLayer) {
     const screen = (u: Uniforms) => {
       this.gl.uniform2f(u.uScreen, b.w, b.h);
       this.gl.uniform2f(u.uPan, b.pan.x, b.pan.y);
     };
-    const night = b.milky + b.nebula > 0.01;
-    // Covers the whole page, since the band and the field cross it.
-    this.layer(4, b, Math.hypot(b.w, b.h) * 1.1, !night ? null : (u) => {
-      this.gl.uniform1f(u.uMilky, b.milky);
-      this.gl.uniform1f(u.uNebula, b.nebula);
+    const stars = new Float32Array(MAX_NEBULA_STARS * 4), starsB = new Float32Array(MAX_NEBULA_STARS * 4);
+    b.stars.slice(0, MAX_NEBULA_STARS).forEach((s, i) => {
+      stars.set([s.x, s.y, s.lit, s.echo], i * 4);
+      starsB.set([s.pull, s.echoK, 0, 0], i * 4);
+    });
+    // Covers the whole page, since the band and the nebula cross it.
+    this.layer(4, b, Math.hypot(b.w, b.h) * 1.1, (u) => {
+      const gl = this.gl;
+      gl.uniform1f(u.uMilky, b.milky);
+      gl.uniform1f(u.uNebula, b.nebula);
+      gl.uniform1f(u.uDay, b.day > 0.01 ? 1 : 0);
+      gl.uniform4fv(u.uStar, stars);
+      gl.uniform4fv(u.uStarB, starsB);
       screen(u);
     }, (u) => {
       const gl = this.gl;
       gl.uniform1f(u.uMilky, b.milky);
       gl.uniform1f(u.uNebula, b.nebula);
-      gl.uniform1f(u.uField, b.field);
-      gl.uniform1f(u.uPaper, b.paper);
+      gl.uniform1f(u.uDay, b.day);
       const masks = new Float32Array(MAX_MASKS * 4);
       b.masks.slice(0, MAX_MASKS).forEach((m, i) => masks.set([m.x, m.y, m.r, 0], i * 4));
       gl.uniform4fv(u.uMask, masks);
@@ -912,14 +936,12 @@ export class HeroPrinter {
       spots.set([...sp.c, sp.size], i * 4);
       ks[i] = sp.k;
     });
-    // Out to the far ring when the rings show; the longest ray (stretched, flaring) otherwise.
-    const reach = s.r * (s.rings > 0.02 ? 3.05 : 3.0);
+    // Out to the longest streamer or ray.
+    const reach = s.r * 2.4;
     this.layer(1, s, reach, !s.disc ? null : (u) => {
       const gl = this.gl;
       gl.uniform1f(u.uSpin, s.spin);
       gl.uniform1f(u.uBoil, s.boil);
-      gl.uniform1f(u.uFlash, s.flash);
-      gl.uniform1f(u.uFoot, s.foot);
       gl.uniform4fv(u.uSpot, spots);
       gl.uniform1fv(u.uSpotK, ks);
     }, (u) => {
@@ -927,8 +949,6 @@ export class HeroPrinter {
       gl.uniform1f(u.uDisc, s.disc ? 1 : 0);
       gl.uniform1f(u.uInk, s.ink);
       gl.uniform1f(u.uRays, s.rays);
-      gl.uniform1f(u.uRings, s.rings);
-      gl.uniform1f(u.uFlash, s.flash);
       gl.uniform1f(u.uBoil, s.boil);
       gl.uniform1f(u.uHov, s.hov);
       gl.uniform1f(u.uHovAng, s.hovAngle);
@@ -1010,7 +1030,7 @@ export class HeroPrinter {
     gl.uniform2f(u.uPtr, this.pointer.x, this.pointer.y);
     gl.uniform1f(u.uShimmer, this.shimmer);
     // A layer that doesn't set these leaves no trace of the last one's.
-    for (const name of ["uGlowLit", "uHov", "uHovAng", "uInk", "uRays", "uRings", "uFlash", "uBoil", "uStrength", "uHaloK", "uMilky", "uNebula", "uField", "uPaper"]) gl.uniform1f(u[name], 0);
+    for (const name of ["uGlowLit", "uHov", "uHovAng", "uInk", "uRays", "uBoil", "uStrength", "uHaloK", "uMilky", "uNebula", "uDay"]) gl.uniform1f(u[name], 0);
     printSet(u);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);

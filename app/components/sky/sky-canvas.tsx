@@ -5,7 +5,7 @@ import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { SkyEngine, type SkyStats, type SkyVariant } from "./engine";
 export { DELIVER_EVENT, DELIVER_SECONDS, LAUNCH_EVENT } from "./engine";
 
-const NO_STATS: SkyStats = { scene: "night", detail: "", comets: 0, flares: 0, sats: 0, launched: 0, flared: 0 };
+const NO_STATS: SkyStats = { scene: "night", detail: "", comets: 0, born: 0, sats: 0, launched: 0, starsLit: 0 };
 let stats = NO_STATS;
 const listeners = new Set<() => void>();
 const publish = (next: SkyStats) => {

@@ -45,7 +45,7 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f3efe4;
+  --bg: #eaf0f8;
   --fg: #1c2840;
   /* The day's red, deeper than the sun on the canvas so small accent labels hold 4.5:1 where the paper tones at its edges. */
   --accent: #a63a1b;

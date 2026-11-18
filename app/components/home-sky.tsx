@@ -84,13 +84,13 @@ export function HomeSky() {
           ) : (
             <>
               <div>{stats.detail}</div>
-              {stats.flared > 0 && (
-                <div key={stats.flared} className="flash">
-                  {stats.flares} {stats.flares === 1 ? "flare" : "flares"}
+              {stats.starsLit > 0 && (
+                <div key={stats.starsLit} className="flash">
+                  {stats.born} new {stats.born === 1 ? "star" : "stars"}
                 </div>
               )}
-              {stats.flared === 0 && (
-                <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to flare ↯</div>
+              {stats.starsLit === 0 && (
+                <div className="hint"><span className="say-click">click</span><span className="say-tap">tap</span> to light a star ↯</div>
               )}
             </>
           )}
